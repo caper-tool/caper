@@ -30,7 +30,9 @@ data RBinOp = Equal
 
 -- Arithmetic Expressions
 data AExpr = Var String
+           | Dereference AExpr
            | IntConst Integer
+           | Triple BExpr AExpr AExpr
            | Neg AExpr
            | ABinary ABinOp AExpr AExpr
              deriving (Show)
@@ -43,8 +45,9 @@ data ABinOp = Add
               deriving (Show)
 
 -- Statements
-data Stmt = Seq [Stmt]
-          | Assign String AExpr
+data Stmt = StmtSeq [Stmt]
+          | LocalVar String
+          | Assign AExpr AExpr
           | If BExpr Stmt Stmt
           | While BExpr Stmt
           | DoWhile Stmt BExpr
@@ -74,6 +77,8 @@ languageDef =
                                      , ")"
                                      , "{"
                                      , "}"
+                                     , "]"
+                                     , "["
                                      ]
            , Token.reservedOpNames = ["+", "-", "*", "/", ":="
                                      , "=", "!=", "<", ">", ">=", "<="
@@ -99,14 +104,14 @@ parser = whiteSpace >> sequenceOfStmt
 sequenceOfStmt =
   do list <- (sepBy1 statement semi)
      -- If there's only one statement return it without using Seq.
-     return $ Seq list --if length list == 1 then head list else Seq list
+     return $ StmtSeq list --if length list == 1 then head list else Seq list
 
 statement :: Parser Stmt
-statement =   ifStmt
-          <|> whileStmt
-          <|> doWhileStmt
-          <|> skipStmt
-          <|> assignStmt
+statement =  ifStmt
+         <|> whileStmt
+         <|> doWhileStmt
+         <|> skipStmt
+         <|> assignStmt
 
 ifStmt :: Parser Stmt
 ifStmt =
@@ -134,7 +139,7 @@ doWhileStmt =
 
 assignStmt :: Parser Stmt
 assignStmt =
-  do var  <- identifier
+  do var  <- aExpression
      reservedOp ":="
      expr <- aExpression
      return $ Assign var expr
@@ -175,8 +180,12 @@ rExpression =
      a2 <- aExpression
      return $ RBinary op a1 a2
  
-relation =   (reservedOp ">" >> return Greater)
-         <|> (reservedOp "<" >> return Less)
+relation =  (reservedOp "=" >> return Equal)
+        <|> (reservedOp "!=" >> return NotEqual)
+        <|> (reservedOp ">" >> return Greater)
+        <|> (reservedOp "<" >> return Less)
+        <|> (reservedOp ">=" >> return GreaterOrEqual)
+        <|> (reservedOp "<=" >> return LessOrEqual)
 
 parseString :: String -> Stmt
 parseString str =
