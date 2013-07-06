@@ -46,12 +46,16 @@ data ABinOp = Add
 
 -- Statements
 data Stmt = StmtSeq [Stmt]
-          | LocalVar String
+          | LocalVar [String]
           | Assign AExpr AExpr
           | If BExpr Stmt Stmt
           | While BExpr Stmt
           | DoWhile Stmt BExpr
           | Skip
+            deriving (Show)
+
+-- Functions
+data Fnct = Function String [String] Stmt
             deriving (Show)
 
 languageDef =
@@ -96,43 +100,59 @@ braces     = Token.braces     lexer -- parses surrounding braces
 brackets   = Token.brackets   lexer -- parses surrounding brackets
 integer    = Token.integer    lexer -- parses an integer
 semi       = Token.semi       lexer -- parses a semicolon
+comma      = Token.comma       lexer -- parses a comma
 whiteSpace = Token.whiteSpace lexer -- parses whitespace
 
 parser :: Parser Stmt
 parser = whiteSpace >> sequenceOfStmt
 
+function :: Parser Fnct
+function =
+  do var  <- identifier
+     args <- parens $ sepBy1 identifier comma
+     stmt <- braces sequenceOfStmt
+     return $ Function var args stmt
+
 sequenceOfStmt =
-  do list <- (sepBy1 statement semi)
-     -- If there's only one statement return it without using Seq.
-     return $ StmtSeq list --if length list == 1 then head list else Seq list
+  do list <- (sepEndBy statement semi)
+     return $ StmtSeq list
 
 statement :: Parser Stmt
 statement =  ifStmt
+         <|> ifElseStmt
          <|> whileStmt
          <|> doWhileStmt
-         <|> skipStmt
          <|> assignStmt
+         <|> localStmt
+         <|> skipStmt
 
 ifStmt :: Parser Stmt
 ifStmt =
   do reserved "if"
      cond  <- parens bExpression
-     stmt1 <- braces statement
+     stmt1 <- braces sequenceOfStmt
+     return $ If cond stmt1 Skip
+
+ifElseStmt :: Parser Stmt
+ifElseStmt =
+  do reserved "if"
+     cond  <- parens bExpression
+     stmt1 <- braces sequenceOfStmt
      reserved "else"
-     stmt2 <- braces statement
+     stmt2 <- braces sequenceOfStmt
      return $ If cond stmt1 stmt2
 
 whileStmt :: Parser Stmt
 whileStmt =
   do reserved "while"
      cond <- parens bExpression
-     stmt <- braces statement
+     stmt <- braces sequenceOfStmt
      return $ While cond stmt
 
 doWhileStmt :: Parser Stmt
 doWhileStmt =
   do reserved "do"
-     stmt <- braces statement
+     stmt <- braces sequenceOfStmt
      reserved "while"
      cond <- parens bExpression
      return $ DoWhile stmt cond
@@ -143,6 +163,12 @@ assignStmt =
      reservedOp ":="
      expr <- aExpression
      return $ Assign var expr
+
+localStmt :: Parser Stmt
+localStmt =
+  do reserved "local"
+     list <- (sepBy1 identifier comma)
+     return $ LocalVar list
 
 skipStmt :: Parser Stmt
 skipStmt = reserved "skip" >> return Skip
