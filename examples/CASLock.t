@@ -1,19 +1,19 @@
 // Compare-and-swap lock
 
-makeLock() {
+function makeLock() {
     local v;
     v := alloc(1);
     [v] := 0;
     return v;
 }
 
-lock(x) {
+function lock(x) {
     local b;
     do {
         b := CAS(x, 0, 1);
     } while (b = 0);
 }
 
-unlock(x) {
+function unlock(x) {
     [x] := 0;
 }

@@ -84,6 +84,8 @@ languageDef =
                                      , "return"
                                      , "break"
                                      , "continue"
+                                     , "function"
+                                     , "region"
                                      , "("
                                      , ")"
                                      , "{"
@@ -118,7 +120,8 @@ sequenceOfDeclr = sepBy function whiteSpace
 
 function :: Parser Declr
 function =
-  do var  <- identifier
+  do reserved "function"
+     var  <- identifier
      args <- parens $ sepBy identifier comma
      stmt <- braces sequenceOfStmt
      return $ Function var args stmt

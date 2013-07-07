@@ -1,13 +1,13 @@
 // Blocking counter
 
-makeCounter() {
+function makeCounter() {
     local v;
     v := alloc(1);
     [v] := 0;
     return v;
 }
 
-incr(x) {
+function incr(x) {
     local v, b;
     do {
         v := [x];
@@ -16,7 +16,7 @@ incr(x) {
     return v;
 }
 
-read(x) {
+function read(x) {
     local v;
     do {
         v := [x];

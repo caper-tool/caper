@@ -1,13 +1,13 @@
 // Compare-and-swap counter
 
-makeCounter() {
+function makeCounter() {
     local v;
     v := alloc(1);
     [v] := 0;
     return v;
 }
 
-incr(x) {
+function incr(x) {
     local v, b;
     do {
         v := [x];
@@ -16,7 +16,7 @@ incr(x) {
     return v;
 }
 
-read(x) {
+function read(x) {
     local v;
     v := [x];
     return v;

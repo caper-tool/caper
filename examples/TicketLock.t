@@ -1,6 +1,6 @@
 // Ticket lock
 
-makeLock() {
+function makeLock() {
     local v;
     v := alloc(2);
     [v + 0] := makeCounter();
@@ -8,7 +8,7 @@ makeLock() {
     return v;
 }
 
-lock(x) {
+function lock(x) {
     local v;
     v := incr([x + 1]);
     while (v != read([x + 0])) {
@@ -16,6 +16,6 @@ lock(x) {
     }
 }
 
-unlock(x) {
+function unlock(x) {
     incr([x + 0]);
 }
