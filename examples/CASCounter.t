@@ -12,7 +12,7 @@ incr(x) {
     do {
         v := [x];
         b := CAS(x, v, v + 1);
-    } while (b = false);
+    } while (b = 0);
     return v;
 }
 

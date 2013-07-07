@@ -1,5 +1,6 @@
 module Parser where
 
+import Debug.Trace
 import System.IO
 import Control.Monad
 import Text.ParserCombinators.Parsec
@@ -30,11 +31,12 @@ data RBinOp = Equal
 
 -- Arithmetic Expressions
 data AExpr = Var String
-           | Dereference AExpr
+           | Deref AExpr
            | IntConst Integer
-           | Triple BExpr AExpr AExpr
+           | Cond BExpr AExpr AExpr
            | Neg AExpr
            | ABinary ABinOp AExpr AExpr
+           | FunctCall String [AExpr]
              deriving (Show)
 
 -- Arithmetic Operations
@@ -46,17 +48,21 @@ data ABinOp = Add
 
 -- Statements
 data Stmt = StmtSeq [Stmt]
-          | LocalVar [String]
+          | VarDeclr [String]
           | Assign AExpr AExpr
+          | ExprStmt AExpr
           | If BExpr Stmt Stmt
           | While BExpr Stmt
           | DoWhile Stmt BExpr
+          | Return (Maybe AExpr)
+          | Break
+          | Continue
           | Skip
             deriving (Show)
 
--- Functions
-data Fnct = Function String [String] Stmt
-            deriving (Show)
+-- Declarations
+data Declr = Function String [String] Stmt
+             deriving (Show)
 
 languageDef =
   emptyDef { Token.commentStart    = "/*"
@@ -77,6 +83,7 @@ languageDef =
                                      , "local"
                                      , "return"
                                      , "break"
+                                     , "continue"
                                      , "("
                                      , ")"
                                      , "{"
@@ -86,7 +93,7 @@ languageDef =
                                      ]
            , Token.reservedOpNames = ["+", "-", "*", "/", ":="
                                      , "=", "!=", "<", ">", ">=", "<="
-                                     , "and", "or", "not"
+                                     , "and", "or", "not", "?", ":"
                                      ]
            }
 
@@ -100,16 +107,19 @@ braces     = Token.braces     lexer -- parses surrounding braces
 brackets   = Token.brackets   lexer -- parses surrounding brackets
 integer    = Token.integer    lexer -- parses an integer
 semi       = Token.semi       lexer -- parses a semicolon
-comma      = Token.comma       lexer -- parses a comma
+comma      = Token.comma      lexer -- parses a comma
+colon      = Token.comma      lexer -- parses a colon
 whiteSpace = Token.whiteSpace lexer -- parses whitespace
 
-parser :: Parser Stmt
-parser = whiteSpace >> sequenceOfStmt
+parser :: Parser [Declr]
+parser = whiteSpace >> sequenceOfDeclr
 
-function :: Parser Fnct
+sequenceOfDeclr = sepBy function whiteSpace
+
+function :: Parser Declr
 function =
   do var  <- identifier
-     args <- parens $ sepBy1 identifier comma
+     args <- parens $ sepBy identifier comma
      stmt <- braces sequenceOfStmt
      return $ Function var args stmt
 
@@ -118,23 +128,26 @@ sequenceOfStmt =
      return $ StmtSeq list
 
 statement :: Parser Stmt
-statement =  ifStmt
-         <|> ifElseStmt
-         <|> whileStmt
-         <|> doWhileStmt
-         <|> assignStmt
-         <|> localStmt
-         <|> skipStmt
+statement =  ifStatement
+         <|> ifElseStatement
+         <|> whileStatement
+         <|> doWhileStatement
+         <|> expressionStatement
+         <|> localStatement
+         <|> breakStatement
+         <|> continueStatement
+         <|> returnStatement
+         <|> skipStatement
 
-ifStmt :: Parser Stmt
-ifStmt =
+ifStatement :: Parser Stmt
+ifStatement =
   do reserved "if"
      cond  <- parens bExpression
      stmt1 <- braces sequenceOfStmt
      return $ If cond stmt1 Skip
 
-ifElseStmt :: Parser Stmt
-ifElseStmt =
+ifElseStatement :: Parser Stmt
+ifElseStatement =
   do reserved "if"
      cond  <- parens bExpression
      stmt1 <- braces sequenceOfStmt
@@ -142,40 +155,69 @@ ifElseStmt =
      stmt2 <- braces sequenceOfStmt
      return $ If cond stmt1 stmt2
 
-whileStmt :: Parser Stmt
-whileStmt =
+whileStatement :: Parser Stmt
+whileStatement =
   do reserved "while"
      cond <- parens bExpression
      stmt <- braces sequenceOfStmt
      return $ While cond stmt
 
-doWhileStmt :: Parser Stmt
-doWhileStmt =
+doWhileStatement :: Parser Stmt
+doWhileStatement =
   do reserved "do"
      stmt <- braces sequenceOfStmt
      reserved "while"
      cond <- parens bExpression
      return $ DoWhile stmt cond
 
-assignStmt :: Parser Stmt
-assignStmt =
-  do var  <- aExpression
-     reservedOp ":="
-     expr <- aExpression
-     return $ Assign var expr
+expressionStatement :: Parser Stmt
+expressionStatement =
+  do expr <- aExpression
+     op   <- optionMaybe $ assignStatement
+     case op of
+       Nothing -> return $ ExprStmt expr
+       Just l  -> return $ Assign expr l
 
-localStmt :: Parser Stmt
-localStmt =
+assignStatement :: Parser AExpr
+assignStatement =
+  do reservedOp ":="
+     expr <- aExpression
+     return expr
+
+localStatement :: Parser Stmt
+localStatement =
   do reserved "local"
      list <- (sepBy1 identifier comma)
-     return $ LocalVar list
+     return $ VarDeclr list
 
-skipStmt :: Parser Stmt
-skipStmt = reserved "skip" >> return Skip
+returnStatement :: Parser Stmt
+returnStatement =
+  do reserved "return"
+     expr <- optionMaybe aExpression
+     return $ Return expr
+
+breakStatement :: Parser Stmt
+breakStatement = reserved "break" >> return Break
+
+continueStatement :: Parser Stmt
+continueStatement = reserved "continue" >> return Continue
+
+skipStatement :: Parser Stmt
+skipStatement = reserved "skip" >> return Skip
 
 aExpression :: Parser AExpr
-aExpression = buildExpressionParser aOperators aTerm
- 
+aExpression = --try (condExpression)
+           buildExpressionParser aOperators aTerm
+
+condExpression :: Parser AExpr
+condExpression =
+  do cond  <- bExpression
+     reservedOp "?"
+     expr1 <- aExpression
+     reservedOp ":"
+     expr2 <- aExpression
+     return $ Cond cond expr1 expr2
+
 bExpression :: Parser BExpr
 bExpression = buildExpressionParser bOperators bTerm
 
@@ -184,7 +226,7 @@ aOperators = [ [Prefix (reservedOp "-"   >> return (Neg             ))          
              , [Infix  (reservedOp "/"   >> return (ABinary Divide  )) AssocLeft]
              , [Infix  (reservedOp "+"   >> return (ABinary Add     )) AssocLeft]
              , [Infix  (reservedOp "-"   >> return (ABinary Subtract)) AssocLeft]
-              ]
+             ]
  
 bOperators = [ [Prefix (reservedOp "not" >> return (Not             ))          ]
              , [Infix  (reservedOp "and" >> return (BBinary And     )) AssocLeft]
@@ -192,8 +234,16 @@ bOperators = [ [Prefix (reservedOp "not" >> return (Not             ))          
              ]
 
 aTerm =  parens aExpression
-     <|> liftM Var identifier
+     <|> funCallOrVar
+     <|> liftM Deref (brackets aExpression)
      <|> liftM IntConst integer
+
+funCallOrVar =
+  do var  <- identifier
+     list <- optionMaybe $ parens $ sepBy aExpression comma
+     case list of
+       Nothing -> return $ Var var
+       Just l  -> return $ FunctCall var l
 
 bTerm =  parens bExpression
      <|> (reserved "true"  >> return (BoolConst True ))
@@ -213,13 +263,13 @@ relation =  (reservedOp "=" >> return Equal)
         <|> (reservedOp ">=" >> return GreaterOrEqual)
         <|> (reservedOp "<=" >> return LessOrEqual)
 
-parseString :: String -> Stmt
+parseString :: String -> [Declr]
 parseString str =
   case parse parser "" str of
     Left e  -> error $ show e
     Right r -> r
  
-parseFile :: String -> IO Stmt
+parseFile :: String -> IO [Declr]
 parseFile file =
   do program  <- readFile file
      case parse parser "" program of

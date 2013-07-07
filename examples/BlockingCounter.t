@@ -11,8 +11,7 @@ incr(x) {
     local v, b;
     do {
         v := [x];
-        b := v != 1 and CAS(x, v, -1);
-    } while (b = false);
+    } while (v = -1 or CAS(x, v, -1) = 0);
     [x] := v + 1;
     return v;
 }

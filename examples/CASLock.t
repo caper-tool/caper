@@ -11,7 +11,7 @@ lock(x) {
     local b;
     do {
         b := CAS(x, 0, 1);
-    } while (b = false);
+    } while (b = 0);
 }
 
 unlock(x) {
