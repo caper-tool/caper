@@ -333,3 +333,21 @@ parseFile file =
      case parse parser "" program of
        Left e  -> print e >> fail "parse error"
        Right r -> return r
+
+aExpressionParser :: Parser AExpr
+aExpressionParser = whiteSpace >> aExpression
+
+parseAExpression :: String -> AExpr
+parseAExpression str =
+  case parse aExpressionParser "" str of
+    Left e  -> error $ show e
+    Right r -> r
+
+bExpressionParser :: Parser BExpr
+bExpressionParser = whiteSpace >> bExpression
+
+parseBExpression :: String -> BExpr
+parseBExpression str =
+  case parse bExpressionParser "" str of
+    Left e  -> error $ show e
+    Right r -> r
