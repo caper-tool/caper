@@ -1,14 +1,14 @@
 // Compare-and-swap counter
 
 function makeCounter() {
-    local v;
+    var v;
     v := alloc(1);
     [v] := 0;
     return v;
 }
 
 function incr(x) {
-    local v, b;
+    var v, b;
     do {
         v := [x];
         b := CAS(x, v, v + 1);
@@ -17,7 +17,7 @@ function incr(x) {
 }
 
 function read(x) {
-    local v;
+    var v;
     v := [x];
     return v;
 }

@@ -80,7 +80,7 @@ languageDef =
                                      , "not"
                                      , "and"
                                      , "or"
-                                     , "local"
+                                     , "var"
                                      , "return"
                                      , "break"
                                      , "continue"
@@ -136,7 +136,7 @@ statement =  ifStatement
          <|> whileStatement
          <|> doWhileStatement
          <|> expressionStatement
-         <|> localStatement
+         <|> varStatement
          <|> breakStatement
          <|> continueStatement
          <|> returnStatement
@@ -187,9 +187,9 @@ assignStatement =
      expr <- aExpression
      return expr
 
-localStatement :: Parser Stmt
-localStatement =
-  do reserved "local"
+varStatement :: Parser Stmt
+varStatement =
+  do reserved "var"
      list <- (sepBy1 identifier comma)
      return $ VarDeclr list
 

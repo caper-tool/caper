@@ -1,7 +1,7 @@
 // Ticket lock
 
 function makeLock() {
-    local v;
+    var v;
     v := alloc(2);
     [v + 0] := makeCounter();
     [v + 1] := makeCounter();
@@ -9,7 +9,7 @@ function makeLock() {
 }
 
 function lock(x) {
-    local v;
+    var v;
     v := incr([x + 1]);
     while (v != read([x + 0])) {
         skip;

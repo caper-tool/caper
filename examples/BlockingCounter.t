@@ -1,14 +1,14 @@
 // Blocking counter
 
 function makeCounter() {
-    local v;
+    var v;
     v := alloc(1);
     [v] := 0;
     return v;
 }
 
 function incr(x) {
-    local v, b;
+    var v, b;
     do {
         v := [x];
     } while (v = -1 or CAS(x, v, -1) = 0);
@@ -17,7 +17,7 @@ function incr(x) {
 }
 
 function read(x) {
-    local v;
+    var v;
     do {
         v := [x];
     } while (v = -1);
