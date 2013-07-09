@@ -1,6 +1,7 @@
 {-# LANGUAGE RankNTypes, MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveDataTypeable, FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 import Prelude hiding (catch)
 import Data.Map as Map
 import Data.Set as Set
@@ -11,7 +12,7 @@ data PermissionExpression =
                 | VarPerm String
                 | EVarPerm String
                 | PlusPerm PermissionExpression PermissionExpression
-
+                deriving (Show)
 
 type ValueExpression = ()
 
@@ -30,8 +31,8 @@ data GuardTypeException =
                 deriving Typeable
 
 instance Show GuardTypeException where
-        show (GTEMultipleOccurrence s Nothing) = "Multiple guards named \"" ++ s ++ "\" were declared in a guard type."
-        show (GTEMultipleOccurrence s (Just gt)) = "Multiple guards named \"" ++ s ++ "\" were declared in the guard type \"" ++ (show gt) ++ "\"."
+        show (GTEMultipleOccurrence s Nothing) = "Multiple guards named \"" ++ s ++ "\" are declared in a guard type."
+        show (GTEMultipleOccurrence s (Just gt)) = "Multiple guards named \"" ++ s ++ "\" are declared in the guard type \"" ++ (show gt) ++ "\"."
 
 instance Exception GuardTypeException
 
@@ -79,23 +80,56 @@ data GuardAST =
                 | NamedPermissionG String PermissionExpression
                 | ParametrisedG String ValueExpression
                 | CoParametrisedG String [ValueExpression]
-                | StarG Guard Guard
+                | StarG GuardAST GuardAST
+                deriving (Show)
 
 
 
 
-data GuardParameters = NoGP | PermissionGP PermissionExpression | Parameters [ValueExpression] | CoParameters [ValueExpression] [ValueExpression]
-
-data GuardType =
+data GuardException =
                 GEInconsistentOccurrences String GuardAST
                 deriving Typeable
 
-instance Show GuardTypeException where
-        show (GTEMultipleOccurrence s Nothing) = "Multiple guards named \"" ++ s ++ "\" were declared in a guard type."
-        show (GTEMultipleOccurrence s (Just gt)) = "Multiple guards named \"" ++ s ++ "\" were declared in the guard type \"" ++ (show gt) ++ "\"."
+instance Show GuardException where
+        show (GEInconsistentOccurrences s g) = "The guard named \"" ++ s ++ "\" is used inconsistently in the guard expression \"" ++ (show g) ++ "\"."
 
-instance Exception GuardTypeException
+instance Exception GuardException
+
+data GuardParameters = NoGP | PermissionGP PermissionExpression | Parameters [ValueExpression] | CoParameters [ValueExpression] [ValueExpression]
+        deriving (Show)
 
 type Guard = Map.Map String GuardParameters
 
-toGuard :: GuardAST -> Guard
+toGuard :: (Throws GuardException l) => GuardAST -> EM l Guard
+toGuard gast = tg (Map.empty) gast
+        where
+                tg g (EmptyG) = return g
+                tg g (NamedG n) = if n `Map.member` g then throw (GEInconsistentOccurrences n gast) else return $ Map.insert n NoGP g
+                tg g (NamedPermissionG n pe) = case Map.lookup n g of
+                                        (Nothing) -> return $ Map.insert n (PermissionGP pe) g
+                                        (Just (PermissionGP pe0)) -> return $ Map.insert n (PermissionGP (PlusPerm pe0 pe)) g
+                                        _ -> throw $ GEInconsistentOccurrences n gast
+                tg g (ParametrisedG n v) = case Map.lookup n g of
+                                        (Nothing) -> return $ Map.insert n (Parameters [v]) g
+                                        (Just (Parameters vs)) -> return $ Map.insert n (Parameters (v : vs)) g
+                                        (Just (CoParameters vs covs)) -> return $ Map.insert n (CoParameters (v : vs) covs) g
+                                        _ -> throw $ GEInconsistentOccurrences n gast
+                tg g (CoParametrisedG n vs) = case Map.lookup n g of
+                                        (Nothing) -> return $ Map.insert n (CoParameters [] vs) g
+                                        (Just (Parameters vs')) -> return $ Map.insert n (CoParameters vs' vs) g
+                                        _ -> throw $ GEInconsistentOccurrences n gast
+                tg g (StarG ge1 ge2) = do
+                                                g' <- tg g ge1
+                                                tg g' ge2
+
+checkGuardAtType :: Guard -> WeakGuardType -> Bool
+checkGuardAtType g gt = Set.fold (\m b -> b || Map.foldWithKey (matchin m) True g) False gt
+        where
+                matchin m k p b = b && case Map.lookup k m of
+                                Nothing -> False
+                                (Just x) -> matchup p x
+                matchup NoGP UniqueGPT = True
+                matchup (PermissionGP _) PermissionGPT = True
+                matchup (Parameters _) ValueGPT = True
+                matchup (CoParameters _ _) ValueGPT = True
+                matchup _ _ = False
