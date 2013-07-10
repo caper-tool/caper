@@ -1,0 +1,103 @@
+\documentclass[a4paper]{article}
+
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{amssymb}
+
+\newtheorem*{extension}{Extension}
+
+\begin{document}
+\title{\textsc{Caper}: Design Document}
+\author{}
+
+\maketitle
+
+This document specifies \textsc{Caper}, a prototype tool for (semi-)automatic program verification using Concurrent Abstract Predicates (CAP).
+Programs will be annotated with pre- and postconditions on functions, loop invariants and other assertions, definitions or proof hints.
+\textsc{Caper} will attempt to verify programs against these specifications.
+
+\section{Programming Language}
+
+The \textsc{Caper} programming language has:
+\begin{itemize}
+  \item functions (procedures) as the basic top-level elements;
+  \item function-scoped mutable variables;
+  \item a shared heap, mutable with primitive atomic operations;
+  \item integer arithmetic;
+  \item conditional and loop constructs;
+  \item fork/join concurrency.
+\end{itemize}
+
+\section{Program Logic}
+
+The \textsc{Caper} program logic is based on CAP and inspired by iCap and TaDA.
+As in CAP, assertions describe resources owned by the local thread and resources belonging to shared regions.
+Shared regions are subject to protocols, which determine how their resources may be used.
+
+As in iCap, but unlike in CAP, the state of shared regions are abstracted.
+That is, instead of directly specifying the resources currently belonging to the region, an assertion specifies the possible abstract states of a region, which are associated with concrete resources by an interpretation function.
+Abstract states of regions are integers.
+
+\begin{extension}
+  Permit other datatypes as the abstract states of regions.
+\end{extension}
+
+Each region is associated with a protocol that determines how its (abstract) state may change.
+In order for a thread to perform a state change, it must have access to a resource (called a guard) associated with the state change in the protocol.
+In CAP, the guard is always a non-zero fractional permission to a single named (and parametrised) guard.
+In TaDA, guards are elements of an arbitrary separation algebra associated with the region.
+\textsc{Caper} takes a middle ground: guards are elements of a separation algebra of a certain form.
+
+\subsection{Guards and Guard Types}
+
+A guard type specifies the separation algebra of guards that is associated with a region.
+Guard types are composed from primitive guard types.
+Each primitive guard type is associated with a name, which must be unique within the overall guard type.
+There are three kinds of primitive guard types:
+\begin{itemize}
+  \item Unique guards consist of a name and nothing else: there can be only one such guard for a region.
+  \item Permission guards consist of a name and a permission value: there may be multiple permission guards for a region, whose permissions compose to give full permission.
+  \item Parametrised guards consist of a name together with an integer value: there is one of these guards for each integer.
+    The syntax for guards makes it possible to represent the combination of all parametrised guards of a given name, excluding a finite set.
+\end{itemize}
+
+\begin{extension}
+  Permit combinations of parameters and permissions.
+\end{extension}
+
+There are two operators for combining guard types: product and sum.
+The product of two guard types $a \times b$ can be thought of as the set of pairs of guards from $a$ and guards from $b$.
+(This corresponds to a direct product on the separation algebras.)
+
+The sum of two guard types $a + b$ contains all guards from $a$ and all guards from $b$.
+(This can be thought of as the (disjoint/discriminated) union of guard types $a$ and $b$.)
+However, we identify the "full" guards of $a$ and $b$.
+
+The sum construction allows us to specify rich forms of capabilities, such as deny-guarantee or insert-remove-definite.
+
+\subsection{Protocols}
+
+Here are some examples of protocol specifications.
+
+For a lock:
+\[
+\begin{array}{r@{\ :\ } c @{\ \rightsquigarrow\ } c}
+  A [ \_ ] & 0 & 1 \\
+  B & 1 & 0
+\end{array}
+\]
+$A [ \_ ]$ indicates that we have some (unspecified but non-zero) permission on $A$.
+
+\[
+\begin{array}{c @{\ |\ } r@{\ :\ } c @{\ \rightsquigarrow\ } c}
+  n > 0 & A (n) & n & -n \\
+  n > 0 & B & -n & n+1 \\
+  n > 0 & B * C & 0 & n \\
+\end{array}
+\]
+
+Logical variables may occur in protocol specifications.
+We can stipulate constraints on the logical variables as side-conditions.
+
+
+\end{document}

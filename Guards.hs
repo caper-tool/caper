@@ -16,10 +16,15 @@ data PermissionExpression =
 
 type ValueExpression = ()
 
+-- The empty guard type (ZeroGT) should not be allowed as a 
+-- parameter to a sum or product.  We therefore split guard
+-- types into two levels.
+
+data TopLevelGuardTypeAST =
+                ZeroGT | SomeGT GuardTypeAST
 
 data GuardTypeAST =
-                ZeroGT
-                | NamedGT String
+                NamedGT String
                 | NamedPermissionGT String
                 | ParametrisedGT String
                 | ProductGT GuardTypeAST GuardTypeAST
@@ -41,14 +46,15 @@ data GuardParameterType =
                 UniqueGPT | PermissionGPT | ValueGPT
                 deriving (Eq,Ord,Show)
 
+-- INVARIANT : instances of WeakGuardType must be non-empty
 type WeakGuardType = Set.Set (Map.Map String GuardParameterType)
 
-validateGuardTypeAST :: (Throws GuardTypeException l) => GuardTypeAST -> EM l ()
-validateGuardTypeAST gt = do
+validateGuardTypeAST :: (Throws GuardTypeException l) => TopLevelGuardTypeAST -> EM l ()
+validateGuardTypeAST ZeroGT = return ()
+validateGuardTypeAST (SomeGT gt) = do
                         vgt Set.empty gt
                         return ()
         where
-                vgt s ZeroGT = return s
                 vgt s (NamedGT n) = checkFresh s n
                 vgt s (NamedPermissionGT n) = checkFresh s n
                 vgt s (ParametrisedGT n) = checkFresh s n
@@ -65,12 +71,16 @@ mixWith op s1 s2 = Set.unions $ Set.toList $ Set.map (\x -> Set.map (op x) s2) s
 
 
 toWeakGuardType :: GuardTypeAST -> WeakGuardType
-toWeakGuardType ZeroGT = Set.singleton Map.empty
 toWeakGuardType (NamedGT n) = Set.singleton $ Map.singleton n UniqueGPT
 toWeakGuardType (NamedPermissionGT n) = Set.singleton $ Map.singleton n PermissionGPT
 toWeakGuardType (ParametrisedGT n) = Set.singleton $ Map.singleton n ValueGPT
 toWeakGuardType (ProductGT gt1 gt2) = mixWith Map.union (toWeakGuardType gt1) (toWeakGuardType gt2)
 toWeakGuardType (SumGT gt1 gt2) = Set.union (toWeakGuardType gt1) (toWeakGuardType gt2)
+
+topLevelToWeakGuardType :: TopLevelGuardTypeAST -> WeakGuardType
+topLevelToWeakGuardType ZeroGT = Set.singleton Map.empty
+topLevelToWeakGuardType (SomeGT gt) = toWeakGuardType gt
+
 
 -- toWeakGuardTypeWorker :: WeakGuardType -> GuardType
 
@@ -133,3 +143,10 @@ checkGuardAtType g gt = Set.fold (\m b -> b || Map.foldWithKey (matchin m) True 
                 matchup (Parameters _) ValueGPT = True
                 matchup (CoParameters _ _) ValueGPT = True
                 matchup _ _ = False
+
+fullGuard :: WeakGuardType -> Guard
+fullGuard gt = Map.map gtToG (Set.findMin gt)
+        where
+                gtToG UniqueGPT = NoGP
+                gtToG PermissionGPT = PermissionGP FullPerm
+                gtToG ValueGPT = CoParameters [] []
