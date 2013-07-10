@@ -1,4 +1,4 @@
-module Parser where
+module Parser(parseFile, parseString, parseAExpression, parseBExpression) where
 
 import Debug.Trace
 import System.IO
@@ -8,104 +8,7 @@ import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as Token
-
--- Boolean expressions
-data BExpr = BoolConst SourcePos Bool
-           | Not SourcePos BExpr
-           | BBinary SourcePos BBinOp BExpr BExpr
-           | RBinary SourcePos RBinOp AExpr AExpr
-
--- Binary Boolean Operators
-data BBinOp = And
-            | Or
-
--- Relational Operators
-data RBinOp = Equal
-            | NotEqual
-            | Greater
-            | Less
-            | GreaterOrEqual
-            | LessOrEqual
-
--- Arithmetic Expressions
-data AExpr = Var SourcePos String
-           | Deref SourcePos AExpr
-           | IntConst SourcePos Integer
-           | Neg SourcePos AExpr
-           | ABinary SourcePos ABinOp AExpr AExpr
-           | FunctCall SourcePos String [AExpr]
-
--- Arithmetic Operations
-data ABinOp = Add
-            | Subtract
-            | Multiply
-            | Divide
-
--- Statements
-data Stmt = StmtSeq SourcePos [Stmt]
-          | VarDeclr SourcePos [String]
-          | Assign SourcePos AExpr AExpr
-          | ExprStmt SourcePos AExpr
-          | If SourcePos BExpr Stmt Stmt
-          | While SourcePos BExpr Stmt
-          | DoWhile SourcePos Stmt BExpr
-          | Return SourcePos (Maybe AExpr)
-          | Break SourcePos
-          | Continue SourcePos
-          | Skip SourcePos
-
--- Declarations
-data Declr = Function SourcePos String [String] Stmt
-
-instance Show BExpr where
-  show (BoolConst _ b)      = show b
-  show (Not _ e)            = "not " ++ show e
-  show (BBinary _ op e1 e2) = show e1 ++ show op ++ show e2
-  show (RBinary _ op e1 e2) = show e1 ++ show op ++ show e2
-
-instance Show BBinOp where
-  show And = " and "
-  show Or  = " or "
-
-instance Show RBinOp where
-  show Equal          = " = "
-  show NotEqual       = " != "
-  show Greater        = " > "
-  show Less           = " < "
-  show GreaterOrEqual = " >= "
-  show LessOrEqual    = " <= "
-
-instance Show AExpr where
-  show (Var _ n)            = n
-  show (Deref _ e)          = "[" ++ show e ++ "]"
-  show (IntConst _ i)       = show i
-  show (Neg _ e)            = "-" ++ show e
-  show (ABinary _ op e1 e2) = show e1 ++ show op ++ show e2
-  show (FunctCall _ n args) = n ++ "(" ++ intercalate ", " (map show args) ++ ")"
-
-instance Show ABinOp where
-  show Add      = " + "
-  show Subtract = " - "
-  show Multiply = " * "
-  show Divide   = " / "
-
-instance Show Stmt where
-  show (StmtSeq _ seq)     = intercalate "; " $ map show seq 
-  show (VarDeclr _ vars)   = "var " ++ intercalate ", " vars
-  show (Assign _ e1 e2)    = show e1 ++ " := " ++ show e2
-  show (ExprStmt _ e)      = show e
-  show (If _ e s1 s2)      = "if (" ++ show e ++ ") {" ++ show s1 ++ "} else {" ++ show s2 ++ "}"
-  show (While _ e s)       = "while (" ++ show e ++ ") {" ++ show s ++ "}"
-  show (DoWhile _ s e)     = "do {" ++ show s ++ "} while (" ++ show e ++ ")"
-  show (Return _ Nothing)  = "return"
-  show (Return _ (Just e)) = "return " ++ show e
-  show (Break _)           = "break"
-  show (Continue _)        = "continue"
-  show (Skip _)            = "skip"
-
-instance Show Declr where
-  show (Function _ n args s) = n ++ "(" ++ ") {" ++ show s ++ "}"
- 
+import AST
 
 languageDef =
   emptyDef { Token.commentStart    = "/*"
@@ -125,8 +28,6 @@ languageDef =
                                      , "or"
                                      , "var"
                                      , "return"
-                                     , "break"
-                                     , "continue"
                                      , "function"
                                      , "region"
                                      , "predicate"
@@ -169,21 +70,21 @@ function =
      var  <- identifier
      args <- parens $ sepBy identifier comma
      stmt <- braces sequenceOfStmt
-     return $ Function pos var args stmt
+     return $ FunctionDeclr pos var Nothing Nothing args stmt
 
 sequenceOfStmt =
   do pos  <- getPosition
-     list <- (sepEndBy statement semi)
+     list <- (sepEndBy statement whiteSpace)
      return $ StmtSeq pos list
 
 statement :: Parser Stmt
 statement =  ifElseStatement
          <|> whileStatement
          <|> doWhileStatement
+         <|> derefStatement
+         <|> assignStatement
          <|> expressionStatement
          <|> varStatement
-         <|> breakStatement
-         <|> continueStatement
          <|> returnStatement
          <|> skipStatement
 
@@ -195,7 +96,8 @@ ifElseStatement =
      stmt1 <- braces sequenceOfStmt
      reserved "else"
      stmt2 <- braces sequenceOfStmt
-     return $ If pos cond stmt1 stmt2
+     semi
+     return $ IfElseStmt pos cond stmt1 stmt2
 
 whileStatement :: Parser Stmt
 whileStatement =
@@ -203,7 +105,7 @@ whileStatement =
      reserved "while"
      cond <- parens bExpression
      stmt <- braces sequenceOfStmt
-     return $ While pos cond stmt
+     return $ WhileStmt pos Nothing cond stmt
 
 doWhileStatement :: Parser Stmt
 doWhileStatement =
@@ -212,54 +114,55 @@ doWhileStatement =
      stmt <- braces sequenceOfStmt
      reserved "while"
      cond <- parens bExpression
-     return $ DoWhile pos stmt cond
+     semi
+     return $ DoWhileStmt pos Nothing stmt cond
+
+derefStatement :: Parser Stmt
+derefStatement =
+  do pos   <- getPosition
+     expr1 <- brackets aExpression
+     reservedOp ":="
+     expr2 <- aExpression
+     semi
+     return $ AssignStmt pos expr1 expr2
+
+assignStatement :: Parser Stmt
+assignStatement =
+  do pos <- getPosition
+     var <- funCallOrVar
+     case var of
+       VarAExpr _ _    -> do { reservedOp ":="; expr <- aExpression; semi; return (AssignStmt pos var expr) }
+       CallAExpr _ _ _ -> semi >> return (ExprStmt pos var)
 
 expressionStatement :: Parser Stmt
 expressionStatement =
-  do pos <- getPosition
+  do pos  <- getPosition
      expr <- aExpression
-     op   <- optionMaybe $ assignStatement
-     case op of
-       Nothing -> return $ ExprStmt pos expr
-       Just l  -> return $ Assign pos expr l
-
-assignStatement :: Parser AExpr
-assignStatement =
-  do reservedOp ":="
-     expr <- aExpression
-     return expr
+     semi
+     return $ ExprStmt pos expr
 
 varStatement :: Parser Stmt
 varStatement =
   do pos <- getPosition
      reserved "var"
      list <- (sepBy1 identifier comma)
-     return $ VarDeclr pos list
+     semi
+     return $ VarStmt pos list
 
 returnStatement :: Parser Stmt
 returnStatement =
   do pos <- getPosition
      reserved "return"
      expr <- optionMaybe aExpression
-     return $ Return pos expr
-
-breakStatement :: Parser Stmt
-breakStatement =
-  do pos <- getPosition
-     reserved "break"
-     return $ Break pos
-
-continueStatement :: Parser Stmt
-continueStatement =
-  do pos <- getPosition
-     reserved "continue"
-     return $ Continue pos
+     semi
+     return $ ReturnStmt pos expr
 
 skipStatement :: Parser Stmt
 skipStatement = 
   do pos <- getPosition
      reserved "skip"
-     return $ Skip pos
+     semi
+     return $ SkipStmt pos
 
 aExpression :: Parser AExpr
 aExpression = buildExpressionParser aOperators aTerm
@@ -267,16 +170,16 @@ aExpression = buildExpressionParser aOperators aTerm
 bExpression :: Parser BExpr
 bExpression = buildExpressionParser bOperators bTerm
 
-aOperators = [ [Prefix (do { pos <- getPosition; reservedOp "-"; return (Neg pos             )})          ]
-             , [Infix  (do { pos <- getPosition; reservedOp "*"; return (ABinary pos Multiply)}) AssocLeft]
-             , [Infix  (do { pos <- getPosition; reservedOp "/"; return (ABinary pos Divide  )}) AssocLeft]
-             , [Infix  (do { pos <- getPosition; reservedOp "+"; return (ABinary pos Add     )}) AssocLeft]
-             , [Infix  (do { pos <- getPosition; reservedOp "-"; return (ABinary pos Subtract)}) AssocLeft]
+aOperators = [ [Prefix (do { pos <- getPosition; reservedOp "-"; return (NegAExpr pos            )})          ]
+             , [Infix  (do { pos <- getPosition; reservedOp "*"; return (BinaryAExpr pos Multiply)}) AssocLeft]
+             , [Infix  (do { pos <- getPosition; reservedOp "/"; return (BinaryAExpr pos Divide  )}) AssocLeft]
+             , [Infix  (do { pos <- getPosition; reservedOp "+"; return (BinaryAExpr pos Add     )}) AssocLeft]
+             , [Infix  (do { pos <- getPosition; reservedOp "-"; return (BinaryAExpr pos Subtract)}) AssocLeft]
              ]
  
-bOperators = [ [Prefix (do { pos <- getPosition; reservedOp "not"; return (Not pos             )})          ]
-             , [Infix  (do { pos <- getPosition; reservedOp "and"; return (BBinary pos And     )}) AssocLeft]
-             , [Infix  (do { pos <- getPosition; reservedOp "or" ; return (BBinary pos Or      )}) AssocLeft]
+bOperators = [ [Prefix (do { pos <- getPosition; reservedOp "not"; return (NotBExpr pos            )})          ]
+             , [Infix  (do { pos <- getPosition; reservedOp "and"; return (BinaryBExpr pos And     )}) AssocLeft]
+             , [Infix  (do { pos <- getPosition; reservedOp "or" ; return (BinaryBExpr pos Or      )}) AssocLeft]
              ]
 
 aTerm =  parens aExpression
@@ -289,30 +192,30 @@ funCallOrVar =
      var  <- identifier
      list <- optionMaybe $ parens $ sepBy aExpression comma
      case list of
-       Nothing -> return $ Var pos var
-       Just l  -> return $ FunctCall pos var l
+       Nothing -> return $ VarAExpr pos var
+       Just l  -> return $ CallAExpr pos var l
 
 deref =
   do pos <- getPosition
      e   <- brackets aExpression
-     return $ Deref pos e
+     return $ DerefAExpr pos e
 
 intConst =
   do pos <- getPosition
      i   <- integer
-     return $ IntConst pos i
+     return $ ConstAExpr pos i
 
 bTerm =  parens bExpression
-     <|> (do { pos <- getPosition; reserved "true"; return (BoolConst pos True)})
-     <|> (do { pos <- getPosition; reserved "false"; return (BoolConst pos False)})
+     <|> (do { pos <- getPosition; reserved "true"; return (ConstBExpr pos True)})
+     <|> (do { pos <- getPosition; reserved "false"; return (ConstBExpr pos False)})
      <|> rExpression
 
 rExpression =
   do pos <- getPosition
-     a1 <- aExpression
-     op <- relation
-     a2 <- aExpression
-     return $ RBinary pos op a1 a2
+     a1  <- aExpression
+     op  <- relation
+     a2  <- aExpression
+     return $ RBinaryBExpr pos op a1 a2
  
 relation =  (reservedOp "=" >> return Equal)
         <|> (reservedOp "!=" >> return NotEqual)
