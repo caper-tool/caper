@@ -12,7 +12,7 @@ data PermissionExpression =
                 | VarPerm String
                 | EVarPerm String
                 | PlusPerm PermissionExpression PermissionExpression
-                deriving (Show)
+                deriving (Eq,Ord,Show)
 
 type ValueExpression = ()
 
@@ -69,6 +69,9 @@ validateGuardTypeAST (SomeGT gt) = do
 mixWith :: (Ord a, Ord b, Ord c) => (a -> b -> c) -> Set.Set a -> Set.Set b -> Set.Set c
 mixWith op s1 s2 = Set.unions $ Set.toList $ Set.map (\x -> Set.map (op x) s2) s1
 
+listMixWith :: (a -> b -> c) -> [a] -> [b] -> [c]
+listMixWith op l1 l2 = Prelude.foldl (++) [] $ Prelude.map (\x -> Prelude.map (op x) l2) l1
+
 
 toWeakGuardType :: GuardTypeAST -> WeakGuardType
 toWeakGuardType (NamedGT n) = Set.singleton $ Map.singleton n UniqueGPT
@@ -81,6 +84,10 @@ topLevelToWeakGuardType :: TopLevelGuardTypeAST -> WeakGuardType
 topLevelToWeakGuardType ZeroGT = Set.singleton Map.empty
 topLevelToWeakGuardType (SomeGT gt) = toWeakGuardType gt
 
+        where
+                gtToG UniqueGPT = NoGP
+                gtToG PermissionGPT = PermissionGP FullPerm
+                gtToG ValueGPT = CoParameters [] []
 
 -- toWeakGuardTypeWorker :: WeakGuardType -> GuardType
 
@@ -106,7 +113,7 @@ instance Show GuardException where
 instance Exception GuardException
 
 data GuardParameters = NoGP | PermissionGP PermissionExpression | Parameters [ValueExpression] | CoParameters [ValueExpression] [ValueExpression]
-        deriving (Show)
+        deriving (Show,Eq,Ord)
 
 type Guard = Map.Map String GuardParameters
 
@@ -150,3 +157,16 @@ fullGuard gt = Map.map gtToG (Set.findMin gt)
                 gtToG UniqueGPT = NoGP
                 gtToG PermissionGPT = PermissionGP FullPerm
                 gtToG ValueGPT = CoParameters [] []
+
+fullGuards :: WeakGuardType -> [Guard]
+fullGuards = Prelude.map (Map.map gtToG) . Set.toList 
+        where
+                gtToG UniqueGPT = NoGP
+                gtToG PermissionGPT = PermissionGP FullPerm
+                gtToG ValueGPT = CoParameters [] []
+
+guardEquivalences :: GuardTypeAST -> [(Guard,Guard)]
+guardEquivalences (SumGT gt1 gt2) = guardEquivalences gt1 ++ guardEquivalences gt2 ++ listMixWith (,) (fullGuards $ toWeakGuardType gt1) (fullGuards $ toWeakGuardType gt2)
+guardEquivalences (ProductGT gt1 gt2) = guardEquivalences gt1 ++ guardEquivalences gt2
+guardEquivalences _ = []
+

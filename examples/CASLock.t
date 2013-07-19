@@ -1,8 +1,20 @@
 // Compare-and-swap lock
 
+region Lock(r,x) {
+  guards %LOCK * UNLOCK;
+  interpretation {
+    0 : x |-> 0 * r@UNLOCK;
+    1 : x |-> 1;
+  }
+  actions {
+    LOCK[_] : 0 ~~> 1;
+    UNLOCK : 1 ~~> 0;
+  }
+}
+
 function makeLock()
   requires emp;
-  ensures IsLock(x) * ret = x; {
+  ensures Lock(r,ret,0) * r@LOCK[1]; {
     var v;
     v := alloc(1);
     [v] := 0;
@@ -10,8 +22,8 @@ function makeLock()
 }
 
 function lock(x)
-  requires IsLock(x);
-  ensures Locked(x); {
+  requires Lock(r,x,_) * r@LOCK[p];
+  ensures Lock(r,x,1) * r@(LOCK[p] * UNLOCK); {
     var b;
     do {
         b := CAS(x, 0, 1);
@@ -19,7 +31,7 @@ function lock(x)
 }
 
 function unlock(x)
-  requires Locked(x);
-  ensures isLock(x); {
+  requires Lock(r,x,1) * r@UNLOCK;
+  ensures Lock(r,x,_); {
     [x] := 0;
 }

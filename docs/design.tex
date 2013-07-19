@@ -3,8 +3,22 @@
 \usepackage{amsmath}
 \usepackage{amsthm}
 \usepackage{amssymb}
+\usepackage{listings}
+\usepackage{color}
 
 \newtheorem*{extension}{Extension}
+
+
+\lstdefinelanguage{caper}
+  {morekeywords={region,guards,interpretation,actions,function,requires,ensures,var,alloc,return,CAS,do,while,if,else},
+  sensitive=true,
+  morecomment=[l]{//},
+  morecomment=[s]{/*}{*/}
+  }
+\lstset{
+  basicstyle=\small,
+  keywordstyle=\color{red}
+}
 
 \begin{document}
 \title{\textsc{Caper}: Design Document}
@@ -71,7 +85,7 @@ The product of two guard types $a \times b$ can be thought of as the set of pair
 
 The sum of two guard types $a + b$ contains all guards from $a$ and all guards from $b$.
 (This can be thought of as the (disjoint/discriminated) union of guard types $a$ and $b$.)
-However, we identify the "full" guards of $a$ and $b$.
+However, we identify the ``full'' guards of $a$ and $b$.
 
 The sum construction allows us to specify rich forms of capabilities, such as deny-guarantee or insert-remove-definite.
 
@@ -99,5 +113,57 @@ $A [ \_ ]$ indicates that we have some (unspecified but non-zero) permission on 
 Logical variables may occur in protocol specifications.
 We can stipulate constraints on the logical variables as side-conditions.
 
+\section{First Example}
+
+We shall use a simple compare-and-swap lock as the motivating example for the \textsc{Caper} tool.
+The code, together with annotations, is shown in Figure~\ref{fig:caslock}.
+
+\begin{figure}
+\begin{center}
+\begin{lstlisting}[language=caper,mathescape,columns=flexible]
+// Compare-and-swap lock
+
+region Lock(r,x) {
+  guards %LOCK * UNLOCK;
+  interpretation {
+    0 : x $\mapsto$ 0 * r@UNLOCK;
+    1 : x $\mapsto$ 1;
+  }
+  actions {
+    LOCK[_] : 0 $\rightsquigarrow$ 1;
+    UNLOCK : 1 $\rightsquigarrow$ 0;
+  }
+}
+
+function makeLock()
+  requires emp;
+  ensures Lock(r,ret,0) * r@LOCK[1]; {
+    var v;
+    v := alloc(1);
+    [v] := 0;
+    return v;
+}
+
+function lock(x)
+  requires Lock(r,x,_) * r@LOCK[p];
+  ensures Lock(r,x,1) * r@(LOCK[p] * UNLOCK); {
+    var b;
+    do {
+        b := CAS(x, 0, 1);
+    } while (b = 0);
+}
+
+function unlock(x)
+  requires Lock(r,x,1) * r@UNLOCK;
+  ensures Lock(r,x,_); {
+    [x] := 0;
+}
+\end{lstlisting}
+\end{center}
+\caption{Compare-and-swap lock example.}
+\label{fig:caslock}
+\end{figure}
+
+It may be necessary to add an invariant assertion to the loop.
 
 \end{document}
