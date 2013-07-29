@@ -1,10 +1,14 @@
-{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
+{-# LANGUAGE FlexibleContexts #-}
 module SaneProver where
 
+import Prelude hiding (mapM,sequence,foldl,mapM_,mapM)
 import qualified Data.Map as Map
-import Control.Monad.State
+import Control.Monad.State hiding (mapM_,mapM)
 import Permissions
 import Data.Maybe
+import Data.Foldable
+import Data.Traversable
 
 data VariableType = VTPermission
         deriving (Eq, Ord, Show)
@@ -12,18 +16,7 @@ data VariableType = VTPermission
 data VariableID = VIDNamed () String
                 | VIDInternal () String
                 deriving (Eq,Ord)
-{--
-instance Eq VariableID where
-        (VIDNamed _ s1) == (VIDNamed _ s2) = s1 == s2
-        (VIDInternal _ s1) == (VIDInternal _ s2) = s1 == s2
-        _ == _ = False
 
-instance Ord VariableID where
-        compare (VIDNamed _ s1) (VIDNamed _ s2) = compare s1 s2
-        compare (VIDNamed _ s1) (VIDInternal _ s2) = GT
-        compare (VIDInternal _ s1) (VIDNamed _ s2) = LT
-        compare (VIDInternal _ s1) (VIDInternal _ s2) = compare s1 s2
---}
 instance Show VariableID where
         show (VIDNamed _ s) = s
         show (VIDInternal _ s) = "__" ++ s
@@ -36,11 +29,11 @@ instance Show EVariable where
         show (EVNormal v) = show v
         show (EVExistential _ s) = "?" ++ s
 
-data Literal a = LPos a | LNeg a deriving (Functor)
+data Literal a v = LPos (a v) | LNeg (a v) deriving (Functor, Foldable, Traversable)
 
-instance Show a => Show (Literal a) where
+instance Show (a v) => Show (Literal a v) where
         show (LPos x) = show x
-        show (LNeg x) = "not " ++ show x
+        show (LNeg x) = "¬ " ++ show x
 
 data PermissionAtomic v = PAZero v
                 | PAFull v
@@ -48,9 +41,7 @@ data PermissionAtomic v = PAZero v
                 | PAEq v v
                 | PADis v v
                 | PATotalFull [v]
-                deriving (Functor)
-
-
+                deriving (Functor, Foldable, Traversable)
 
 instance Show v => Show (PermissionAtomic v) where
         show (PAZero v) = "0 =p= " ++ show v
@@ -62,7 +53,10 @@ instance Show v => Show (PermissionAtomic v) where
 
 type VIDPermissionAtomic = PermissionAtomic VariableID
 
-data Assertion = PermissionAssertion (Literal VIDPermissionAtomic)
+type PermissionLiteral = Literal PermissionAtomic
+
+
+data Assertion = PermissionAssertion (Literal PermissionAtomic VariableID)
 
 instance Show Assertion where
         show (PermissionAssertion pa) = show pa
@@ -82,7 +76,7 @@ emptyContext = Context Map.empty []
 freshVariable :: Context -> String -> VariableID
 -- Return a variable identifier not currently bound in the context
 freshVariable c s = head $ filter (\x -> Map.notMember x (bindings c))
-                        [ VIDInternal () $ s ++ (show n) | n <- [0..] ]
+                        [ VIDInternal () $ s ++ n | n <- "" : map show [0..] ]
 
 freshPermission :: String -> State Context VariableID
 -- Bind a fresh permission variable
@@ -174,21 +168,21 @@ pass (PATotalFull vs) m = do
                         ks <- pavars vs
                         modify $ mapThird (. (dImpl $ m $ DTotalFull ks))
 
-passt :: Literal VIDPermissionAtomic -> State (Int, Map.Map VariableID Int, DPF -> DPF) ()
+passt :: PermissionLiteral VariableID -> State (Int, Map.Map VariableID Int, DPF -> DPF) ()
 passt (LPos x) = pass x id
 passt (LNeg x) = pass x DNot
 
-passtl :: [Literal VIDPermissionAtomic] -> State (Int, Map.Map VariableID Int, DPF -> DPF) ()
+passtl :: [PermissionLiteral VariableID] -> State (Int, Map.Map VariableID Int, DPF -> DPF) ()
 passtl [] = return ()
 passtl (l:ls) = passt l >> passtl ls
 
-permissionConsistentDPF :: [Literal VIDPermissionAtomic] -> DPF
+permissionConsistentDPF :: [PermissionLiteral VariableID] -> DPF
 permissionConsistentDPF ls = let (_, (_, _, x)) = runState (passtl ls) (0, Map.empty, id) in DNot $ x DFalse
 
 
-type PermissionEConsequences = [Literal (PermissionAtomic EVariable)]
+type PermissionEConsequences = [Literal PermissionAtomic EVariable]
 
-filterPermissionAssertions :: Context -> [Literal VIDPermissionAtomic]
+filterPermissionAssertions :: Context -> [PermissionLiteral VariableID]
 filterPermissionAssertions = (mapMaybe getperms) . assertions
         where
                 getperms (PermissionAssertion a) = Just a
@@ -222,11 +216,11 @@ pechk (PATotalFull vs) m = do
                         ks <- pevars vs
                         modify $ mapThird (. (DAnd $ m $ DTotalFull ks))
 
-pechkt :: Ord v => Literal (PermissionAtomic v) -> State (Int, Map.Map v Int, DPF -> DPF) ()
+pechkt :: Ord v => Literal PermissionAtomic v -> State (Int, Map.Map v Int, DPF -> DPF) ()
 pechkt (LPos x) = pechk x id
 pechkt (LNeg x) = pechk x DNot
 
-pechktl :: Ord v => [Literal (PermissionAtomic v)] -> State (Int, Map.Map v Int, DPF -> DPF) ()
+pechktl :: Ord v => [Literal PermissionAtomic v] -> State (Int, Map.Map v Int, DPF -> DPF) ()
 pechktl [] = return ()
 pechktl (l:ls) = pechkt l >> pechktl ls
 
@@ -239,6 +233,33 @@ permCheckEConsequences :: Context -> PermissionEConsequences -> DPF
 permCheckEConsequences c ecs = let (_, (n, m, x)) = runState ((passtl $ filterPermissionAssertions c) >> pavars (allPermissionVars c)) (0, Map.empty, id) in
                         let m' = Map.mapKeys EVNormal m in
                         let (_, (_, _, r)) = runState (pechktl ecs) (n, m', x) in (r (DNot DFalse))
+
+
+
+instantiateEvar :: EVariable -> StateT (Map.Map String VariableID) (State Context) VariableID
+instantiateEvar (EVNormal vid) = return vid -- TODO: check that the variable is bound/bind it if not?
+instantiateEvar (EVExistential () name) = do
+                                        mv <- gets (Map.lookup name)
+                                        case mv of
+                                                (Just vid) -> return vid
+                                                Nothing -> do
+                                                        vid <- lift $ freshPermission name
+                                                        modify $ Map.insert name vid
+                                                        return vid
+
+
+permAssertEConsequences :: PermissionEConsequences -> State Context (Map.Map String VariableID)
+-- Update the context by asserting properties of permissions, possibly including evars
+-- The evars become instantiated as fresh internal variables
+-- The returned Map defines the substitution for evars
+permAssertEConsequences ecs = runStateT (mapM paec ecs) Map.empty >>= return . snd
+        where
+                paec :: Literal PermissionAtomic EVariable ->
+                        StateT (Map.Map String VariableID) (State Context) ()
+                paec ec = do
+                        pl <- mapM instantiateEvar ec
+                        lift $ assert (PermissionAssertion pl)
+
 
 
 
