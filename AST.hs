@@ -36,7 +36,7 @@ data ABinOp = Add
             | Divide
 
 -- Statements
-data Stmt = StmtSeq SourcePos [Stmt]
+data Stmt = SeqStmt SourcePos [Stmt]
           | VarStmt SourcePos [String]
           | AssignStmt SourcePos AExpr AExpr
           | ExprStmt SourcePos AExpr
@@ -45,6 +45,8 @@ data Stmt = StmtSeq SourcePos [Stmt]
           | DoWhileStmt SourcePos (Maybe LStmt) Stmt BExpr
           | ReturnStmt SourcePos (Maybe AExpr)
           | SkipStmt SourcePos
+          | ForkStmt SourcePos AExpr AExpr
+          | JoinStmt SourcePos AExpr
           | AssertStmt SourcePos LStmt
 
 data LStmt = MapsTo SourcePos AExpr AExpr
@@ -53,9 +55,9 @@ data LStmt = MapsTo SourcePos AExpr AExpr
 data Declr = FunctionDeclr SourcePos String (Maybe LStmt) (Maybe LStmt) [String] Stmt
 
 instance Show BExpr where
-  show (ConstBExpr _ b)      = show b
+  show (ConstBExpr _ b)          = show b
   show (NotBExpr _ e)            = "(" ++ "not " ++ show e ++ ")"
-  show (BinaryBExpr _ op e1 e2) = "(" ++ show e1 ++ show op ++ show e2 ++ ")"
+  show (BinaryBExpr _ op e1 e2)  = "(" ++ show e1 ++ show op ++ show e2 ++ ")"
   show (RBinaryBExpr _ op e1 e2) = "(" ++ show e1 ++ show op ++ show e2 ++ ")"
 
 instance Show BBinOp where
@@ -71,12 +73,12 @@ instance Show RBinOp where
   show LessOrEqual    = " <= "
 
 instance Show AExpr where
-  show (VarAExpr _ n)            = n
-  show (DerefAExpr _ e)          = "[" ++ show e ++ "]"
-  show (ConstAExpr _ i)       = show i
-  show (NegAExpr _ e)            = "-" ++ show e
+  show (VarAExpr _ n)           = n
+  show (DerefAExpr _ e)         = "[" ++ show e ++ "]"
+  show (ConstAExpr _ i)         = show i
+  show (NegAExpr _ e)           = "-" ++ show e
   show (BinaryAExpr _ op e1 e2) = "(" ++ show e1 ++ show op ++ show e2 ++ ")"
-  show (CallAExpr _ n args) = n ++ "(" ++ intercalate ", " (map show args) ++ ")"
+  show (CallAExpr _ n args)     = n ++ "(" ++ intercalate ", " (map show args) ++ ")"
 
 instance Show ABinOp where
   show Add      = " + "
@@ -85,7 +87,7 @@ instance Show ABinOp where
   show Divide   = " / "
 
 instance Show Stmt where
-  show (StmtSeq _ seq)               = unwords $ map show seq 
+  show (SeqStmt _ seq)               = unwords $ map show seq 
   show (VarStmt _ vars)              = "var " ++ intercalate ", " vars ++ ";"
   show (AssignStmt _ e1 e2)          = show e1 ++ " := " ++ show e2 ++ ";"
   show (ExprStmt _ e)                = show e ++ ";"
@@ -97,6 +99,8 @@ instance Show Stmt where
   show (ReturnStmt _ Nothing)        = "return;"
   show (ReturnStmt _ (Just e))       = "return " ++ show e ++ ";"
   show (SkipStmt _)                  = "skip;"
+  show (ForkStmt _ e1 e2)            = "fork " ++ show e1 ++ " := " ++ show e2 ++ ";"
+  show (JoinStmt _ e)                = "join " ++ show e ++ ";"
   show (AssertStmt _ ls)             = "assert " ++ show ls ++ ";"
 
 instance Show LStmt where

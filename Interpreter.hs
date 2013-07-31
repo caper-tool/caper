@@ -7,10 +7,17 @@ module Interpreter where
 
 import AST
 import Parser
-import Data.Map;
+import Control.Monad.State
+import Data.Map (Map)
+import qualified Data.Map as Map
 
-data Context = Map String Integer
-type State = Map Integer Integer
+type Context = Map String Integer
+type Heap = Map Integer Integer
+
+type StateM = StateT Heap IO
+
+data StmtValue = NormalValue Integer
+               | ReturnValue Integer
 
 class Eval a b where
   eval :: Context -> a -> b
@@ -20,12 +27,12 @@ instance Eval BExpr Bool where
   eval ctx (NotBExpr _ e)                        = not (eval ctx e)
   eval ctx (BinaryBExpr _ And e1 e2)             = (eval ctx e1) && (eval ctx e2)
   eval ctx (BinaryBExpr _ Or e1 e2)              = (eval ctx e1) || (eval ctx e2)
---  eval ctx (RBinaryBExpr _ Equal e1 e2)          = (eval ctx e1) == (eval ctx e2)
---  eval ctx (RBinaryBExpr _ NotEqual e1 e2)       = (eval ctx e1) /= (eval ctx e2)
---  eval ctx (RBinaryBExpr _ Greater e1 e2)        = (eval ctx e1) > (eval ctx e2)
---  eval ctx (RBinaryBExpr _ Less e1 e2)           = (eval ctx e1) < (eval ctx e2)
---  eval ctx (RBinaryBExpr _ GreaterOrEqual e1 e2) = (eval ctx e1) >= (eval ctx e2)
---  eval ctx (RBinaryBExpr _ LessOrEqual e1 e2)    = (eval ctx e1) <= (eval ctx e2)
+  eval ctx (RBinaryBExpr _ Equal e1 e2)          = ((eval :: Context -> AExpr -> Integer) ctx e1) == ((eval :: Context -> AExpr -> Integer) ctx e2)
+  eval ctx (RBinaryBExpr _ NotEqual e1 e2)       = ((eval :: Context -> AExpr -> Integer) ctx e1) /= ((eval :: Context -> AExpr -> Integer) ctx e2)
+  eval ctx (RBinaryBExpr _ Greater e1 e2)        = ((eval :: Context -> AExpr -> Integer) ctx e1) > ((eval :: Context -> AExpr -> Integer) ctx e2)
+  eval ctx (RBinaryBExpr _ Less e1 e2)           = ((eval :: Context -> AExpr -> Integer) ctx e1) < ((eval :: Context -> AExpr -> Integer) ctx e2)
+  eval ctx (RBinaryBExpr _ GreaterOrEqual e1 e2) = ((eval :: Context -> AExpr -> Integer) ctx e1) >= ((eval :: Context -> AExpr -> Integer) ctx e2)
+  eval ctx (RBinaryBExpr _ LessOrEqual e1 e2)    = ((eval :: Context -> AExpr -> Integer) ctx e1) <= ((eval :: Context -> AExpr -> Integer) ctx e2)
 
 instance Eval AExpr Integer where
   eval ctx (VarAExpr _  n)                = 0
@@ -38,19 +45,14 @@ instance Eval AExpr Integer where
   eval ctx (BinaryAExpr _ Divide e1 e2)   = quot (eval ctx e1) (eval ctx e2)
   eval ctx (CallAExpr _ n args)           = 0
 
---instance Eval Stmt Integer where
---  eval ctx (SeqStmt _ seq)         = 0
---  eval ctx (VarStmt _ vars)        = 0
---  eval ctx (AssignStmt _ e1 e2)    = 0
---  eval ctx (ExprStmt _ e)          = 0
---  eval ctx (IfElseStmt_ b s1 s2)   = if (eval ctx b) then (eval ctx s1) else (eval ctx s2)
---  eval ctx (WhileStmt _ e s)       = 0
---  eval ctx (DoWhileStmt _ s e)     = 0
---  eval ctx (ReturnStmt _ Nothing)  = 0
---  eval ctx (ReturnStmt _ (Just e)) = 0
---  eval ctx (SkipStmt _)            = 0
-
---instance Eval Declr
---  type Out Declr = Maybe Integer
---  eval (Function _ n args s) = 
-
+instance Eval Stmt StmtValue where
+  eval ctx (SeqStmt _ seq)         = NormalValue 0
+  eval ctx (VarStmt _ vars)        = NormalValue 0
+  eval ctx (AssignStmt _ e1 e2)    = NormalValue 0
+  eval ctx (ExprStmt _ e)          = NormalValue (eval ctx e)
+  eval ctx (IfElseStmt _ b s1 s2)  = if (eval ctx b) then (eval ctx s1) else (eval ctx s2)
+  eval ctx (WhileStmt _ _ e s)     = NormalValue 0
+  eval ctx (DoWhileStmt _ _ s e)   = NormalValue 0
+  eval ctx (ReturnStmt _ Nothing)  = ReturnValue 0
+  eval ctx (ReturnStmt _ (Just e)) = ReturnValue (eval ctx e)
+  eval ctx (SkipStmt _)            = NormalValue 0

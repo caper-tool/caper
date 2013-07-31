@@ -75,7 +75,7 @@ function =
 sequenceOfStmt =
   do pos  <- getPosition
      list <- (sepEndBy statement whiteSpace)
-     return $ StmtSeq pos list
+     return $ SeqStmt pos list
 
 statement :: Parser Stmt
 statement =  ifElseStatement
@@ -254,3 +254,5 @@ parseBExpression str =
   case parse bExpressionParser "" str of
     Left e  -> error $ show e
     Right r -> r
+
+
