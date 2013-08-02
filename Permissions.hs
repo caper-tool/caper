@@ -1,6 +1,8 @@
 
-module Permissions (DPF(..), dImpl, dEmp, dpf_eval) where
+module Permissions (PermExpr(..), PermAtom(..), PermFormula(..), pf_eval) where
 import Data.List
+import Data.Maybe
+import Control.Parallel.Strategies
 
 data DPF = DFalse | DAnd DPF DPF | DOr DPF DPF | DNot DPF | DEq Int Int | DC Int Int Int
         | DAll DPF | DEx DPF | DDis Int Int | DZero Int | DFull Int
@@ -99,6 +101,116 @@ et_splits ETSome = [ETBranch ETSome ETSome, ETBranch ETSome ETNone, ETBranch ETN
 et_splits ETNone = [ETNone]
 et_splits (ETBranch et1 et2) = combine ETBranch (et_splits et1) (et_splits et2)
 
+
+-- Permissions with expressions
+
+data PermExpr = PEFull | PEZero | PEVar Int | PESum PermExpr PermExpr | PECompl PermExpr
+data PermAtom = PAEqual PermExpr PermExpr | PADisjoint PermExpr PermExpr
+data PermFormula = PFFalse | PFTrue
+                | PFAtom PermAtom
+                | PFNot PermFormula
+                | PFAnd PermFormula PermFormula
+                | PFOr PermFormula PermFormula
+                | PFImpl PermFormula PermFormula
+                | PFAll PermFormula
+                | PFEx PermFormula
+
+testpf1 = PFAll $ PFImpl (PFEx $ PFEx $ PFAnd (PFAtom $ PAEqual (PESum (PEVar 0) (PEVar 1)) (PEVar 2)) (PFAtom $ PAEqual (PEVar 0) (PEVar 1))) (PFAtom $ PADisjoint (PEVar 0) PEFull)
+
+pf_eval :: PermFormula -> Bool
+pf_eval = pf_eval_env 0 ETSome
+
+pf_eval_env :: Int -> EvalTree -> PermFormula -> Bool
+pf_eval_env _ _ PFFalse = False
+pf_eval_env _ _ PFTrue = True
+pf_eval_env d et (PFNot f) = not $ pf_eval_env d et f
+pf_eval_env d et (PFAnd f1 f2) = pf_eval_env d et f1 && pf_eval_env d et f2
+pf_eval_env d et (PFOr f1 f2) = pf_eval_env d et f1 || pf_eval_env d et f2
+pf_eval_env d et (PFImpl f1 f2) = if pf_eval_env d et f1 then pf_eval_env d et f2 else True
+pf_eval_env d et (PFAll f) = foldl (&&) True (parMap rseq (\e -> pf_eval_env (d+1) e f) (et_splits et))
+pf_eval_env d et (PFEx f) = foldl (||) False (parMap rseq (\e -> pf_eval_env (d+1) e f) (et_splits et))
+pf_eval_env d et (PFAtom a) = pa_eval_env d et a
+
+pa_eval_env :: Int -> EvalTree -> PermAtom -> Bool
+pa_eval_env d et (PAEqual pe1 pe2) = let pc1 = pe_to_pc pe1 in
+                                let pc2 = pe_to_pc pe2 in
+                                        pc_empty d et (pe_disj_combs pe1) &&
+                                        pc_empty d et (pe_disj_combs pe2) &&
+                                        pc_empty d et (PCInter pc1 (PCCompl pc2)) &&
+                                        pc_empty d et (PCInter (PCCompl pc1) pc2)
+pa_eval_env d et (PADisjoint pe1 pe2) = pc_empty d et (pe_disj_combs pe1) && pc_empty d et (pe_disj_combs pe2) &&
+                                        pc_empty d et (PCInter (pe_to_pc pe1) (pe_to_pc pe2))
+
+pe_to_pc :: PermExpr -> PermComb
+pe_to_pc PEFull = PCPrim PPFull
+pe_to_pc PEZero = PCPrim PPZero
+pe_to_pc (PEVar n) = PCPrim (PPVar n)
+pe_to_pc (PESum pe1 pe2) = PCUnion (pe_to_pc pe1) (pe_to_pc pe2)
+pe_to_pc (PECompl pe) = PCCompl (pe_to_pc pe)
+
+pe_disj_combs :: PermExpr -> PermComb
+-- Find a permission combination that is zero exactly when all sums are disjoint
+pe_disj_combs (PESum pe1 pe2) = PCUnion (PCInter (pe_to_pc pe1) (pe_to_pc pe2)) $
+                                PCUnion (pe_disj_combs pe1) (pe_disj_combs pe2)
+pe_disj_combs (PECompl pe) = pe_disj_combs pe
+pe_disj_combs _ = PCPrim PPZero
+
+data PermPrim = PPFull | PPZero | PPVar Int 
+data PermComb = PCPrim PermPrim | PCCompl PermComb | PCUnion PermComb PermComb | PCInter PermComb PermComb
+
+pc_normalise :: PermComb -> [[(PermPrim,Bool)]]
+pc_normalise (PCPrim pp) = [[(pp, False)]]
+pc_normalise (PCUnion pc1 pc2) = (pc_normalise pc1) ++ (pc_normalise pc2)
+pc_normalise (PCInter pc1 pc2) = combine (++) (pc_normalise pc1) (pc_normalise pc2)
+pc_normalise (PCCompl pc) = case pc of
+                        (PCPrim pp) -> [[(pp, True)]]
+                        (PCUnion pc1 pc2) -> pc_normalise $ PCInter (PCCompl pc1) (PCCompl pc2)
+                        (PCInter pc1 pc2) -> pc_normalise $ PCUnion (PCCompl pc1) (PCCompl pc2)
+                        (PCCompl pc') ->  pc_normalise pc'
+
+npc_simplify :: [[(PermPrim,Bool)]] -> [[(Int,Bool)]]
+npc_simplify = mapMaybe inter_simplify
+        where
+                inter_simplify :: [(PermPrim,Bool)] -> Maybe [(Int,Bool)]
+                inter_simplify [] = return []
+                inter_simplify ((pp,b) : xs) = case pp of
+                        PPFull -> if b then Nothing else inter_simplify xs
+                        PPZero -> if b then inter_simplify xs else Nothing
+                        (PPVar n) -> do
+                                xs' <- inter_simplify xs
+                                return $ (n,b) : xs'
+
+correct_indexes :: Int -> [[(Int,Bool)]] -> [[(Int,Bool)]]
+correct_indexes d = map (map ci)
+        where
+                ci (i,b) = (d - i - 1, b)
+
+npc_empty :: EvalTree -> [[(Int,Bool)]] -> Bool
+npc_empty et = (foldl (&&) True) . (map (eval_empty_inters et))
+
+pc_empty :: Int -> EvalTree -> PermComb -> Bool
+pc_empty d et = (npc_empty et) . (correct_indexes d) . npc_simplify . pc_normalise
+
+
+
+dpf_to_pf :: DPF -> PermFormula
+dpf_to_pf DFalse = PFFalse
+dpf_to_pf (DAnd dpf1 dpf2) = PFAnd (dpf_to_pf dpf1) (dpf_to_pf dpf2)
+dpf_to_pf (DOr dpf1 dpf2) = PFOr (dpf_to_pf dpf1) (dpf_to_pf dpf2)
+dpf_to_pf (DNot dpf1) = PFNot (dpf_to_pf dpf1)
+dpf_to_pf (DEq n1 n2) = PFAtom $ PAEqual (PEVar n1) (PEVar n2)
+dpf_to_pf (DC n1 n2 n3) = PFAtom $ PAEqual (PESum (PEVar n1) (PEVar n2)) (PEVar n3)
+dpf_to_pf (DAll dpf) = PFAll $ dpf_to_pf dpf
+dpf_to_pf (DEx dpf) = PFEx $ dpf_to_pf dpf
+dpf_to_pf (DDis n1 n2) = PFAtom $ PADisjoint (PEVar n1) (PEVar n2)
+dpf_to_pf (DZero n) = PFAtom $ PAEqual (PEVar n) PEZero
+dpf_to_pf (DFull n) = PFAtom $ PAEqual (PEVar n) PEFull
+dpf_to_pf _ = error "!"
+
+
+
+
+
 test1 = DEx (DAll (DDis 0 1))
 test2 = DEx (DAll (dImpl (DAll (DDis 0 1)) (DEq 0 1)))
 test2a = DEx (DAll (DEx (dImpl (DDis 0 1) (DEq 1 2))))
@@ -119,4 +231,6 @@ testTrees (x:xs) = do
         putStrLn (show x)
         putStrLn $ "  " ++ (show (eval_empty_inters x [(0,True),(2,False)]))
         testTrees xs
-        
+
+foo :: IO ()
+foo = print $ pf_eval $ dpf_to_pf $ DEx test4

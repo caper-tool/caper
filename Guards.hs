@@ -1,17 +1,21 @@
 {-# LANGUAGE RankNTypes, MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE DeriveDataTypeable, FlexibleContexts #-}
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-import Prelude hiding (catch)
-import Data.Map as Map
-import Data.Set as Set
+import Prelude hiding (catch,mapM,sequence,foldl,mapM_)
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Control.Monad.Exception
+import SaneProver
+import Data.Foldable
+import Data.Traversable
 
-data PermissionExpression =
+data PermissionExpression v =
                 FullPerm
-                | VarPerm String
---                | PlusPerm PermissionExpression PermissionExpression
-                deriving (Eq,Ord,Show)
+                | VarPerm v
+                | PlusPerm (PermissionExpression v) (PermissionExpression v)
+                deriving (Eq,Ord,Show,Functor,Foldable,Traversable)
 
 type ValueExpression = ()
 
@@ -72,7 +76,7 @@ mixWith :: (Ord a, Ord b, Ord c) => (a -> b -> c) -> Set.Set a -> Set.Set b -> S
 mixWith op s1 s2 = Set.unions $ Set.toList $ Set.map (\x -> Set.map (op x) s2) s1
 
 listMixWith :: (a -> b -> c) -> [a] -> [b] -> [c]
-listMixWith op l1 l2 = Prelude.foldl (++) [] $ Prelude.map (\x -> Prelude.map (op x) l2) l1
+listMixWith op l1 l2 = foldl (++) [] $ map (\x -> map (op x) l2) l1
 
 
 toWeakGuardType :: GuardTypeAST -> WeakGuardType
@@ -89,34 +93,34 @@ topLevelToWeakGuardType (SomeGT gt) = toWeakGuardType gt
 
 -- toWeakGuardTypeWorker :: WeakGuardType -> GuardType
 
-data GuardAST =
+data GuardAST v =
                 EmptyG
                 | NamedG String
-                | NamedPermissionG String PermissionExpression
+                | NamedPermissionG String (PermissionExpression v)
                 | ParametrisedG String ValueExpression
                 | CoParametrisedG String [ValueExpression]
-                | StarG GuardAST GuardAST
-                deriving (Show)
+                | StarG (GuardAST v) (GuardAST v)
+                deriving (Show,Functor,Foldable,Traversable)
 
 
 
 
-data GuardException =
-                GEInconsistentOccurrences String GuardAST
+data GuardException v =
+                GEInconsistentOccurrences String (GuardAST v)
                 deriving Typeable
 
-instance Show GuardException where
+instance Show v => Show (GuardException v) where
         show (GEInconsistentOccurrences s g) = "The guard named \"" ++ s ++ "\" is used inconsistently in the guard expression \"" ++ (show g) ++ "\"."
 
-instance Exception GuardException
+instance (Typeable v, Show v) => Exception (GuardException v)
 
-data GuardParameters = NoGP | PermissionGP PermissionExpression
+data GuardParameters v = NoGP | PermissionGP (PermissionExpression v)
  -- | Parameters [ValueExpression] | CoParameters [ValueExpression] [ValueExpression]
-        deriving (Show,Eq,Ord)
+        deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
-type Guard = Map.Map String GuardParameters
+type Guard v = Map.Map String (GuardParameters v)
 
-toGuard :: (Throws GuardException l) => GuardAST -> EM l Guard
+toGuard :: (Typeable v, Show v, Throws (GuardException v) l) => GuardAST v -> EM l (Guard v)
 toGuard gast = tg (Map.empty) gast
         where
                 tg g (EmptyG) = return g
@@ -125,7 +129,7 @@ toGuard gast = tg (Map.empty) gast
                                         (Nothing) -> return $ Map.insert n (PermissionGP pe) g
                                         (Just (PermissionGP pe0)) -> return $ Map.insert n (PermissionGP (PlusPerm pe0 pe)) g
                                         _ -> throw $ GEInconsistentOccurrences n gast
-                tg g (ParametrisedG n v) = case Map.lookup n g of
+{--                tg g (ParametrisedG n v) = case Map.lookup n g of
                                         (Nothing) -> return $ Map.insert n (Parameters [v]) g
                                         (Just (Parameters vs)) -> return $ Map.insert n (Parameters (v : vs)) g
                                         (Just (CoParameters vs covs)) -> return $ Map.insert n (CoParameters (v : vs) covs) g
@@ -133,12 +137,12 @@ toGuard gast = tg (Map.empty) gast
                 tg g (CoParametrisedG n vs) = case Map.lookup n g of
                                         (Nothing) -> return $ Map.insert n (CoParameters [] vs) g
                                         (Just (Parameters vs')) -> return $ Map.insert n (CoParameters vs' vs) g
-                                        _ -> throw $ GEInconsistentOccurrences n gast
+                                        _ -> throw $ GEInconsistentOccurrences n gast --}
                 tg g (StarG ge1 ge2) = do
                                                 g' <- tg g ge1
                                                 tg g' ge2
 
-checkGuardAtType :: Guard -> WeakGuardType -> Bool
+checkGuardAtType :: Guard v -> WeakGuardType -> Bool
 checkGuardAtType g gt = Set.fold (\m b -> b || Map.foldWithKey (matchin m) True g) False gt
         where
                 matchin m k p b = b && case Map.lookup k m of
@@ -146,27 +150,27 @@ checkGuardAtType g gt = Set.fold (\m b -> b || Map.foldWithKey (matchin m) True 
                                 (Just x) -> matchup p x
                 matchup NoGP UniqueGPT = True
                 matchup (PermissionGP _) PermissionGPT = True
-                matchup (Parameters _) ValueGPT = True
-                matchup (CoParameters _ _) ValueGPT = True
+--                matchup (Parameters _) ValueGPT = True
+--                matchup (CoParameters _ _) ValueGPT = True
                 matchup _ _ = False
 
-gtToG :: GuardParameterType -> GuardParameters
+gtToG :: GuardParameterType -> GuardParameters v
 gtToG UniqueGPT = NoGP
 gtToG PermissionGPT = PermissionGP FullPerm
-gtToG ValueGPT = CoParameters [] []
+--gtToG ValueGPT = CoParameters [] []
 
-fullGuard :: WeakGuardType -> Guard
+fullGuard :: WeakGuardType -> Guard v
 fullGuard gt = Map.map gtToG (Set.findMin gt)
 
-fullGuards :: WeakGuardType -> [Guard]
+fullGuards :: WeakGuardType -> [Guard v]
 fullGuards = Prelude.map (Map.map gtToG) . Set.toList 
 
-guardEquivalences :: GuardTypeAST -> [(Guard,Guard)]
+guardEquivalences :: GuardTypeAST -> [(Guard v,Guard v)]
 guardEquivalences (SumGT gt1 gt2) = guardEquivalences gt1 ++ guardEquivalences gt2 ++ listMixWith (,) (fullGuards $ toWeakGuardType gt1) (fullGuards $ toWeakGuardType gt2)
 guardEquivalences (ProductGT gt1 gt2) = guardEquivalences gt1 ++ guardEquivalences gt2
 guardEquivalences _ = []
 
-guardPrimitiveEntailment :: Guard -> Guard -> PermissionContext Maybe Guard
+guardPrimitiveEntailment :: Guard VariableID -> Guard EVariable -> Prover (Maybe (Guard VariableID))
 -- Checks if first guard entails second without rewrites
 -- Returns the frame if so, Nothing otherwise
-guardPrimitiveEntailment g1 g2 = 
+guardPrimitiveEntailment g1 g2 = error "Not done!"
