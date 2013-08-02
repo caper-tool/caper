@@ -48,6 +48,7 @@ instance Show v => Show (PermissionExpression v) where
         show PEZero = "0"
         show (PESum e1 e2) = "(" ++ show e1 ++ " + " ++ show e2 ++ ")"
         show (PECompl e) = "(1 - " ++ show e ++ ")"
+        show (PEVar v) = show v
 
 data PermissionAtomic v =
                  PAEq (PermissionExpression v) (PermissionExpression v)
@@ -186,27 +187,6 @@ pass f m = do
                 (_, s, _) <- get
                 modify $ mapThird (. (P.PFImpl $ m $ P.PFAtom $ toPermAtom $ deBrujinify s f))
 
-{--
-pass (PAZero vid) m = do
-                        [k] <- pavars [vid]
-                        modify $ mapThird (. (dImpl $ m $ DZero k))
-pass (PAFull vid) m = do
-                        [k] <- pavars [vid]
-                        modify $ mapThird (. (dImpl $ m $ DFull k))
-pass (PAComp v1 v2 v3) m = do
-                        [k1,k2,k3] <- pavars [v1,v2,v3]
-                        modify $ mapThird (. (dImpl $ m $ DC k1 k2 k3))
-pass (PAEq v1 v2 ) m = do
-                        [k1,k2] <- pavars [v1,v2]
-                        modify $ mapThird (. (dImpl $ m $ DEq k1 k2))
-pass (PADis v1 v2) m = do
-                        [k1,k2] <- pavars [v1,v2]
-                        modify $ mapThird (. (dImpl $ m $ DDis k1 k2))
-pass (PATotalFull vs) m = do
-                        ks <- pavars vs
-                        modify $ mapThird (. (dImpl $ m $ DTotalFull ks))
-                        --}
-
 passt :: PermissionLiteral VariableID -> State (Int, Map.Map VariableID Int, DPF -> DPF) ()
 passt (LPos x) = pass x id
 passt (LNeg x) = pass x P.PFNot
@@ -230,37 +210,12 @@ filterPermissionAssertions = mapMaybe getperms . assertions
 
 
 
--- Think harder.  We should introduce the remaining universal variables first.
--- Naieve approach: use the context, you idiot!
-
-
-
 -- Got to think of better names for these!
 pechk :: Ord v => PermissionAtomic v -> (DPF -> DPF) -> State (Int, Map.Map v Int, DPF -> DPF) ()
 pechk f m = do
                 pevars_ f
                 (_, s, _) <- get
                 modify $ mapThird (. (P.PFAnd $ m $ P.PFAtom $ toPermAtom $ deBrujinify s f))
-{--
-pechk (PAZero vid) m = do
-                        [k] <- pevars [vid]
-                        modify $ mapThird (. (DAnd $ m $ DZero k))
-pechk (PAFull vid) m = do
-                        [k] <- pevars [vid]
-                        modify $ mapThird (. (DAnd $ m $ DFull k))
-pechk (PAComp v1 v2 v3) m = do
-                        [k1,k2,k3] <- pevars [v1,v2,v3]
-                        modify $ mapThird (. (DAnd $ m $ DC k1 k2 k3))
-pechk (PAEq v1 v2 ) m = do
-                        [k1,k2] <- pevars [v1,v2]
-                        modify $ mapThird (. (DAnd $ m $ DEq k1 k2))
-pechk (PADis v1 v2) m = do
-                        [k1,k2] <- pevars [v1,v2]
-                        modify $ mapThird (. (DAnd $ m $ DDis k1 k2))
-pechk (PATotalFull vs) m = do
-                        ks <- pevars vs
-                        modify $ mapThird (. (DAnd $ m $ DTotalFull ks))
---}
 
 pechkt :: Ord v => Literal PermissionAtomic v -> State (Int, Map.Map v Int, DPF -> DPF) ()
 pechkt (LPos x) = pechk x id
@@ -268,8 +223,6 @@ pechkt (LNeg x) = pechk x P.PFNot
 
 pechktl :: Ord v => [Literal PermissionAtomic v] -> State (Int, Map.Map v Int, DPF -> DPF) ()
 pechktl = mapM_ pechkt
---pechktl [] = return ()
---pechktl (l:ls) = pechkt l >> pechktl ls
 
 allPermissionVars :: Context -> [VariableID]
 allPermissionVars = Map.foldWithKey permissionVarFold [] . bindings
@@ -315,17 +268,17 @@ var_foo = VIDNamed () "foo"
 var_x = VIDNamed () "x"
 var_y = VIDNamed () "y"
 pllist1 = [
-        LNeg $ PAZero var_x,
-        LPos $ PAZero var_foo,
-        LPos $ PAComp var_x var_y var_foo]
-pllist1b = [LPos $ PAComp var_x var_y var_foo,
-        LNeg $ PAZero var_x,
-        LPos $ PAZero var_foo
+        LNeg $ PAEq (PEVar var_x) PEZero,
+        LPos $ PAEq (PEVar var_foo) PEZero,
+        LPos $ PAEq (PESum (PEVar var_x) (PEVar var_y)) (PEVar var_foo)]
+pllist1b = [LPos $ PAEq (PESum (PEVar var_x) (PEVar var_y)) (PEVar var_foo),
+        LNeg $ PAEq (PEVar var_x) PEZero,
+        LPos $ PAEq (PEVar var_foo) PEZero
         ]
-pllist2 = [LPos $ PAComp var_x var_y var_foo,
-        LNeg $ PAZero var_x,
-        LPos $ PAZero var_y,
-        LPos $ PAFull var_foo
+pllist2 = [LPos $ PAEq (PESum (PEVar var_x) (PEVar var_y)) (PEVar var_foo),
+        LNeg $ PAEq (PEVar var_x) PEZero,
+        LPos $ PAEq (PEVar var_y) PEZero,
+        LPos $ PAEq (PEVar var_foo) PEFull
         ]
 
 
@@ -333,12 +286,12 @@ c0 = snd $ runState x emptyContext
         where
                 x = do
                         foo <- checkBindVariable () "foo" VTPermission
-                        assertPermissionFalse $ PAZero foo
+                        assertPermissionFalse $ PAEq (PEVar foo) PEZero
                         x <- checkBindVariable () "x" VTPermission
                         y <- checkBindVariable () "y" VTPermission
-                        assertPermissionTrue $ PAComp x y foo
+                        assertPermissionTrue $ PAEq (PESum (PEVar x) (PEVar y)) (PEVar foo)
                         return ()
-
+--
 evar_bar = EVExistential () "bar"
 
 ec = [
