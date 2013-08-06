@@ -1,16 +1,20 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes #-}
 module SaneProver where
 
 import Prelude hiding (sequence,foldl,mapM_,mapM)
 import qualified Data.Map as Map
 import Control.Monad.State hiding (mapM_,mapM)
+import Control.Monad.Trans.Maybe
 import qualified Permissions as P
 import Data.Maybe
 import Data.Foldable
 import Data.Traversable
 import Data.Typeable
 import Control.Monad hiding (mapM_,mapM)
+--import Data.Functor.Identity
+
 
 data VariableType = VTPermission
         deriving (Eq, Ord, Show)
@@ -42,7 +46,7 @@ data PermissionExpression v = PEFull
                         | PEVar v
                         | PESum (PermissionExpression v) (PermissionExpression v)
                         | PECompl (PermissionExpression v)
-                        deriving (Functor, Foldable, Traversable)
+                        deriving (Eq,Ord,Functor, Foldable, Traversable)
 instance Show v => Show (PermissionExpression v) where
         show PEFull = "1"
         show PEZero = "0"
@@ -74,7 +78,9 @@ data Context = Context {
         assertions :: [Assertion]
         }
 
+type ProverT = StateT Context
 type Prover = State Context
+
 
 instance Show Context where
         show (Context _ as) = foldl (++) "" $ map (('\n':) . show) as
@@ -88,7 +94,7 @@ freshVariable :: Context -> String -> VariableID
 freshVariable c s = head $ filter (\x -> Map.notMember x (bindings c))
                         [ VIDInternal () $ s ++ n | n <- "" : map show [0..] ]
 
-freshPermission :: String -> State Context VariableID
+freshPermission :: Monad m => String -> ProverT m VariableID
 -- Bind a fresh permission variable
 freshPermission s = do
                         c <- get
@@ -96,7 +102,7 @@ freshPermission s = do
                         put $ c { bindings = Map.insert vid VTPermission (bindings c) }
                         return vid
 
-checkBindVariable :: () -> String -> VariableType -> State Context VariableID
+checkBindVariable :: Monad m => () -> String -> VariableType -> ProverT m VariableID
 -- Check if the named variable is bound
 -- If it is, its current type must be consistent with the proposed type
 -- If not, then a new binding is created
@@ -109,17 +115,17 @@ checkBindVariable meta name vartype = let vid = VIDNamed meta name in do
                                 return vid
 
 
-assert :: Assertion -> State Context ()
+assert :: Monad m => Assertion -> ProverT m ()
 -- Add an assertion
 assert a = do
                 c <- get
                 put $ c { assertions = assertions c ++ [a] }
 
-assertPermissionTrue :: VIDPermissionAtomic -> State Context ()
+assertPermissionTrue :: Monad m => VIDPermissionAtomic -> ProverT m ()
 -- Assert a permission atomic to be true
 assertPermissionTrue = assert . PermissionAssertion . LPos
 
-assertPermissionFalse :: VIDPermissionAtomic -> State Context ()
+assertPermissionFalse :: Monad m => VIDPermissionAtomic -> ProverT m ()
 -- Assert a permission atomic to be false
 assertPermissionFalse = assert . PermissionAssertion . LNeg
 
@@ -129,7 +135,7 @@ assertPermissionFalse = assert . PermissionAssertion . LNeg
 type DPF = P.PermFormula
 
 
-pXvar :: Ord v => (DPF->DPF) -> v -> State (Int, Map.Map v Int, DPF -> DPF) ()
+pXvar :: (Ord v, Monad m) => (DPF->DPF) -> v -> StateT (Int, Map.Map v Int, DPF -> DPF) m ()
 pXvar x vid = do
                 (n, m, c) <- get
                 case Map.lookup vid m of
@@ -138,7 +144,7 @@ pXvar x vid = do
                                 put (n+1, Map.insert vid (n+1) m, c . x)
                                 return ()
 
-pgetVar :: Ord v => v -> State (Int, Map.Map v Int, DPF -> DPF) Int
+pgetVar :: (Ord v, Monad m) => v -> StateT (Int, Map.Map v Int, DPF -> DPF) m Int
 pgetVar vid = do
                 (n, m, c) <- get
                 let k = Map.findWithDefault (error "Internal error: pgetVar called on uninitialised variable") vid m
@@ -146,17 +152,17 @@ pgetVar vid = do
 
 pXvars x vids = mapM_ (pXvar x) vids >> mapM pgetVar vids
 
-pavars :: Ord v => [v] -> State (Int, Map.Map v Int, DPF -> DPF) [Int]
+pavars :: (Ord v, Monad m) => [v] -> StateT (Int, Map.Map v Int, DPF -> DPF) m [Int]
 pavars = pXvars P.PFAll
 
-pevars :: Ord v => [v] -> State (Int, Map.Map v Int, DPF -> DPF) [Int]
+pevars :: (Ord v, Monad m) => [v] -> StateT (Int, Map.Map v Int, DPF -> DPF) m [Int]
 pevars = pXvars P.PFEx
 
-pXvars_ :: (Ord v, Traversable f) => (DPF -> DPF) -> f v -> State (Int, Map.Map v Int, DPF -> DPF) ()
+pXvars_ :: (Ord v, Traversable f, Monad m) => (DPF -> DPF) -> f v -> StateT (Int, Map.Map v Int, DPF -> DPF) m ()
 pXvars_ x = mapM_ (pXvar x)
-pavars_ :: (Ord v, Traversable f) => f v -> State (Int, Map.Map v Int, DPF -> DPF) ()
+pavars_ :: (Ord v, Traversable f, Monad m) => f v -> StateT (Int, Map.Map v Int, DPF -> DPF) m ()
 pavars_ = pXvars_ P.PFAll
-pevars_ :: (Ord v, Traversable f) => f v -> State (Int, Map.Map v Int, DPF -> DPF) ()
+pevars_ :: (Ord v, Traversable f, Monad m) => f v -> StateT (Int, Map.Map v Int, DPF -> DPF) m ()
 pevars_ = pXvars_ P.PFEx
 
 mapSecond :: (b -> b) -> (a, b, c) -> (a, b, c)
@@ -181,17 +187,17 @@ toPermAtom (PAEq e1 e2) = P.PAEqual (toPermExpr e1) (toPermExpr e2)
 toPermAtom (PADis e1 e2) = P.PADisjoint (toPermExpr e1) (toPermExpr e2)
 
 -- Got to think of better names for these!
-pass :: VIDPermissionAtomic -> (DPF -> DPF) -> State (Int, Map.Map VariableID Int, DPF -> DPF) ()
+pass :: Monad m => VIDPermissionAtomic -> (DPF -> DPF) -> StateT (Int, Map.Map VariableID Int, DPF -> DPF) m ()
 pass f m = do
                 pavars_ f
                 (_, s, _) <- get
                 modify $ mapThird (. (P.PFImpl $ m $ P.PFAtom $ toPermAtom $ deBrujinify s f))
 
-passt :: PermissionLiteral VariableID -> State (Int, Map.Map VariableID Int, DPF -> DPF) ()
+passt :: Monad m => PermissionLiteral VariableID -> StateT (Int, Map.Map VariableID Int, DPF -> DPF) m ()
 passt (LPos x) = pass x id
 passt (LNeg x) = pass x P.PFNot
 
-passtl :: [PermissionLiteral VariableID] -> State (Int, Map.Map VariableID Int, DPF -> DPF) ()
+passtl :: Monad m => [PermissionLiteral VariableID] -> StateT (Int, Map.Map VariableID Int, DPF -> DPF) m ()
 passtl = mapM_ passt
 --passtl [] = return ()
 --passtl (l:ls) = passt l >> passtl ls
@@ -211,17 +217,17 @@ filterPermissionAssertions = mapMaybe getperms . assertions
 
 
 -- Got to think of better names for these!
-pechk :: Ord v => PermissionAtomic v -> (DPF -> DPF) -> State (Int, Map.Map v Int, DPF -> DPF) ()
+pechk :: (Ord v, Monad m) => PermissionAtomic v -> (DPF -> DPF) -> StateT (Int, Map.Map v Int, DPF -> DPF) m ()
 pechk f m = do
                 pevars_ f
                 (_, s, _) <- get
                 modify $ mapThird (. (P.PFAnd $ m $ P.PFAtom $ toPermAtom $ deBrujinify s f))
 
-pechkt :: Ord v => Literal PermissionAtomic v -> State (Int, Map.Map v Int, DPF -> DPF) ()
+pechkt :: (Ord v, Monad m) => Literal PermissionAtomic v -> StateT (Int, Map.Map v Int, DPF -> DPF) m ()
 pechkt (LPos x) = pechk x id
 pechkt (LNeg x) = pechk x P.PFNot
 
-pechktl :: Ord v => [Literal PermissionAtomic v] -> State (Int, Map.Map v Int, DPF -> DPF) ()
+pechktl :: (Ord v, Monad m) => [Literal PermissionAtomic v] -> StateT (Int, Map.Map v Int, DPF -> DPF) m ()
 pechktl = mapM_ pechkt
 
 allPermissionVars :: Context -> [VariableID]
@@ -234,9 +240,15 @@ permCheckEConsequences c ecs = let (_, (n, m, x)) = runState (passtl (filterPerm
                         let m' = Map.mapKeys EVNormal m in
                         let (_, (_, _, r)) = runState (pechktl ecs) (n, m', x) in r P.PFTrue
 
+permDoCheckEConsequences :: (Monad m, MonadPlus m) => PermissionEConsequences -> ProverT m ()
+permDoCheckEConsequences pecs = do
+                                c <- get
+                                let r = P.pf_eval $ permCheckEConsequences c pecs
+                                if r then return () else mzero
 
 
-instantiateEvar :: EVariable -> StateT (Map.Map String VariableID) (State Context) VariableID
+
+instantiateEvar :: Monad m => EVariable -> StateT (Map.Map String VariableID) (ProverT m) VariableID
 instantiateEvar (EVNormal vid) = return vid -- TODO: check that the variable is bound/bind it if not?
 instantiateEvar (EVExistential () name) = do
                                         mv <- gets (Map.lookup name)
@@ -248,18 +260,21 @@ instantiateEvar (EVExistential () name) = do
                                                         return vid
 
 
-permAssertEConsequences :: PermissionEConsequences -> State Context (Map.Map String VariableID)
+permAssertEConsequences :: Monad m => PermissionEConsequences -> ProverT m (Map.Map String VariableID)
 -- Update the context by asserting properties of permissions, possibly including evars
 -- The evars become instantiated as fresh internal variables
 -- The returned Map defines the substitution for evars
 permAssertEConsequences ecs = liftM snd $ runStateT (mapM paec ecs) Map.empty
         where
-                paec :: Literal PermissionAtomic EVariable ->
-                        StateT (Map.Map String VariableID) (State Context) ()
+                paec :: Monad m => Literal PermissionAtomic EVariable ->
+                        StateT (Map.Map String VariableID) (ProverT m) ()
                 paec ec = do
                         pl <- mapM instantiateEvar ec
                         lift $ assert (PermissionAssertion pl)
 
+
+mapProver :: (forall s. m (a, s) -> n (b, s)) -> ProverT m a -> ProverT n b
+mapProver x = mapStateT x
 
 
 {--
