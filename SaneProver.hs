@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, DeriveDataTypeable #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE RankNTypes #-}
 module SaneProver where
 
@@ -28,12 +28,13 @@ instance Show VariableID where
         show (VIDInternal _ s) = "__" ++ s
 
 
-data EVariable = EVNormal VariableID | EVExistential () String
+data EVariable = EVNormal VariableID | EVExistential () String -- | EVInternal () Int
         deriving (Eq, Ord, Typeable)
 
 instance Show EVariable where
         show (EVNormal v) = show v
         show (EVExistential _ s) = "?" ++ s
+--        show (EVInternal _ n) = "?_" ++ show n
 
 data Literal a v = LPos (a v) | LNeg (a v) deriving (Functor, Foldable, Traversable)
 
@@ -54,10 +55,28 @@ instance Show v => Show (PermissionExpression v) where
         show (PECompl e) = "(1 - " ++ show e ++ ")"
         show (PEVar v) = show v
 
+instance Monad PermissionExpression where
+        return = PEVar
+        (PEVar v) >>= b = b v
+        PESum x y >>= b = PESum (x >>= b) (y >>= b)
+        PECompl e >>= b = PECompl (e >>= b)
+        PEFull >>= _ = PEFull
+        PEZero >>= _ = PEZero
+
 data PermissionAtomic v =
                  PAEq (PermissionExpression v) (PermissionExpression v)
                 | PADis (PermissionExpression v) (PermissionExpression v)
                 deriving (Functor, Foldable, Traversable)
+
+class PermExprSubable c where
+        permExprSub :: (v -> PermissionExpression w) -> c v -> c w
+
+instance PermExprSubable PermissionExpression where
+        permExprSub a b = b >>= a
+
+instance PermExprSubable PermissionAtomic where
+        permExprSub s (PAEq x y) = PAEq (permExprSub s x) (permExprSub s y)
+        permExprSub s (PADis x y) = PADis (permExprSub s x) (permExprSub s y)
 
 instance Show v => Show (PermissionAtomic v) where
         show (PAEq v1 v2) = show v1 ++ " =p= " ++ show v2
@@ -66,6 +85,10 @@ instance Show v => Show (PermissionAtomic v) where
 type VIDPermissionAtomic = PermissionAtomic VariableID
 
 type PermissionLiteral = Literal PermissionAtomic
+
+instance PermExprSubable (Literal PermissionAtomic) where
+        permExprSub s (LPos a) = LPos (permExprSub s a)
+        permExprSub s (LNeg a) = LNeg (permExprSub s a)
 
 
 data Assertion = PermissionAssertion (Literal PermissionAtomic VariableID)
@@ -79,6 +102,7 @@ data Context = Context {
         }
 
 type ProverT = StateT Context
+
 type Prover = State Context
 
 
@@ -248,34 +272,85 @@ permDoCheckEConsequences pecs = do
 
 
 
-instantiateEvar :: Monad m => EVariable -> StateT (Map.Map String VariableID) (ProverT m) VariableID
-instantiateEvar (EVNormal vid) = return vid -- TODO: check that the variable is bound/bind it if not?
+instantiateEvar :: Monad m => EVariable -> StateT (Map.Map String (PermissionExpression VariableID)) (ProverT m) (PermissionExpression VariableID)
+instantiateEvar (EVNormal vid) = return $ PEVar vid -- TODO: check that the variable is bound/bind it if not?
 instantiateEvar (EVExistential () name) = do
                                         mv <- gets (Map.lookup name)
                                         case mv of
                                                 (Just vid) -> return vid
                                                 Nothing -> do
                                                         vid <- lift $ freshPermission name
-                                                        modify $ Map.insert name vid
-                                                        return vid
+                                                        modify $ Map.insert name (PEVar vid)
+                                                        return (PEVar vid)
 
-
-permAssertEConsequences :: Monad m => PermissionEConsequences -> ProverT m (Map.Map String VariableID)
+permAssertEConsequences :: Monad m => PermissionEConsequences -> Map.Map String (PermissionExpression VariableID)
+                                -> ProverT m (Map.Map String (PermissionExpression VariableID))
 -- Update the context by asserting properties of permissions, possibly including evars
 -- The evars become instantiated as fresh internal variables
 -- The returned Map defines the substitution for evars
-permAssertEConsequences ecs = liftM snd $ runStateT (mapM paec ecs) Map.empty
+permAssertEConsequences ecs mp = liftM snd $ runStateT (mapM paec ecs) mp
         where
                 paec :: Monad m => Literal PermissionAtomic EVariable ->
-                        StateT (Map.Map String VariableID) (ProverT m) ()
+                        StateT (Map.Map String (PermissionExpression VariableID)) (ProverT m) ()
                 paec ec = do
                         pl <- mapM instantiateEvar ec
-                        lift $ assert (PermissionAssertion pl)
+                        let pl' = permExprSub id pl
+                        lift $ assert (PermissionAssertion pl')
 
 
 mapProver :: (forall s. m (a, s) -> n (b, s)) -> ProverT m a -> ProverT n b
 mapProver x = mapStateT x
 
+-- Remark: This is currently only set for permissions.  Will need to make it work more generally.
+
+type CheckerT m = StateT (PermissionEConsequences, Map.Map String (Maybe (PermissionExpression VariableID))) (ProverT m)
+
+type EvarSubstitution = EVariable -> Maybe (PermissionExpression VariableID)
+
+bindEvar :: Monad m => String -> PermissionExpression VariableID -> CheckerT m ()
+-- Binds an evar to a permission expression (in existing variables)
+-- If there already is a binding, this generates a condition that
+-- the bound expressions be equal
+bindEvar name expr = do
+                (ecs, subs) <- get
+                case Map.lookup name subs of
+                        Nothing -> put (ecs, Map.insert name (Just expr) subs)
+                        (Just Nothing) -> put (ecs, Map.insert name (Just expr) subs)
+                        (Just (Just x)) -> if x == expr then return () else put (ecs ++ [fmap EVNormal $ LPos $ PAEq expr x], subs)
+
+freshEvar :: Monad m => CheckerT m String
+-- Returns a fresh evar
+freshEvar = do
+                c <- lift get
+                (ecs, s) <- get
+                let ev = head $ filter (\x -> Map.notMember (VIDInternal () x) (bindings c) && Map.notMember x s)
+                        [ "_evar" ++ n | n <- map show [0..] ]
+                put (ecs, Map.insert ev Nothing s)
+                return ev
+                
+addConstraint :: MonadPlus m => Literal PermissionAtomic EVariable -> CheckerT m ()
+addConstraint l = do -- Possibly check bindings for evars. Probably only an issue if evars called _evar[0-9]* are not generated by freshEvar
+                (ecs, s) <- get
+                put (l : ecs, s)
+
+check :: MonadPlus m => CheckerT m a -> ProverT m (a, EvarSubstitution)
+-- Check whether the assertions hold.
+-- If so, grant them, if not fail this path
+check c = do
+        (r, (pecs, subs)) <- runStateT c ([], Map.empty)
+        let pecs' = map (permExprSub (liftSubs subs)) pecs
+        permDoCheckEConsequences pecs'
+        subs' <- permAssertEConsequences pecs' (Map.mapMaybe id subs)
+        return (r, evarSubs subs')
+        where
+                liftSubs :: Map.Map String (Maybe (PermissionExpression VariableID)) -> EVariable -> PermissionExpression EVariable
+                liftSubs s x@(EVExistential _ e) = case Map.lookup e s of
+                        Nothing -> PEVar x
+                        (Just Nothing) -> PEVar x
+                        (Just (Just pe)) -> fmap EVNormal pe
+                evarSubs :: Map.Map String (PermissionExpression VariableID) -> EvarSubstitution
+                evarSubs s (EVNormal vid) = Just $ PEVar vid
+                evarSubs s (EVExistential _ n) = Map.lookup n s
 
 {--
 

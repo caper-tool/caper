@@ -8,6 +8,7 @@ module Choice where
 
 import Control.Monad hiding (sequence)
 import Control.Monad.Trans
+import Control.Monad.Trans.Maybe
 
 -- ChoiceM datatype represents a non-determinstic choice of
 -- values of type a, having (lazy) side-effects in monad m.
@@ -43,6 +44,9 @@ instance MonadTrans ChoiceM where
 instance (MonadIO m) => MonadIO (ChoiceM m) where
         liftIO = lift . liftIO
 
+
+firstChoiceT :: Monad m => ChoiceM m a -> MaybeT m a
+firstChoiceT = MaybeT . firstChoice
 
 -- Get the first successful choice (if any)
 firstChoice :: Monad m => ChoiceM m a -> m (Maybe a)

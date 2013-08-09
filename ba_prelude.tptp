@@ -1,0 +1,41 @@
+fof(meet_associative,axiom,
+    ! [X,Y,Z] : meet(X, meet(Y, Z)) = meet(meet(X, Y), Z)).
+fof(join_associative,axiom,
+    ! [X,Y,Z] : join(X, join(Y, Z)) = join(join(X, Y), Z)).
+fof(meet_commutative,axiom,
+    ! [X,Y] : meet(X, Y) = meet(Y, X)).
+fof(join_commutative,axiom,
+    ! [X,Y] : join(X, Y) = join(Y, X)).
+fof(meet_join_distributive,axiom,
+    ! [X,Y,Z] : meet(X, join(Y, Z)) = join(meet(X,Y), meet(X,Z))).
+fof(join_meet_distributive,axiom,
+    ! [X,Y,Z] : join(X, meet(Y, Z)) = meet(join(X,Y), join(X,Z))).
+fof(join_zero,axiom,
+    ! [X]: join(X, zero) = X).
+fof(join_one,axiom,
+    ! [X]: join(X, one) = one).
+fof(meet_zero,axiom,
+    ! [X]: meet(X, zero) = zero).
+fof(meet_one,axiom,
+    ! [X]: meet(X, one) = X).
+fof(join_idempotent,axiom,
+    ! [X]: join(X, X) = X).
+fof(meet_idempotent,axiom,
+    ! [X]: meet(X, X) = X).
+fof(meet_join_X,axiom,
+    ! [X, Y]: meet(X, join(X, Y)) = X).
+fof(join_meet_X,axiom,
+    ! [X, Y]: join(X, meet(X, Y)) = X).
+fof(meet_compl,axiom,
+    ! [X]: meet(X, compl(X)) = zero).
+fof(join_compl,axiom,
+    ! [X]: join(X, compl(X)) = one).
+fof(one_zero_distinct,axiom,
+    ~ (one = zero)).
+fof(split,axiom,
+    ! [X]: (X = zero | ?[Y]: ~(meet(X,Y) = zero | meet(X,Y) = X))).
+fof(disjoint,definition,
+    ![X, Y]: (disj(X, Y) <=> meet(X,Y) = zero)).
+fof(compose,definition,
+    ![X, Y, Z]: (compose(X, Y, Z) <=> (join(X, Y) = Z & meet(X, Y) = zero))).
+

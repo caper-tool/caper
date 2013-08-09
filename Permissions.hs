@@ -219,6 +219,14 @@ test3a = DEx (DAll (DAll (DEx (DAnd (DDis 2 3) (DOr (DNot (DDis 1 0)) (DEq 1 3))
 test4 = DAll $ dImpl (DAll (DOr (dEmp 0) (DNot (DDis 0 1)))) (DAll $ DAll $ DAll $ DAll $ dImpl (DC 0 1 4) (dImpl (DC 2 3 4) (dImpl (DEq 0 2) (DEq 1 3))))
 test5 = DAll $ DOr (DDis 0 0) (DEx $ DEx $ DAnd (DAnd (DNot (DDis 0 0)) (DNot (DDis 1 1))) (DC 0 1 2))
 
+testCrossSplit = PFAll $ PFAll $ PFAll $ PFAll $ PFImpl
+        (PFAtom $ PAEqual (PESum (PEVar 0) (PEVar 1)) (PESum (PEVar 2) (PEVar 3))) $
+        PFEx $ PFEx $ PFEx $ PFEx $
+        (PFAnd (PFAnd (PFAtom $ PAEqual (PESum (PEVar 0) (PEVar 1)) (PEVar 4))
+                        (PFAtom $ PAEqual (PESum (PEVar 2) (PEVar 3)) (PEVar 5)))
+                (PFAnd (PFAtom $ PAEqual (PESum (PEVar 0) (PEVar 2)) (PEVar 6))
+                        (PFAtom $ PAEqual (PESum (PEVar 1) (PEVar 3)) (PEVar 7))))
+
 
 trees 0 = [ETSome]
 trees n = foldl (++) [] $ map et_splits (trees (n-1))

@@ -1,5 +1,5 @@
 {-# LANGUAGE RankNTypes, MultiParamTypeClasses, FunctionalDependencies #-}
-{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE DeriveDataTypeable, FlexibleContexts #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -7,9 +7,13 @@ import Prelude hiding (catch,mapM,sequence,foldl,mapM_)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Control.Monad.Exception
+import Control.Monad hiding (mapM)
+import Control.Monad.Trans.Class
+import Control.Monad.Trans.Maybe
 import SaneProver
 import Data.Foldable
 import Data.Traversable
+import Choice
 
 {--
 data PermissionExpression v =
@@ -120,16 +124,25 @@ data GuardParameters v = NoGP | PermissionGP (PermissionExpression v)
  -- | Parameters [ValueExpression] | CoParameters [ValueExpression] [ValueExpression]
         deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
-type Guard v = Map.Map String (GuardParameters v)
+newtype Guard v = GD (Map.Map String (GuardParameters v)) deriving (Eq,Ord,Show)
+
+guardLift f (GD x) = GD (f x)
+
+instance PermExprSubable GuardParameters where
+        permExprSub s NoGP = NoGP
+        permExprSub s (PermissionGP pe) = PermissionGP (permExprSub s pe)
+
+instance PermExprSubable Guard where
+        permExprSub s (GD g) = GD $ Map.map (permExprSub s) g
 
 toGuard :: (Typeable v, Show v, Throws (GuardException v) l) => GuardAST v -> EM l (Guard v)
 toGuard gast = tg (Map.empty) gast
         where
-                tg g (EmptyG) = return g
-                tg g (NamedG n) = if n `Map.member` g then throw (GEInconsistentOccurrences n gast) else return $ Map.insert n NoGP g
+                tg g (EmptyG) = return $ GD g
+                tg g (NamedG n) = if n `Map.member` g then throw (GEInconsistentOccurrences n gast) else return . GD $ Map.insert n NoGP g
                 tg g (NamedPermissionG n pe) = case Map.lookup n g of
-                                        (Nothing) -> return $ Map.insert n (PermissionGP pe) g
-                                        (Just (PermissionGP pe0)) -> return $ Map.insert n (PermissionGP (PESum pe0 pe)) g
+                                        (Nothing) -> return . GD $ Map.insert n (PermissionGP pe) g
+                                        (Just (PermissionGP pe0)) -> return . GD $ Map.insert n (PermissionGP (PESum pe0 pe)) g
                                         _ -> throw $ GEInconsistentOccurrences n gast
 {--                tg g (ParametrisedG n v) = case Map.lookup n g of
                                         (Nothing) -> return $ Map.insert n (Parameters [v]) g
@@ -141,11 +154,11 @@ toGuard gast = tg (Map.empty) gast
                                         (Just (Parameters vs')) -> return $ Map.insert n (CoParameters vs' vs) g
                                         _ -> throw $ GEInconsistentOccurrences n gast --}
                 tg g (StarG ge1 ge2) = do
-                                                g' <- tg g ge1
+                                                (GD g') <- tg g ge1
                                                 tg g' ge2
 
 checkGuardAtType :: Guard v -> WeakGuardType -> Bool
-checkGuardAtType g gt = Set.fold (\m b -> b || Map.foldWithKey (matchin m) True g) False gt
+checkGuardAtType (GD g) gt = Set.fold (\m b -> b || Map.foldWithKey (matchin m) True g) False gt
         where
                 matchin m k p b = b && case Map.lookup k m of
                                 Nothing -> False
@@ -162,10 +175,10 @@ gtToG PermissionGPT = PermissionGP PEFull
 --gtToG ValueGPT = CoParameters [] []
 
 fullGuard :: WeakGuardType -> Guard v
-fullGuard gt = Map.map gtToG (Set.findMin gt)
+fullGuard gt = GD $ Map.map gtToG (Set.findMin gt)
 
 fullGuards :: WeakGuardType -> [Guard v]
-fullGuards = Prelude.map (Map.map gtToG) . Set.toList 
+fullGuards = Prelude.map (GD . (Map.map gtToG)) . Set.toList 
 
 guardEquivalences :: GuardTypeAST -> [(Guard v,Guard v)]
 guardEquivalences (SumGT gt1 gt2) = guardEquivalences gt1 ++ guardEquivalences gt2 ++ listMixWith (,) (fullGuards $ toWeakGuardType gt1) (fullGuards $ toWeakGuardType gt2)
@@ -173,50 +186,47 @@ guardEquivalences (ProductGT gt1 gt2) = guardEquivalences gt1 ++ guardEquivalenc
 guardEquivalences _ = []
 
 
-sameGuardParametersType :: GuardParameters v -> GuardParameters v -> Maybe (GuardParameters v)
+sameGuardParametersType :: GuardParameters v -> GuardParameters w -> Maybe (GuardParameters v)
 sameGuardParametersType NoGP NoGP = Nothing
 sameGuardParametersType (PermissionGP _) (PermissionGP _) = Nothing
 sameGuardParametersType a _ = Just a
 
-subtractPE :: (Monad m, MonadPlus m) => PermissionExpression VariableID -> PermissionExpression EVariable ->
-                StateT (Map.Map String (PermissionExpression VariableID), PermissionEConsequences) m (Maybe (PermissionExpression EVariable))
+subtractPE :: MonadPlus m => PermissionExpression VariableID -> PermissionExpression EVariable ->
+                CheckerT m (Maybe (PermissionExpression EVariable))
 subtractPE l PEFull = do
-                        modify (\(x,y) -> (x, (LPos $ PAEq (fmap EVNormal l) PEFull) : y))
+                        addConstraint $ LPos $ PAEq (fmap EVNormal l) PEFull
                         return Nothing
 subtractPE l PEZero = mzero     -- Having a permission guard at all should imply that it's non-zero, therefore this path can simply fail
 subtractPE l (PEVar (EVExistential _ s)) = do
-                        (m, cs) <- get
-                        case lookup s m
-                                Nothing -> do
-                                        put (insert s l m, cs)
-                                        return Nothing -- TODO: Handle case with some frame
-                                Just r -> do
-                                        put (m, cs ++ [LPos $ PAEq l r])
-                                        return Nothing
+                        bindEvar s l -- TODO: frame some permission off?
+                        return Nothing
+subtractPE l s = do -- TODO: frame some permission
+                addConstraint $ LPos $ PAEq (fmap EVNormal l) s
+                return Nothing
 
 
-
-guardPrimitiveEntailmentL :: (Monad m, MonadPlus m) => Guard VariableID -> Guard EVariable -> StateT (Map.Map String VariableID, PermissionEConsequences) m (Guard VariableID)
-guardPrimitiveEntailmentL g1 g2 = if null $ Map.differenceWith sameGuardParametersType g2 g1 then doGPEL else mzero
+guardPrimitiveEntailmentM :: MonadPlus m => Guard VariableID -> Guard EVariable -> CheckerT m (Guard EVariable)
+guardPrimitiveEntailmentM (GD g1) (GD g2) = if Map.null $ Map.differenceWith sameGuardParametersType g2 g1 then liftM GD doGPEM else mzero
         where
-                rest = Map.difference g1 g2
-                doGPEL = do
+                rest = Map.map (fmap EVNormal) $ Map.difference g1 g2
+                doGPEM = do
                         let k = Map.intersectionWith (,) g1 g2
                         r <- mapM subtract k
-                        return $ Map.mapMaybe id r
-                subtract :: (GuardParameters VariableID, GuardParameters EVariable) -> StateT (Map.Map String VariableID, PermissionEConsequences) m (Maybe (GuardParameters VariableID))
-                subtract (NoGP, NoGP) = Nothing
+                        return $ Map.union (Map.mapMaybe id r) rest
+                subtract :: MonadPlus m => (GuardParameters VariableID, GuardParameters EVariable) -> CheckerT m (Maybe (GuardParameters EVariable))
+                subtract (NoGP, NoGP) = return Nothing
+                subtract (PermissionGP pe1, PermissionGP pe2) = liftM (fmap PermissionGP) $ subtractPE pe1 pe2
+                subtract _ = mzero -- Should be impossible
 
 
-
-
-mapProver listToMaybe
-
-
-guardPrimitiveEntailment :: Guard VariableID -> Guard EVariable -> ProverT Maybe (Guard VariableID, Map.Map String VariableID)
+guardPrimitiveEntailment :: Monad m => Guard VariableID -> Guard EVariable -> ProverT (MaybeT m) (Guard EVariable, EvarSubstitution)
 -- Checks if first guard entails second without rewrites
 -- Returns the frame and substitution if so, Nothing otherwise
-guardPrimitiveEntailment g1 g2 = if null $ g2 `Map.difference` g1 then dogpe else fail "Non sequitur"
+guardPrimitiveEntailment g1@(GD g1a) g2@(GD g2a) = if Map.null $ g2a `Map.difference` g1a then dogpe else fail "Non sequitur"
         where
                 dogpe = do
-                        mapM_ permDoCheckEConsequences 
+                        (frame, subs) <- mapProver firstChoiceT $ check $ guardPrimitiveEntailmentM g1 g2
+                        return (frame, subs)
+                        --return (permExprSub subs frame, subs)
+
+--}
