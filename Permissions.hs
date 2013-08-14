@@ -1,8 +1,11 @@
 
-module Permissions (PermExpr(..), PermAtom(..), PermFormula(..), pf_eval) where
+module Permissions (TPProver(..)) where
 import Data.List
 import Data.Maybe
 import Control.Parallel.Strategies
+import qualified ProverDatatypes as PD
+import PermissionsInterface
+
 
 data DPF = DFalse | DAnd DPF DPF | DOr DPF DPF | DNot DPF | DEq Int Int | DC Int Int Int
         | DAll DPF | DEx DPF | DDis Int Int | DZero Int | DFull Int
@@ -115,6 +118,55 @@ data PermFormula = PFFalse | PFTrue
                 | PFAll PermFormula
                 | PFEx PermFormula
 
+instance Show PermExpr where
+        show PEFull = "1"
+        show PEZero = "0"
+        show (PEVar n) = "[" ++ show n ++ "]"
+        show (PESum pe1 pe2) = "(" ++ show pe1 ++ " + " ++ show pe2 ++ ")"
+        show (PECompl pe) = "(1 - " ++ show pe ++ ")"
+instance Show PermAtom where
+        show (PAEqual e1 e2) = show e1 ++ " = " ++ show e2
+        show (PADisjoint e1 e2) = show e1 ++ " # " ++ show e2
+
+instance Show PermFormula where
+        show PFFalse = "_|_"
+        show PFTrue = "T"
+        show (PFAtom a) = show a
+        show (PFNot f) = "¬ " ++ show f
+        show (PFAnd f1 f2) = "(" ++ show f1 ++ " /\\ " ++ show f2 ++ ")"
+        show (PFOr f1 f2) = "(" ++ show f1 ++ " \\/ " ++ show f2 ++ ")"
+        show (PFImpl f1 f2) = "(" ++ show f1 ++ " => " ++ show f2 ++ ")"
+        show (PFAll f1) = "(A)(" ++ show f1 ++ ")"
+        show (PFEx f1) = "(E)(" ++ show f1 ++ ")"
+
+
+toPermExpr :: (a -> Int) -> PD.PermissionExpression a -> PermExpr
+toPermExpr s PD.PEFull = PEFull
+toPermExpr s PD.PEZero = PEZero
+toPermExpr s (PD.PEVar x) = PEVar (s x)
+toPermExpr s (PD.PESum e1 e2) = PESum (toPermExpr s e1) (toPermExpr s e2)
+toPermExpr s (PD.PECompl e) = PECompl (toPermExpr s e)
+
+toPermAtom :: (a -> Int) -> PD.PermissionAtomic a -> PermAtom
+toPermAtom s (PD.PAEq e1 e2) = PAEqual (toPermExpr s e1) (toPermExpr s e2)
+toPermAtom s (PD.PADis e1 e2) = PADisjoint (toPermExpr s e1) (toPermExpr s e2)
+
+toPermFormula :: (Eq a) => (a -> Int) -> PD.FOF PD.PermissionAtomic a -> PermFormula
+toPermFormula s (PD.FOFForAll v f') = PFAll (toPermFormula (\x -> if x == v then 0 else s x + 1) f')
+toPermFormula s (PD.FOFExists v f') = PFEx (toPermFormula (\x -> if x == v then 0 else s x + 1) f')
+toPermFormula s (PD.FOFAtom a) = PFAtom $ toPermAtom s a
+toPermFormula s (PD.FOFAnd f1 f2) = PFAnd (toPermFormula s f1) (toPermFormula s f2)
+toPermFormula s (PD.FOFOr f1 f2) = PFOr (toPermFormula s f1) (toPermFormula s f2)
+toPermFormula s (PD.FOFImpl f1 f2) = PFImpl (toPermFormula s f1) (toPermFormula s f2)
+toPermFormula s (PD.FOFNot f) = PFNot (toPermFormula s f)
+toPermFormula _ PD.FOFFalse = PFFalse
+toPermFormula _ PD.FOFTrue = PFTrue
+
+toPermSentence :: PD.FOF PD.PermissionAtomic String -> PermFormula
+toPermSentence f = toPermFormula (\x -> error $ "toPermSentence: Variable " ++ x ++ " occurs free in the formula:\n" ++ show f) f
+
+
+
 testpf1 = PFAll $ PFImpl (PFEx $ PFEx $ PFAnd (PFAtom $ PAEqual (PESum (PEVar 0) (PEVar 1)) (PEVar 2)) (PFAtom $ PAEqual (PEVar 0) (PEVar 1))) (PFAtom $ PADisjoint (PEVar 0) PEFull)
 
 pf_eval :: PermFormula -> Bool
@@ -190,6 +242,14 @@ npc_empty et = (foldl (&&) True) . (map (eval_empty_inters et))
 
 pc_empty :: Int -> EvalTree -> PermComb -> Bool
 pc_empty d et = (npc_empty et) . (correct_indexes d) . npc_simplify . pc_normalise
+
+newtype TPProver = TPProver ()
+
+
+instance PermissionsProver TPProver where
+        permCheck _ = return . Just . pf_eval . toPermSentence
+
+
 
 
 

@@ -9,6 +9,7 @@ module Choice where
 import Control.Monad hiding (sequence)
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
+import Debug.Trace
 
 -- ChoiceM datatype represents a non-determinstic choice of
 -- values of type a, having (lazy) side-effects in monad m.
@@ -28,7 +29,7 @@ instance Monad m => Monad (ChoiceM m) where
                         (Choice x y) -> Choice (x >>= b) (y >>= b)
                         NoChoice -> NoChoice
                         (Lazy l) -> Lazy $ liftM (>>= b) l
-        fail _ = NoChoice
+        fail s = trace s NoChoice
 
 -- MonadPlus instance for ChoiceM.
 -- mplus is a choice of two alternative computations

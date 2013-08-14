@@ -10,10 +10,16 @@ import Control.Monad.Exception
 import Control.Monad hiding (mapM)
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Maybe
+import ProverDatatypes
 import SaneProver
+import PermissionsInterface
 import Data.Foldable
 import Data.Traversable
 import Choice
+import Control.Monad.State hiding (mapM_,mapM)
+--import System.IO.Unsafe -- TODO: Don't depend on this.
+import Debug.Trace
+import PermissionsE
 
 {--
 data PermissionExpression v =
@@ -124,7 +130,7 @@ data GuardParameters v = NoGP | PermissionGP (PermissionExpression v)
  -- | Parameters [ValueExpression] | CoParameters [ValueExpression] [ValueExpression]
         deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
-newtype Guard v = GD (Map.Map String (GuardParameters v)) deriving (Eq,Ord,Show)
+newtype Guard v = GD (Map.Map String (GuardParameters v)) deriving (Eq,Ord,Show,Functor)
 
 guardLift f (GD x) = GD (f x)
 
@@ -197,12 +203,28 @@ subtractPE l PEFull = do
                         addConstraint $ LPos $ PAEq (fmap EVNormal l) PEFull
                         return Nothing
 subtractPE l PEZero = mzero     -- Having a permission guard at all should imply that it's non-zero, therefore this path can simply fail
-subtractPE l (PEVar (EVExistential _ s)) = do
+subtractPE l ex@(PEVar (EVExistential _ s)) = trace ("binding: " ++ s ++ " === " ++ show l) (do
                         bindEvar s l -- TODO: frame some permission off?
-                        return Nothing
-subtractPE l s = do -- TODO: frame some permission
+                        return Nothing) `mplus`
+                (do
+                        ev <- freshEvar
+                        let eve = (PEVar $ EVExistential () ev)
+                        trace ("binding: " ++ s ++ " + " ++ ev ++ " === " ++ show l) $ addConstraint $ LNeg $ PAEq ex PEZero
+                        addConstraint $ LNeg $ PAEq eve PEZero
+                        addConstraint $ LPos $ PAEq (fmap EVNormal l) (PESum ex eve)
+                        return (Just eve))
+
+subtractPE l s = (do -- TODO: frame some permission
                 addConstraint $ LPos $ PAEq (fmap EVNormal l) s
-                return Nothing
+                return Nothing) `mplus`
+        (do
+                ev <- freshEvar
+                let eve = (PEVar $ EVExistential () ev)
+                addConstraint $ LNeg $ PAEq s PEZero
+                addConstraint $ LNeg $ PAEq eve PEZero
+                addConstraint $ LPos $ PAEq (fmap EVNormal l) (PESum s eve)
+                return (Just eve))
+
 
 
 guardPrimitiveEntailmentM :: MonadPlus m => Guard VariableID -> Guard EVariable -> CheckerT m (Guard EVariable)
@@ -219,14 +241,45 @@ guardPrimitiveEntailmentM (GD g1) (GD g2) = if Map.null $ Map.differenceWith sam
                 subtract _ = mzero -- Should be impossible
 
 
-guardPrimitiveEntailment :: Monad m => Guard VariableID -> Guard EVariable -> ProverT (MaybeT m) (Guard EVariable, EvarSubstitution)
+guardPrimitiveEntailment :: (MonadIO m, Monad m, PermissionsProver p) => p -> Guard VariableID -> Guard EVariable -> ProverT (MaybeT m) (Guard EVariable, EvarSubstitution)
 -- Checks if first guard entails second without rewrites
 -- Returns the frame and substitution if so, Nothing otherwise
-guardPrimitiveEntailment g1@(GD g1a) g2@(GD g2a) = if Map.null $ g2a `Map.difference` g1a then dogpe else fail "Non sequitur"
+guardPrimitiveEntailment prover g1@(GD g1a) g2@(GD g2a) = if Map.null $ g2a `Map.difference` g1a then dogpe else fail "Non sequitur"
         where
                 dogpe = do
-                        (frame, subs) <- mapProver firstChoiceT $ check $ guardPrimitiveEntailmentM g1 g2
+                        (frame, subs) <- mapProver firstChoiceT $ checkWith prover $ guardPrimitiveEntailmentM g1 g2
                         return (frame, subs)
                         --return (permExprSub subs frame, subs)
 
---}
+cont1 = snd $ runState x emptyContext
+        where
+                x = do
+                        foo <- checkBindVariable () "foo" VTPermission
+                        assertPermissionFalse $ PAEq (PEVar foo) (PEFull)
+                        assertPermissionFalse $ PAEq (PEVar foo) (PEZero)
+                        bar <- checkBindVariable () "bar" VTPermission
+                        assertPermissionFalse $ PAEq (PEVar bar) (PEFull)
+                        assertPermissionFalse $ PAEq (PEVar bar) (PEZero)
+
+cont2 = execState x cont1
+        where
+                x = do
+                        assertPermissionFalse $ PADis (PEVar $ VIDNamed () "foo") (PEVar $ VIDNamed () "bar")
+
+
+gd1 = GD (Map.fromList [("A", NoGP), ("B", NoGP)])
+gd2 = GD (Map.fromList [("B", NoGP)])
+gd3 = GD (Map.fromList [("A", PermissionGP PEFull), ("B", PermissionGP (PEVar $ VIDNamed () "foo"))])
+gd3a = fmap EVNormal gd3
+gd4 = GD (Map.fromList [("A", PermissionGP $ PEVar $ VIDNamed () "bar")])
+gd5a = GD (Map.fromList [("A", PermissionGP $ PEVar $ EVExistential () "zop")])
+gd6a = GD (Map.fromList [("A", PermissionGP $ PEVar $ EVExistential () "zop"), ("B", PermissionGP $ PEVar $ EVExistential () "zop")])
+gd7 = GD (Map.fromList [("A", PermissionGP $ PEVar $ VIDNamed () "bar"), ("B", PermissionGP (PEVar $ VIDNamed () "foo"))])
+
+gtest :: (PermissionsProver p) => p -> Context -> Guard VariableID -> Guard EVariable -> IO (Maybe (Guard EVariable, Context))
+gtest prover c g1 g2 = runMaybeT $ runStateT x c
+        where
+                x :: StateT Context (MaybeT IO) (Guard EVariable)
+                x = do
+                        r <- guardPrimitiveEntailment prover g1 g2 
+                        return $ fst r
