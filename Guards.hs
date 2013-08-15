@@ -3,6 +3,7 @@
 {-# LANGUAGE DeriveDataTypeable, FlexibleContexts #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+module Guards where
 import Prelude hiding (catch,mapM,sequence,foldl,mapM_)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -20,8 +21,6 @@ import Choice
 import Control.Monad.State hiding (mapM_,mapM)
 --import System.IO.Unsafe -- TODO: Don't depend on this.
 import Debug.Trace
-import PermissionsE
-import Permissions
 
 {--
 data PermissionExpression v =
@@ -258,8 +257,10 @@ guardPrimitiveEntailment prover g1@(GD g1a) g2@(GD g2a) = if Map.null $ g2a `Map
 
 candidateGuardEquivs :: GuardEquivs -> Guard v -> Guard w -> GuardEquivs
 -- Find the guard equivalences appropriate for rewriting the first guard to the second
-candidateGuardEquivs ges (GD g1) (GD g2) = filter isCandidateGuardEquiv ges
+candidateGuardEquivs ges (GD g1) (GD g2) = filter isCandidateGuardEquiv (andBack ges)
         where
+                andBack [] = []
+                andBack ((x,y):xs) = (x,y) : (y,x) : andBack xs
                 g1' = g1 `Map.difference` g2
                 g2' = g2 `Map.difference` g1
                 isCandidateGuardEquiv (GD gel, GD ger) = Map.null (Map.difference gel g1') && Map.null (Map.difference g2' ger)
@@ -278,41 +279,3 @@ guardGeneralEntailment p ges g1 g2 = guardPrimitiveEntailment p g1 g2 `mplus`
                         guardPrimitiveEntailment p (guardJoin (eGuardSubs frame0 s0) (snd ge)) g2)
 
 
-cont1 = snd $ runState x emptyContext
-        where
-                x = do
-                        foo <- checkBindVariable () "foo" VTPermission
-                        assertPermissionFalse $ PAEq (PEVar foo) (PEFull)
-                        assertPermissionFalse $ PAEq (PEVar foo) (PEZero)
-                        bar <- checkBindVariable () "bar" VTPermission
-                        assertPermissionFalse $ PAEq (PEVar bar) (PEFull)
-                        assertPermissionFalse $ PAEq (PEVar bar) (PEZero)
-
-cont2 = execState x cont1
-        where
-                x = do
-                        assertPermissionFalse $ PADis (PEVar $ VIDNamed () "foo") (PEVar $ VIDNamed () "bar")
-
-
-gd1 = GD (Map.fromList [("A", NoGP), ("B", NoGP)])
-gd2 = GD (Map.fromList [("B", NoGP)])
-gd3 = GD (Map.fromList [("A", PermissionGP PEFull), ("B", PermissionGP (PEVar $ VIDNamed () "foo"))])
-gd3a = fmap EVNormal gd3
-gd4 = GD (Map.fromList [("A", PermissionGP $ PEVar $ VIDNamed () "bar")])
-gd5a = GD (Map.fromList [("A", PermissionGP $ PEVar $ EVExistential () "zop")])
-gd6a = GD (Map.fromList [("A", PermissionGP $ PEVar $ EVExistential () "zop"), ("B", PermissionGP $ PEVar $ EVExistential () "zop")])
-gd7 = GD (Map.fromList [("A", PermissionGP $ PEVar $ VIDNamed () "bar"), ("B", PermissionGP (PEVar $ VIDNamed () "foo"))])
-
-gtest :: (PermissionsProver p) => p -> Context -> Guard VariableID -> Guard EVariable -> IO (Maybe (Guard EVariable, Context))
-gtest prover c g1 g2 = runMaybeT $ runStateT x c
-        where
-                x :: StateT Context (MaybeT IO) (Guard EVariable)
-                x = do
-                        r <- guardPrimitiveEntailment prover g1 g2 
-                        return $ fst r
-
-main :: IO ()
-main = do
-        epp <- makeEPProver
-        r <- gtest epp cont2 gd7 gd6a
-        putStrLn $ show r
