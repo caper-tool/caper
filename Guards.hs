@@ -20,6 +20,7 @@ import Control.Monad.State hiding (mapM_,mapM)
 --import System.IO.Unsafe -- TODO: Don't depend on this.
 import Debug.Trace
 import PermissionsE
+import Permissions
 
 {--
 data PermissionExpression v =
@@ -283,3 +284,9 @@ gtest prover c g1 g2 = runMaybeT $ runStateT x c
                 x = do
                         r <- guardPrimitiveEntailment prover g1 g2 
                         return $ fst r
+
+main :: IO ()
+main = do
+        epp <- makeEPProver
+        r <- gtest epp cont2 gd7 gd6a
+        putStrLn $ show r

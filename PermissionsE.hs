@@ -10,6 +10,7 @@ import Control.Concurrent.MVar
 import System.Exit
 import ProverDatatypes
 import PermissionsInterface
+import Debug.Trace
 
 -- Note, variables must be alpha-numeric (possibly including _) to work!
 
@@ -143,7 +144,7 @@ timeoutSem n sem = do
         MSem.signal sem
 
 checkBothWays :: Show v => EPProver -> BAFormula v -> IO (Maybe Bool)
-checkBothWays epp formula = do
+checkBothWays epp formula = trace ("Calling E on:\n" ++ show formula) $ do
         htrue <- startCheck epp formula
         mvtrue <- newEmptyMVar
         sem <- MSem.new 0
@@ -158,8 +159,8 @@ checkBothWays epp formula = do
         rtrue <- takeMVar mvtrue
         rfalse <- takeMVar mvfalse
         return $ if rtrue == ExitSuccess then
-                Just True 
-                else if rfalse == ExitSuccess then Just False else Nothing
+                trace "Proved." $ Just True 
+                else if rfalse == ExitSuccess then trace "Disproved." $ Just False else trace "Unknown." $ Nothing
 
 
 makeEPProver :: IO EPProver

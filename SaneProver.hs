@@ -74,18 +74,26 @@ filterPermissionAssertions = mapMaybe getperms . assertions
 
 type PermFOF = FOF PermissionAtomic String
 
+vidToString :: VariableID -> String
+vidToString (VIDNamed _ n) = "n_" ++ n
+vidToString (VIDInternal _ n) = "i_" ++ n
+
+evarToString :: EVariable -> String
+evarToString (EVExistential _ n) = "e_" ++ n
+evarToString (EVNormal v) = vidToString v
+
 contextToPermFOF :: Context -> PermFOF -> PermFOF
 -- Generate a first-order formula from a context, and a first-order formula to check inside the context
 contextToPermFOF c@(Context bs as) = cPFOF (Map.mapMaybe (\x -> if x == VTPermission then Just False else Nothing) bs) (filterPermissionAssertions c)
         where
                 cPFOF :: Map.Map VariableID Bool -> [PermissionLiteral VariableID] -> PermFOF -> PermFOF
-                cPFOF bs [] r = Map.foldrWithKey (\v bound -> if bound || notElem (show v) r then id else FOFForAll (show v)) r bs
-                cPFOF bs (a : as) r = let (bdgs, bs') = runState (foldrM checkBind id a) bs in (bdgs . (FOFImpl $ literalToFOF (fmap show a)) . (cPFOF bs' as)) r
+                cPFOF bs [] r = Map.foldrWithKey (\v bound -> if bound || notElem (vidToString v) r then id else FOFForAll (vidToString v)) r bs
+                cPFOF bs (a : as) r = let (bdgs, bs') = runState (foldrM checkBind id a) bs in (bdgs . (FOFImpl $ literalToFOF (fmap vidToString a)) . (cPFOF bs' as)) r
                 checkBind v bds = do
                                 bv <- gets (Map.lookup v)
                                 if bv == Just True then return bds else do
                                         modify (Map.insert v True)
-                                        return $ (FOFForAll (show v)) . bds
+                                        return $ (FOFForAll (vidToString v)) . bds
                         
 eConsequencesToPermFOF :: PermissionEConsequences -> PermFOF
 -- Generate a first-order formula as the conjunction of the PermissionEConsequences, with all existential vars scoped.
@@ -93,13 +101,13 @@ eConsequencesToPermFOF = eCPFOF Set.empty
         where
                 eCPFOF :: Set.Set String -> PermissionEConsequences -> PermFOF
                 eCPFOF _ [] = FOFTrue
-                eCPFOF s (c : cs) = let (bdgs, s') = runState (foldrM checkBind id c) s in bdgs $ FOFAnd (literalToFOF (fmap show c)) (eCPFOF s' cs)
+                eCPFOF s (c : cs) = let (bdgs, s') = runState (foldrM checkBind id c) s in bdgs $ FOFAnd (literalToFOF (fmap evarToString c)) (eCPFOF s' cs)
                 checkBind (EVNormal _) bds = return bds
                 checkBind ex@(EVExistential _ e) bds = do
                                 bv <- gets (elem e)
                                 if bv then return bds else do
                                         modify (Set.insert e)
-                                        return $ (FOFExists (show ex)) . bds
+                                        return $ (FOFExists (evarToString ex)) . bds
                         
 
 permCheckEConsequences :: Context -> PermissionEConsequences -> PermFOF
