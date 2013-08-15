@@ -187,12 +187,35 @@ fullGuard gt = GD $ Map.map gtToG (Set.findMin gt)
 fullGuards :: WeakGuardType -> [Guard v]
 fullGuards = Prelude.map (GD . (Map.map gtToG)) . Set.toList 
 
-type GuardEquivs = forall v. [(Guard v, Guard v)]
 
-guardEquivalences :: GuardTypeAST -> GuardEquivs
-guardEquivalences (SumGT gt1 gt2) = guardEquivalences gt1 ++ guardEquivalences gt2 ++ listMixWith (,) (fullGuards $ toWeakGuardType gt1) (fullGuards $ toWeakGuardType gt2)
-guardEquivalences (ProductGT gt1 gt2) = guardEquivalences gt1 ++ guardEquivalences gt2
-guardEquivalences _ = []
+guardEquivalence :: GuardTypeAST -> Guard v1 -> Guard v2 -> (Guard v3, Guard v4)
+-- Given a GuardTypeAST and a pair of guards, find a pair of guards that
+-- could be used to rewrite the first to entail the second.
+-- This assumes the guards conform to the guard type.
+guardEquivalence (ProductGT gta1 gta2) gd1 gd2 = (guardJoin gd3a gd3b, guardJoin gd4a gd4b)
+        where
+                (gd3a, gd4a) = guardEquivalence gta1 gd1 gd2
+                (gd3b, gd4b) = guardEquivalence gta2 gd1 gd2
+guardEquivalence (SumGT gta1 gta2) gd1 gd2 =
+                case (ma gta1 gd1, ma gta2 gd1, ma gta1 gd2, ma gta2 gd2) of
+                                        (True, _, True, _) -> guardEquivalence gta1 gd1 gd2
+                                        (True, _, _, True) -> (fgf gta1 gd1, fgf gta2 gd2)
+                                        (_, True, _, True) -> guardEquivalence gta2 gd1 gd2
+                                        (_, True, True, _) -> (fgf gta2 gd1, fgf gta1 gd2)
+                                        _ -> (GD Map.empty, GD Map.empty)
+                where
+                        ma :: GuardTypeAST -> Guard v -> Bool
+                        ma (NamedGT n) (GD g) = Map.member n g
+                        ma (NamedPermissionGT n) (GD g) = Map.member n g
+                        ma (ProductGT t1 t2) g = ma t1 g || ma t2 g
+                        ma (SumGT t1 t2) g = ma t1 g || ma t2 g
+                        fgf :: GuardTypeAST -> Guard v -> Guard w
+                        fgf (NamedGT n) _ = GD $ Map.singleton n NoGP
+                        fgf (NamedPermissionGT n) _ = GD $ Map.singleton n (PermissionGP PEFull)
+                        fgf (ProductGT gt1 gt2) g = guardJoin (fgf gt1 g) (fgf gt2 g)
+                        fgf (SumGT gt1 gt2) g = if ma gt2 g then fgf gt2 g else fgf gt1 g
+                        
+guardEquivalence _ _ _ = (GD Map.empty, GD Map.empty)
 
 
 sameGuardParametersType :: GuardParameters v -> GuardParameters w -> Maybe (GuardParameters v)
@@ -254,28 +277,18 @@ guardPrimitiveEntailment prover g1@(GD g1a) g2@(GD g2a) = if Map.null $ g2a `Map
                         return (frame, subs)
                         --return (permExprSub subs frame, subs)
 
-
-candidateGuardEquivs :: GuardEquivs -> Guard v -> Guard w -> GuardEquivs
--- Find the guard equivalences appropriate for rewriting the first guard to the second
-candidateGuardEquivs ges (GD g1) (GD g2) = filter isCandidateGuardEquiv (andBack ges)
-        where
-                andBack [] = []
-                andBack ((x,y):xs) = (x,y) : (y,x) : andBack xs
-                g1' = g1 `Map.difference` g2
-                g2' = g2 `Map.difference` g1
-                isCandidateGuardEquiv (GD gel, GD ger) = Map.null (Map.difference gel g1') && Map.null (Map.difference g2' ger)
-
 guardJoin :: Guard v -> Guard v -> Guard v
 guardJoin (GD g1) (GD g2) = GD $ Map.union g1 g2
+
 
 eGuardSubs :: Guard EVariable -> EvarSubstitution -> Guard VariableID
 eGuardSubs g subs = permExprSub (fromJust . subs) g
 
-guardGeneralEntailment :: (MonadIO m, Monad m, PermissionsProver p) => p -> GuardEquivs -> Guard VariableID -> Guard EVariable -> ProverT (MaybeT m) (Guard EVariable, EvarSubstitution)
-guardGeneralEntailment p ges g1 g2 = guardPrimitiveEntailment p g1 g2 `mplus`
+guardGeneralEntailment :: (MonadIO m, Monad m, PermissionsProver p) => p -> GuardTypeAST -> Guard VariableID -> Guard EVariable -> ProverT (MaybeT m) (Guard EVariable, EvarSubstitution)
+guardGeneralEntailment p gt g1 g2 = guardPrimitiveEntailment p g1 g2 `mplus`
                 (do
-                        ge <- lift $ MaybeT $ return $ listToMaybe $ candidateGuardEquivs ges g1 g2
-                        (frame0, s0) <- guardPrimitiveEntailment p g1 (fmap EVNormal $ fst ge)
-                        guardPrimitiveEntailment p (guardJoin (eGuardSubs frame0 s0) (snd ge)) g2)
+                        let (gel, ger) = guardEquivalence gt g1 g2
+                        (frame0, s0) <- guardPrimitiveEntailment p g1 gel
+                        guardPrimitiveEntailment p (guardJoin (eGuardSubs frame0 s0) ger) g2)
 
 

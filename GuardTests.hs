@@ -14,6 +14,9 @@ import SaneProver
 
 gt1 = ProductGT (NamedPermissionGT "A") (SumGT (NamedPermissionGT "B") (ProductGT (NamedGT "C") (NamedGT "D")))
 
+gt2 = ProductGT (SumGT (NamedPermissionGT "A") (NamedPermissionGT "Z")) (SumGT (NamedPermissionGT "B") (ProductGT (NamedGT "C") (NamedGT "D")))
+
+
 cont1 = snd $ runState x emptyContext
         where
                 x = do
