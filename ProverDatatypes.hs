@@ -59,7 +59,7 @@ instance Monad PermissionExpression where
 data PermissionAtomic v =
                  PAEq (PermissionExpression v) (PermissionExpression v)
                 | PADis (PermissionExpression v) (PermissionExpression v)
-                deriving (Functor, Foldable, Traversable)
+                deriving (Functor, Foldable, Traversable, Eq, Ord)
 
 class PermExprSubable c where
         permExprSub :: (v -> PermissionExpression w) -> c v -> c w
