@@ -10,6 +10,10 @@ import Prelude hiding (foldl, foldr)
 import Data.Foldable
 import qualified Data.Set as Set
 import Test.QuickCheck.Monadic
+import Text.Printf
+--import Control.Exception
+import System.CPUTime
+
 
 newtype StringVar = StringVar String deriving (Eq, Ord)
 instance Show StringVar where
@@ -61,14 +65,27 @@ close :: (Eq v, Ord v, Foldable a) => FOF a v -> FOF a v
 close f = foldr (\x -> if freeIn x f then FOFForAll x else id) f (foldr (Set.insert) Set.empty f)
 
 prop_SimplEquiv :: FOF PermissionAtomic StringVar -> Property
-prop_SimplEquiv x = monadicIO $ do
+prop_SimplEquiv x = quantifierDepth (close x) == 4 ==> monadicIO $ do
+--                        run $ putStrLn $ "######" ++  (show $ quantifierDepth x)
                         let x' = close x
                         run $ do
                                 putStrLn (show x')
                                 putStrLn (show (simplify x'))
                                 putStrLn "================"
-                        r2 <- run $ permCheck (TPProver ()) (fmap show (simplify x'))
-                        r1 <- run $ permCheck (TPProver ()) (fmap show x')
+                        r2 <- run $ time $ permCheck (TPProver ()) (fmap show (simplify x'))
+                        r1 <- run $ time $ permCheck (TPProver ()) (fmap show x')
                         assert $ r1 == r2
 
 args' = stdArgs {maxSize = 6}
+
+
+time :: Show t => IO t -> IO t
+time a = do
+    start <- getCPUTime
+    v <- a
+    seq v $ print v
+    end   <- getCPUTime
+    let diff = (fromIntegral (end - start)) / (10^12)
+    printf "Computation time: %0.6f sec\n" (diff :: Double)
+    return v
+

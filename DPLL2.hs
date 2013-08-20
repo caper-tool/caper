@@ -53,6 +53,30 @@ propagateUnits' m s = execState (mapM_ pu s) m
                         else
                                 return ()
 
+dpll' :: Model -> [Clause] -> [Clause] -> Maybe Model
+dpll' m [] [] = return m
+dpll' mdl@(Model (m,mmask)) us (cl@(Clause (c,cmask)) : cs)
+        | complement (m `xor` c) .&. (mmask .&. cmask) /= 0 = dpll' mdl us cs
+        | (complement mmask) .&. cmask /= 0 = let pcm = (complement mmask) .&. cmask in if popCount pcm == 1 then
+                                        -- propagate the unit!
+                                        dpll' (Model (m .|. (c .&. pcm), mmask .|. pcm)) [] $! (us ++ cs)
+                                else
+                                        dpll' mdl (cl : us) cs
+        | otherwise = mzero
+dpll' m us [] = dpll' mp [] us `mplus` dpll' mn [] us
+        where
+                m' = purify m us 0 0 in
+                (mp, mn) = chooseLiteral m' us
+
+purify :: Model -> [Clause] -> Integer -> Integer -> Model
+purify (Model (m,mmask)) [] pos neg = Model (m .|. (pos .&. (pos `xor` neg)), mmask .|. (pos `xor` neg))
+purify m ((Clause (c,cm)):cs) pos neg = purify m cs (pos .|. (c .&. cm)) (neg .|. (complement c .&. cm))
+
+chooseLiteral :: Model -> [Clause] -> (Model, Model)
+-- Pick a litral that 
+
+
+
 
 data Proposition a = Prop a
                 | PAnd (Proposition a) (Proposition a)

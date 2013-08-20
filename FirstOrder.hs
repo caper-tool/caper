@@ -75,3 +75,11 @@ freeIn v (FOFNot f) = freeIn v f
 freeIn v (FOFAtom a) = elem v a
 freeIn v _ = False
 
+quantifierDepth :: FOF a v -> Int
+quantifierDepth (FOFForAll v f) = 1 + quantifierDepth f
+quantifierDepth (FOFExists v f) = 1 + quantifierDepth f
+quantifierDepth (FOFAnd f1 f2) = max (quantifierDepth f1) (quantifierDepth f2)
+quantifierDepth (FOFOr f1 f2) = max (quantifierDepth f1) (quantifierDepth f2)
+quantifierDepth (FOFImpl f1 f2) = max (quantifierDepth f1) (quantifierDepth f2)
+quantifierDepth (FOFNot f) = quantifierDepth f
+quantifierDepth _ = 0
