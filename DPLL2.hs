@@ -1,9 +1,10 @@
+module DPLL2 where
+
 import Data.Bits
 import qualified Data.Sequence as Seq
 import Data.Sequence ((|>), (<|), (><), Seq)
-import Control.Monad.State
 import Data.Foldable
-import Prelude hiding (foldl, foldr, mapM, mapM_)
+import Prelude hiding (foldl, foldr, mapM, mapM_, foldl1)
 import Data.Maybe
 import Debug.Trace
 import Control.Monad.State hiding (mapM, mapM_)
@@ -27,6 +28,9 @@ instance Show Clause where
                         show' cx mx = (if testBit mx 0 then
                                 if testBit cx 0 then '+' else '-'
                                 else '*') : show' (shift cx (-1)) (shift mx (-1))
+
+instance Show Model where
+        show (Model (c,m)) = show (Clause (c,m))
 
 triSat :: Model -> Clause -> Maybe Bool
 -- Returns Just True if the clause is satisfied
@@ -53,6 +57,9 @@ propagateUnits' m s = execState (mapM_ pu s) m
                         else
                                 return ()
 
+dpll :: [Clause] -> Maybe Model
+dpll cs = dpll' (purify (Model (0,0)) cs 0 0) [] cs
+
 dpll' :: Model -> [Clause] -> [Clause] -> Maybe Model
 dpll' m [] [] = return m
 dpll' mdl@(Model (m,mmask)) us (cl@(Clause (c,cmask)) : cs)
@@ -65,7 +72,7 @@ dpll' mdl@(Model (m,mmask)) us (cl@(Clause (c,cmask)) : cs)
         | otherwise = mzero
 dpll' m us [] = dpll' mp [] us `mplus` dpll' mn [] us
         where
-                m' = purify m us 0 0 in
+                m' = purify m us 0 0
                 (mp, mn) = chooseLiteral m' us
 
 purify :: Model -> [Clause] -> Integer -> Integer -> Model
@@ -73,7 +80,12 @@ purify (Model (m,mmask)) [] pos neg = Model (m .|. (pos .&. (pos `xor` neg)), mm
 purify m ((Clause (c,cm)):cs) pos neg = purify m cs (pos .|. (c .&. cm)) (neg .|. (complement c .&. cm))
 
 chooseLiteral :: Model -> [Clause] -> (Model, Model)
--- Pick a litral that 
+-- Pick a litral that occurs in the clauses but not the model
+-- Return the model modified with it true and false
+chooseLiteral (Model (m,mmask)) cs = (Model (m .|. lit, mmask .|. lit), Model (m .&. (complement lit), mmask .|. lit))
+        where
+                cms = mmask .&. foldr (\(Clause (_,cm)) -> (cm .|.)) 0 cs
+                lit = cms .&. (cms - 1)
 
 
 
@@ -118,3 +130,13 @@ toCNF = toCNF' Seq.empty where
                                 let (s2, c2) = toCNF' s1 p2 in
                                 (s2, mixWithS (clauseOrS) c1 c2)
 
+toClause :: [(Bool,Integer)] -> Clause
+toClause = Clause . (tc' 0 0)
+        where
+                tc' mod mask [] = (mod,mask)
+                tc' mod mask ((p,i) : cs) = let ii = fromInteger i - 1 in
+                        if testBit mask ii then
+                                (0,0) 
+                        else
+                                tc' ((if p then setBit else clearBit) mod ii)
+                                        (setBit mask ii) cs
