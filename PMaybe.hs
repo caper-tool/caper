@@ -8,12 +8,13 @@ import Control.Monad.Trans.Maybe
 import Data.Typeable
 import Control.Monad
 import Debug.Trace
+import Prelude hiding (catch)
 
 newtype PMaybe a = PMaybe {
                 runPMaybe :: Sem.MSemN Int -> MaybeT IO a
         }
 
-data ResultUnneededException = ResultUnneededException Bool deriving (Show, Typeable)
+data ResultUnneededException = ResultUnneededException ThreadId deriving (Show, Typeable)
 instance Exception ResultUnneededException
 
 doRunPMaybe :: PMaybe a -> IO (Maybe a)
@@ -49,7 +50,7 @@ instance MonadPlus PMaybe where
                         cTId <- forkIO (child pTId childmv s release childdonemv)
                         tlog $ "Started child: " ++ show cTId
                         result <- (restore $ ((runMaybeT $ runPMaybe c1 s) >>= evaluate . evalMaybe)) `catch`
-                                (\ ex@(ResultUnneededException b) -> if b then do
+                                (\ ex@(ResultUnneededException te) -> if te /= cTId then do
                                                 throwTo cTId ex
                                                 tlog "Propagated exception"
                                                 release
@@ -57,7 +58,6 @@ instance MonadPlus PMaybe where
                                         else do
                                                 tlog "Using child value"
                                                 return Nothing)
- --                       tlog "Releasing semaphore"
                         release
                         case result of
                                 Nothing -> do
@@ -65,7 +65,7 @@ instance MonadPlus PMaybe where
                                                 tlog $ "Awaiting child " ++ (show cTId)
                                                 takeMVar childdonemv
                                                 return ()) `catch`
-                                                    (\ ex@(ResultUnneededException b) -> tlog "Exception while waiting for child" >> if b then do
+                                                    (\ ex@(ResultUnneededException te) -> tlog "Exception while waiting for child" >> if te /= cTId then do
                                                                 throwTo cTId ex
                                                                 throw ex
                                                         else return ())
@@ -74,12 +74,12 @@ instance MonadPlus PMaybe where
                                 _ -> do
                                         tlog $ "Abort child: " ++ (show cTId)
                                         restore (do
-                                                throwTo cTId (ResultUnneededException True)
+                                                throwTo cTId (ResultUnneededException pTId)
                                                 tlog "Checking done"
                                                 takeMVar childdonemv
                                                 tlog "Child finished")
                                                 `catch`
-                                                (\ ex@(ResultUnneededException b) -> tlog "Exception while aborting" >> if b then
+                                                (\ ex@(ResultUnneededException te) -> tlog "Exception while aborting" >> if te /= cTId then
                                                         throw ex
                                                         else return ())
                                         tlog $ "Child aborted: " ++ show cTId
@@ -101,7 +101,8 @@ instance MonadPlus PMaybe where
                                 Nothing -> return () --tlog "No child answer"
                                 _ -> do
                                         tlog $ "Throwing to parent " ++ show parent
-                                        throwTo parent (ResultUnneededException False)
+                                        mytid <- myThreadId
+                                        throwTo parent (ResultUnneededException mytid)
                                         tlog "Thrown"
                         putMVar donemv ()
                         ) `catch`
