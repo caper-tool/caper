@@ -71,10 +71,10 @@ propagateUnits' m s = execState (mapM_ pu s) m
                         else
                                 return ()
 
-dpll :: [Clause] -> Maybe Model
+dpll :: MonadPlus m => [Clause] -> m Model
 dpll cs = let m = Model (0,0) in dpll' (\x -> id) (purify m cs) [] cs
 
-dpll' :: (forall a. Model -> a -> a) -> Model -> [Clause] -> [Clause] -> Maybe Model
+dpll' :: MonadPlus m => (forall a. Model -> a -> a) -> Model -> [Clause] -> [Clause] -> m Model
 dpll' _ m [] [] = return m
 dpll' f mdl@(Model (m,mmask)) us (cl@(Clause (c,cmask)) : cs)
         | complement (m `xor` c) .&. (mmask .&. cmask) /= 0 = (trace $ "dropping\n c:" ++ show cl ++ "\n m:" ++ show mdl) $ (f mdl) $ dpll' f mdl us cs
@@ -100,7 +100,7 @@ chooseLiteral :: Model -> [Clause] -> (Model, Model)
 -- Pick a litral that 
 chooseLiteral m@(Model (mv, mm)) cs = (trace $ "choosing: " ++ show lit) (Model (setBit mv lit, setBit mm lit), Model (clearBit mv lit, setBit mm lit))
         where
-                lit = (trace $ show m) getMax (rankCommon m cs) (candidateLiterals m cs)
+                lit = (trace $ show m) getMax (rankFriends m cs) (candidateLiterals m cs)
 
 
 getMax :: Ord b => (a -> b) -> [a] -> a
@@ -120,8 +120,23 @@ rankCommon :: Model -> [Clause] -> Int -> Int
 rankCommon _ cs b = rc cs 0
         where
                 rc [] n = n
-                rc ((Clause (cm, _)) : cr) n = rc cr $! (if testBit cm b then n + 1 else n)
+                rc ((Clause (_, cm)) : cr) n = rc cr $! (if testBit cm b then n + 1 else n)
 
+rankFriends :: Model -> [Clause] -> Int -> Int
+rankFriends (Model (_,mm)) cs b = popCount $ mm .&. rf cs 0
+        where
+                rf [] n = n
+                rf ((Clause (_,cm)) : cr) n = rf cr $! if testBit cm b then n .|. cm else n
+
+rankCF m cs b = rankFriends m cs b * rankCommon m cs b
+
+rankPolarity :: Model -> [Clause] -> Int -> Int
+rankPolarity _ cs b = (uncurry max) $ rp cs (0, 0)
+        where
+                rp [] r = r
+                rp ((Clause (cc, cm)) : cr) (n,m) = rp cr $! (if testBit cm b then if testBit cc b then (n+1,m) else (n,m+1) else (n,m))
+
+rankUnfriends m cs b = - rankFriends m cs b
 
 data Proposition a = Prop a
                 | PAnd (Proposition a) (Proposition a)

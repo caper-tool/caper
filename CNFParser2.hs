@@ -4,6 +4,7 @@ import Text.Parsec.Char
 import qualified Text.Parsec.Token as P
 import DPLL2
 import Data.Bits
+import PMaybe
 
 decimal = P.decimal (P.makeTokenParser emptyDef)
 
@@ -73,7 +74,7 @@ loadFile fn = do
 dpllFile :: String -> IO (Maybe Model)
 dpllFile fn = do
         cs <- loadFile fn
-        let m = dpll $! cs
+        m <- doRunPMaybe $ dpll $! cs
         case m of
                 Nothing -> return m
                 Just mod -> do
@@ -89,4 +90,4 @@ dpllFiles (f:fs) = do
 
 main = do
         --dpllFile "cnf/UUF50.218.1000/uuf50-01.cnf"
-        dpllFiles ["cnf/uuf250-0" ++ show n ++ ".cnf" | n <- [1..100]]
+        dpllFiles ["cnf/uf20-0" ++ show n ++ ".cnf" | n <- [1..1000]]
