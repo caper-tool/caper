@@ -4,7 +4,7 @@ import Data.Bits
 import qualified Data.Sequence as Seq
 import Data.Sequence ((|>), (<|), (><), Seq)
 import Data.Foldable
-import Prelude hiding (foldl, foldr, mapM, mapM_)
+import Prelude hiding (foldl, foldr, mapM, mapM_, foldl1)
 import Data.Maybe
 import Control.Monad.State hiding (mapM, mapM_)
 import Data.Traversable
@@ -36,7 +36,6 @@ instance Show Clause where
 
 instance Show Model where
         show (Model (c, m)) = show (Clause (c, m))
-
 
 triSat :: Model -> Clause -> Maybe Bool
 -- Returns Just True if the clause is satisfied
@@ -97,7 +96,8 @@ purify' (Model (m,mmask)) [] pos neg = Model (m .|. ((complement mmask .&. pos) 
 purify' m ((Clause (c,cm)):cs) pos neg = purify' m cs (pos .|. (c .&. cm)) (neg .|. (complement c .&. cm))
 
 chooseLiteral :: Model -> [Clause] -> (Model, Model)
--- Pick a litral that 
+-- Pick a litral that occurs in the clauses but not the model
+-- Return the model modified with it true and false
 chooseLiteral m@(Model (mv, mm)) cs = (trace $ "choosing: " ++ show lit) (Model (setBit mv lit, setBit mm lit), Model (clearBit mv lit, setBit mm lit))
         where
                 lit = (trace $ show m) getMax (rankFriends m cs) (candidateLiterals m cs)
@@ -177,4 +177,15 @@ toCNF = toCNF' Seq.empty where
         toCNF' s (POr p1 p2) = let (s1, c1) = toCNF' s p1 in
                                 let (s2, c2) = toCNF' s1 p2 in
                                 (s2, mixWithS (clauseOrS) c1 c2)
-
+{-
+toClause :: [(Bool,Integer)] -> Clause
+toClause = Clause . (tc' 0 0)
+        where
+                tc' mod mask [] = (mod,mask)
+                tc' mod mask ((p,i) : cs) = let ii = fromInteger i - 1 in
+                        if testBit mask ii then
+                                (0,0) 
+                        else
+                                tc' ((if p then setBit else clearBit) mod ii)
+                                        (setBit mask ii) cs
+-}
