@@ -14,7 +14,7 @@ newtype PMaybe a = PMaybe {
                 runPMaybe :: Sem.MSemN Int -> MaybeT IO a
         }
 
-data ResultUnneededException = ResultUnneededException ThreadId deriving (Show, Typeable)
+data ResultUnneededException = ResultUnneededException deriving (Show, Typeable)
 instance Exception ResultUnneededException
 
 doRunPMaybe :: PMaybe a -> IO (Maybe a)
@@ -39,81 +39,38 @@ instance MonadPlus PMaybe where
         c1 `mplus` c2 = PMaybe $ \s -> MaybeT $ mask $ \restore -> do
                 (_, b) <- Sem.waitF s get1
                 if b then do
-                        tlog "+Acquired semaphore"
-                        donemv <- newEmptyMVar
+                        relmv <- newEmptyMVar
                         let release = do
-                                tt <- tryPutMVar donemv ()
-                                if tt then tlog "-Releasing semaphore" >> Sem.signal s 1 else return ()
-                        childmv <- newEmptyMVar
-                        childdonemv <- newEmptyMVar
-                        pTId <- myThreadId
-                        cTId <- forkIO (child pTId childmv s release childdonemv)
-                        tlog $ "Started child: " ++ show cTId
-                        result <- (restore $ ((runMaybeT $ runPMaybe c1 s) >>= evaluate . evalMaybe)) `catch`
-                                (\ ex@(ResultUnneededException te) -> if te /= cTId then do
-                                                throwTo cTId ex
-                                                tlog "Propagated exception"
-                                                release
-                                                throw ex
-                                        else do
-                                                tlog "Using child value"
-                                                return Nothing)
-                        release
-                        case result of
-                                Nothing -> do
-                                        restore (do
-                                                tlog $ "Awaiting child " ++ (show cTId)
-                                                takeMVar childdonemv
-                                                return ()) `catch`
-                                                    (\ ex@(ResultUnneededException te) -> tlog "Exception while waiting for child" >> if te /= cTId then do
-                                                                throwTo cTId ex
-                                                                throw ex
-                                                        else return ())
-                                        tlog "Child done"
-                                        takeMVar childmv
-                                _ -> do
-                                        tlog $ "Abort child: " ++ (show cTId)
-                                        restore (do
-                                                throwTo cTId (ResultUnneededException pTId)
-                                                tlog "Checking done"
-                                                takeMVar childdonemv
-                                                tlog "Child finished")
-                                                `catch`
-                                                (\ ex@(ResultUnneededException te) -> tlog "Exception while aborting" >> if te /= cTId then
-                                                        throw ex
-                                                        else return ())
-                                        tlog $ "Child aborted: " ++ show cTId
-                                        return result
+                                b <- tryPutMVar relmv ()
+                                if b then Sem.signal s 1 else return ()
+                        answermv <- newEmptyMVar
+                        child1 <- forkIO $ child c1 answermv s
+                        child2 <- forkIO $ child c2 answermv s
+                        restore (do
+                                res <- takeMVar answermv
+                                release
+                                case res of
+                                        Nothing -> takeMVar answermv
+                                        _ -> return res)
+                                `finally` (do
+                                        release
+                                        forkIO $ (do
+                                                throwTo child1 ResultUnneededException
+                                                throwTo child2 ResultUnneededException))
                 else
                         restore $ runMaybeT $ runPMaybe c1 s `mplus` runPMaybe c2 s
             where
                 get1 0 = (0, False)
                 get1 _ = (1, True)
-                child parent mv sem release donemv = (do
-                        tlog "Child started"
-                        res <- runMaybeT $! runPMaybe c2 sem
+                child c mv sem = (do
+                        res <- runMaybeT $! runPMaybe c sem
                         res' <- evaluate (evalMaybe res)
-                        tlog "Child result"
-                        putMVar mv res'
-                        tlog "Result put"
-                        release
-                        case res' of
-                                Nothing -> return () --tlog "No child answer"
-                                _ -> do
-                                        tlog $ "Throwing to parent " ++ show parent
-                                        mytid <- myThreadId
-                                        throwTo parent (ResultUnneededException mytid)
-                                        tlog "Thrown"
-                        putMVar donemv ()
-                        ) `catch`
-                                (\(ResultUnneededException b) -> do
-                                        bb <- tryPutMVar donemv ()
-                                        tlog $ "Thread exiting by: " ++ show b ++ " and mvar did: " ++ show bb)
+                        putMVar mv res') `catch` (\ResultUnneededException -> return ())
                 evalMaybe (Just x) = x `seq` Just x
                 evalMaybe Nothing = Nothing
                 tlog m = do
                         tid <- myThreadId
-                        putStrLn $ show tid ++ "> " ++ m
+                        putStrLn $ show tid ++ "> " ++ m 
 
 {-
 foo n = return $ head $ filter (\x -> x `mod` n == 0) [1..]
