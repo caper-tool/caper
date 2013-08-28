@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 module ProverDatatypes where
 import Prelude hiding (sequence,foldl,mapM_,mapM)
 import qualified Data.Map as Map
@@ -61,15 +62,15 @@ data PermissionAtomic v =
                 | PADis (PermissionExpression v) (PermissionExpression v)
                 deriving (Functor, Foldable, Traversable, Eq, Ord)
 
-class PermExprSubable c where
-        permExprSub :: (v -> PermissionExpression w) -> c v -> c w
+class ExpressionSub c e where
+        exprSub :: (v -> e w) -> c v -> c w
 
-instance PermExprSubable PermissionExpression where
-        permExprSub a b = b >>= a
+instance Monad m => ExpressionSub m m where
+        exprSub a b = b >>= a
 
-instance PermExprSubable PermissionAtomic where
-        permExprSub s (PAEq x y) = PAEq (permExprSub s x) (permExprSub s y)
-        permExprSub s (PADis x y) = PADis (permExprSub s x) (permExprSub s y)
+instance ExpressionSub PermissionAtomic PermissionExpression where
+        exprSub s (PAEq x y) = PAEq (exprSub s x) (exprSub s y)
+        exprSub s (PADis x y) = PADis (exprSub s x) (exprSub s y)
 
 instance Show v => Show (PermissionAtomic v) where
         show (PAEq v1 v2) = show v1 ++ " =p= " ++ show v2
@@ -79,10 +80,9 @@ type VIDPermissionAtomic = PermissionAtomic VariableID
 
 type PermissionLiteral = Literal PermissionAtomic
 
-instance PermExprSubable (Literal PermissionAtomic) where
-        permExprSub s (LPos a) = LPos (permExprSub s a)
-        permExprSub s (LNeg a) = LNeg (permExprSub s a)
-
+instance (ExpressionSub a e) => ExpressionSub (Literal a) e where
+        exprSub s (LPos a) = LPos (exprSub s a)
+        exprSub s (LNeg a) = LNeg (exprSub s a)
 
 data Assertion = PermissionAssertion (Literal PermissionAtomic VariableID)
 
@@ -125,6 +125,7 @@ instance (Show (a v), Show v) => Show (FOF a v) where
         show (FOFImpl f1 f2) = "(" ++ show f1 ++ " => " ++ show f2 ++ ")"
         show (FOFForAll v f1) = "![" ++ show v ++ "](" ++ show f1 ++ ")"
         show (FOFExists v f1) = "?[" ++ show v ++ "](" ++ show f1 ++ ")"
+
 
 literalToFOF :: Literal a v -> FOF a v
 literalToFOF (LPos a) = FOFAtom a

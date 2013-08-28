@@ -135,12 +135,12 @@ newtype Guard v = GD (Map.Map String (GuardParameters v)) deriving (Eq,Ord,Show,
 
 guardLift f (GD x) = GD (f x)
 
-instance PermExprSubable GuardParameters where
-        permExprSub s NoGP = NoGP
-        permExprSub s (PermissionGP pe) = PermissionGP (permExprSub s pe)
+instance ExpressionSub GuardParameters PermissionExpression where
+        exprSub s NoGP = NoGP
+        exprSub s (PermissionGP pe) = PermissionGP (exprSub s pe)
 
-instance PermExprSubable Guard where
-        permExprSub s (GD g) = GD $ Map.map (permExprSub s) g
+instance ExpressionSub Guard PermissionExpression where
+        exprSub s (GD g) = GD $ Map.map (exprSub s) g
 
 toGuard :: (Typeable v, Show v, Throws (GuardException v) l) => GuardAST v -> EM l (Guard v)
 toGuard gast = tg (Map.empty) gast
@@ -275,14 +275,14 @@ guardPrimitiveEntailment prover g1@(GD g1a) g2@(GD g2a) = if Map.null $ g2a `Map
                 dogpe = do
                         (frame, subs) <- mapProver firstChoiceT $ checkWith prover $ guardPrimitiveEntailmentM g1 g2
                         return (frame, subs)
-                        --return (permExprSub subs frame, subs)
+                        --return (exprSub subs frame, subs)
 
 guardJoin :: Guard v -> Guard v -> Guard v
 guardJoin (GD g1) (GD g2) = GD $ Map.union g1 g2
 
 
 eGuardSubs :: Guard EVariable -> EvarSubstitution -> Guard VariableID
-eGuardSubs g subs = permExprSub (fromJust . subs) g
+eGuardSubs g subs = exprSub (fromJust . subs) g
 
 guardGeneralEntailment :: (MonadIO m, Monad m, PermissionsProver p) => p -> GuardTypeAST -> Guard VariableID -> Guard EVariable -> ProverT (MaybeT m) (Guard EVariable, EvarSubstitution)
 guardGeneralEntailment p gt g1 g2 = guardPrimitiveEntailment p g1 g2 `mplus`

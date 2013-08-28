@@ -143,7 +143,7 @@ permAssertEConsequences ecs mp = liftM snd $ runStateT (mapM paec ecs) mp
                         StateT (Map.Map String (PermissionExpression VariableID)) (ProverT m) ()
                 paec ec = do
                         pl <- mapM instantiateEvar ec
-                        let pl' = permExprSub id pl
+                        let pl' = exprSub id pl
                         lift $ assert (PermissionAssertion pl')
 
 
@@ -187,7 +187,7 @@ checkWith :: (MonadIO m, MonadPlus m, PermissionsProver p) => p -> CheckerT m a 
 -- If so, grant them, if not fail this path
 checkWith prover c = do
         (r, (pecs, subs)) <- runStateT c ([], Map.empty)
-        let pecs' = map (permExprSub (liftSubs subs)) pecs
+        let pecs' = map (exprSub (liftSubs subs)) pecs
         permDoCheckEConsequences prover pecs'
         subs' <- permAssertEConsequences pecs' (Map.mapMaybe id subs)
         return (r, evarSubs subs')
