@@ -10,8 +10,13 @@ import Data.Traversable
 import Data.Typeable
 import Control.Monad hiding (mapM_,mapM)
 
-data VariableType = VTPermission
+data VariableType = VTPermission | VTValue
         deriving (Eq, Ord, Show)
+
+instance Show VariableType where
+        show VTPermission = "Permission"
+        show VTValue = "Value"
+
 
 data VariableID = VIDNamed () String
                 | VIDInternal () String

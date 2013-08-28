@@ -83,3 +83,13 @@ quantifierDepth (FOFOr f1 f2) = max (quantifierDepth f1) (quantifierDepth f2)
 quantifierDepth (FOFImpl f1 f2) = max (quantifierDepth f1) (quantifierDepth f2)
 quantifierDepth (FOFNot f) = quantifierDepth f
 quantifierDepth _ = 0
+
+freeVariables :: (Ord v, Foldable a) => FOF a v -> Set.Set v
+freeVariables (FOFForAll v f) = Set.delete v (freeVariables f)
+freeVariables (FOFExists v f) = Set.delete v (freeVariables f)
+freeVariables (FOFAnd f1 f2) = Set.union (freeVariables f1) (freeVariables f2)
+freeVariables (FOFOr f1 f2) = Set.union (freeVariables f1) (freeVariables f2)
+freeVariables (FOFImpl f1 f2) = Set.union (freeVariables f1) (freeVariables f2)
+freeVariables (FOFNot f) = freeVariables f
+freeVariables (FOFAtom a) = Set.fromList $ toList a
+freeVariables _ = Set.empty
