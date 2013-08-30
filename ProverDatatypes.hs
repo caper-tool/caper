@@ -11,7 +11,7 @@ import Data.Typeable
 import Control.Monad hiding (mapM_,mapM)
 
 data VariableType = VTPermission | VTValue
-        deriving (Eq, Ord, Show)
+        deriving (Eq, Ord, Show, Typeable)
 
 instance Show VariableType where
         show VTPermission = "Permission"

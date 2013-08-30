@@ -19,6 +19,7 @@ import ProverDatatypes
 import ValueProver
 import qualified TypingContext as TC
 import FirstOrder
+import Exceptions
 
 data Provers = Provers {
                 permissionsProver :: FOF PermissionAtomic String -> IO (Maybe Bool),
