@@ -150,6 +150,20 @@ permAssertEConsequences ecs mp = liftM snd $ runStateT (mapM paec ecs) mp
 mapProver :: (forall s. m (a, s) -> n (b, s)) -> ProverT m a -> ProverT n b
 mapProver x = mapStateT x
 
+data Context = Context {
+        bindings :: Map.Map VariableID VariableType,
+        assertions :: [Assertion]
+        }
+
+instance Show Context where
+        show (Context _ as) = foldl (++) "" $ map (('\n':) . show) as
+
+emptyContext :: Context
+-- A context with no variables and no assertions
+emptyContext = Context Map.empty []
+
+type ProverT = StateT Context
+
 -- Remark: This is currently only set for permissions.  Will need to make it work more generally.
 
 type CheckerT m = StateT (PermissionEConsequences, Map.Map String (Maybe (PermissionExpression VariableID))) (ProverT m)

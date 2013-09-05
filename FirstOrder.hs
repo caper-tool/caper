@@ -65,6 +65,7 @@ sentence = sentence' Set.empty
                 sentence' s (FOFNot f) = sentence' s f
                 sentence' s (FOFAtom a) = foldr (\x -> (x `elem` s &&)) True a
 
+{--
 freeIn :: (Eq v, Foldable a) => v -> FOF a v -> Bool
 freeIn v (FOFForAll v' f) = if v == v' then False else freeIn v f
 freeIn v (FOFExists v' f) = if v == v' then False else freeIn v f
@@ -74,6 +75,7 @@ freeIn v (FOFImpl f1 f2) = freeIn v f1 || freeIn v f2
 freeIn v (FOFNot f) = freeIn v f
 freeIn v (FOFAtom a) = elem v a
 freeIn v _ = False
+--}
 
 quantifierDepth :: FOF a v -> Int
 quantifierDepth (FOFForAll v f) = 1 + quantifierDepth f
@@ -84,6 +86,7 @@ quantifierDepth (FOFImpl f1 f2) = max (quantifierDepth f1) (quantifierDepth f2)
 quantifierDepth (FOFNot f) = quantifierDepth f
 quantifierDepth _ = 0
 
+{--
 freeVariables :: (Ord v, Foldable a) => FOF a v -> Set.Set v
 freeVariables (FOFForAll v f) = Set.delete v (freeVariables f)
 freeVariables (FOFExists v f) = Set.delete v (freeVariables f)
@@ -93,3 +96,4 @@ freeVariables (FOFImpl f1 f2) = Set.union (freeVariables f1) (freeVariables f2)
 freeVariables (FOFNot f) = freeVariables f
 freeVariables (FOFAtom a) = Set.fromList $ toList a
 freeVariables _ = Set.empty
+--}

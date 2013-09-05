@@ -2,20 +2,15 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 module ProverDatatypes where
-import Prelude hiding (sequence,foldl,mapM_,mapM)
+import Prelude hiding (sequence,foldl,foldr,elem,mapM_,mapM)
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Control.Monad.State hiding (mapM_,mapM)
 import Data.Foldable
 import Data.Traversable
 import Data.Typeable
 import Control.Monad hiding (mapM_,mapM)
 
-data VariableType = VTPermission | VTValue
-        deriving (Eq, Ord, Show, Typeable)
-
-instance Show VariableType where
-        show VTPermission = "Permission"
-        show VTValue = "Value"
 
 
 data VariableID = VIDNamed () String
@@ -89,24 +84,52 @@ instance (ExpressionSub a e) => ExpressionSub (Literal a) e where
         exprSub s (LPos a) = LPos (exprSub s a)
         exprSub s (LNeg a) = LNeg (exprSub s a)
 
+
+data ValueExpression v =
+          VEConst Integer
+        | VEVar v
+        | VEPlus (ValueExpression v) (ValueExpression v)
+        | VEMinus (ValueExpression v) (ValueExpression v)
+        | VETimes (ValueExpression v) (ValueExpression v)
+        deriving (Eq,Ord,Functor,Foldable,Traversable)
+
+instance Show a => Show (ValueExpression a) where
+        show (VEConst n) = show n
+        show (VEVar v) = show v
+        show (VEPlus e1 e2) = "(" ++ show e1 ++ " + " ++ show e2 ++  ")"
+        show (VEMinus e1 e2) = "(" ++ show e1 ++ " - " ++ show e2 ++  ")"
+        show (VETimes e1 e2) = "(" ++ show e1 ++ " * " ++ show e2 ++  ")"
+
+data ValueAtomic v =
+          VAEq (ValueExpression v) (ValueExpression v)
+        | VALt (ValueExpression v) (ValueExpression v)
+        deriving (Eq,Ord,Functor,Foldable,Traversable)
+
+instance Show a => Show (ValueAtomic a) where
+        show (VAEq e1 e2) = show e1 ++ " =v= " ++ show e2
+        show (VALt e1 e2) = show e1 ++ " < " ++ show e2
+
+
+
+data VariableType = VTPermission | VTValue
+        deriving (Eq, Ord, Typeable)
+
+data Provers = Provers {
+                permissionsProver :: FOF PermissionAtomic String -> IO (Maybe Bool),
+                valueProver :: FOF ValueExpression String -> IO (Maybe Bool)
+                }
+
+instance Show VariableType where
+        show VTPermission = "Permission"
+        show VTValue = "Value"
+
 data Assertion = PermissionAssertion (Literal PermissionAtomic VariableID)
 
 instance Show Assertion where
         show (PermissionAssertion pa) = show pa
 
-data Context = Context {
-        bindings :: Map.Map VariableID VariableType,
-        assertions :: [Assertion]
-        }
 
-instance Show Context where
-        show (Context _ as) = foldl (++) "" $ map (('\n':) . show) as
 
-emptyContext :: Context
--- A context with no variables and no assertions
-emptyContext = Context Map.empty []
-
-type ProverT = StateT Context
 
 data FOF a v =
           FOFForAll v (FOF a v)
@@ -131,6 +154,25 @@ instance (Show (a v), Show v) => Show (FOF a v) where
         show (FOFForAll v f1) = "![" ++ show v ++ "](" ++ show f1 ++ ")"
         show (FOFExists v f1) = "?[" ++ show v ++ "](" ++ show f1 ++ ")"
 
+class FreeVariables f where
+        foldrFree :: (Eq a) => (a -> b -> b) -> b -> f a -> b
+        freeIn :: (Eq v) => v -> f v -> Bool
+        freeIn v = foldrFree ( (||) . (== v) ) False
+        freeVariables :: (Ord v) => f v -> Set.Set v
+        freeVariables = foldrFree Set.insert Set.empty
+
+instance (Foldable a) => FreeVariables (FOF a) where
+        foldrFree f = ff []
+                where
+                        ff bound x (FOFForAll v s) = ff (v : bound) x s
+                        ff bound x (FOFExists v s) = ff (v : bound) x s
+                        ff bound x (FOFAtom a) = foldr (ignoring bound) x a
+                        ff bound x (FOFAnd f1 f2) = ff bound (ff bound x f2) f1
+                        ff bound x (FOFOr f1 f2) = ff bound (ff bound x f2) f1
+                        ff bound x (FOFImpl f1 f2) = ff bound (ff bound x f2) f1
+                        ff bound x (FOFNot f') = ff bound x f'
+                        ff bound x _ = x
+                        ignoring l u v = if u `elem` l then v else f u v
 
 literalToFOF :: Literal a v -> FOF a v
 literalToFOF (LPos a) = FOFAtom a

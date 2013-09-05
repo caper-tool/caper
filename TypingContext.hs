@@ -9,7 +9,7 @@ import Exceptions
 
 newtype TContext v t = TContext (Map v (Either Int t), Int)
 
-data TypeResult t = JustType t | Undetermined | NotBound
+data TypeResult t = JustType t | Undetermined | NotBound deriving (Eq, Ord)
 
 lookup :: Ord v => v -> TContext v t -> TypeResult t
 -- Determine the type of a variable in the context
@@ -36,7 +36,7 @@ declare :: (Ord v) => v -> TContext v t -> TContext v t
 -- Declare a variable to be bound in the context
 declare x tc@(TContext (m, n)) = if Map.member x m then tc else TContext (Map.insert x (Left n) m, n+1)
 
-declareAll :: (Ord v) => [v] -> TContext v t -> TContext v t
+declareAll :: (Ord v, Foldable f) => f v -> TContext v t -> TContext v t
 declareAll vs c = foldr declare c vs
 
 unify :: (Ord v, Eq t, Show v, Show t, Typeable v, Typeable t, Monad m, Throws (TypeUnificationException v t) l) =>
