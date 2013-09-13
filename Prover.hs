@@ -86,6 +86,7 @@ assume c@(ValueCondition cass) = do
                         addAssumption c
 assume c@(EqualityCondition _ _) = do
                         declareVars (freeVariables c)
+                        -- TODO: Need to unify the variables
                         addAssumption c
 
 
