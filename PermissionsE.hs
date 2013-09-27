@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveFunctor #-}
-module PermissionsE(EPProver, makeEPProver) where
+module PermissionsE(EPProver(..), tptpBAPrelude, makeEPProver) where
 import Control.Concurrent
 import Data.List
 import System.IO
@@ -11,6 +11,8 @@ import System.Exit
 import ProverDatatypes
 import PermissionsInterface
 import Debug.Trace
+import System.Directory
+import Control.Exception
 
 -- Note, variables must be alpha-numeric (possibly including _) to work!
 
@@ -122,11 +124,11 @@ tptpBAPrelude = readFile "ba_prelude.tptp"
 query :: Show v => BAFormula v -> String
 query f = "fof(query,question," ++ show f ++ ")."
 
-startCheck :: Show v => EPProver -> BAFormula v -> IO ProcessHandle
-startCheck epp formula = do
+startCheck :: Show v => EPProver -> BAFormula v -> Handle -> Handle -> IO ProcessHandle
+startCheck epp formula outHandle errHandle = do
         let p = (proc (proverPath epp)
-                ["--auto", "--tptp3-format"]) { std_in = CreatePipe, std_out = CreatePipe, std_err = CreatePipe }
-        (Just inp, Just outp, _, ph) <- createProcess p
+                ["--auto", "--tptp3-format", "--output-level=0"]) { std_in = CreatePipe, std_out = UseHandle outHandle, std_err = UseHandle errHandle }
+        (Just inp, _, _, ph) <- createProcess p
         hPutStrLn inp ((tptpPrelude epp) ++ query formula)
         hClose inp
         return ph
@@ -144,23 +146,40 @@ timeoutSem n sem = do
         MSem.signal sem
 
 checkBothWays :: Show v => EPProver -> BAFormula v -> IO (Maybe Bool)
-checkBothWays epp formula = trace ("Calling E on:\n" ++ show formula) $ do
-        htrue <- startCheck epp formula
-        mvtrue <- newEmptyMVar
-        sem <- MSem.new 0
-        tidtrue <- forkIO $ waitForCheck htrue sem mvtrue
-        hfalse <- startCheck epp (BANot formula)
-        mvfalse <- newEmptyMVar
-        tidfalse <- forkIO $ waitForCheck hfalse sem mvfalse
-        let hs = [htrue,hfalse]
-        tidTimeout <- forkIO $ timeoutSem 1000000 sem
-        MSem.wait sem
-        mapM_ terminateProcess hs
-        rtrue <- takeMVar mvtrue
-        rfalse <- takeMVar mvfalse
-        return $ if rtrue == ExitSuccess then
-                trace "Proved." $ Just True 
-                else if rfalse == ExitSuccess then trace "Disproved." $ Just False else trace "Unknown." $ Nothing
+checkBothWays epp formula = trace ("Calling E on:\n" ++ show formula) $ bracket
+        (do
+                out1 <- openTempFile "." "eout.log"
+                err1 <- openTempFile "." "eerr.log"                
+                out2 <- openTempFile "." "eout.log"
+                err2 <- openTempFile "." "eerr.log"
+                return (out1,err1,out2,err2))
+        (\((outFile1,outHandle1),(errFile1,errHandle1),(outFile2,outHandle2),(errFile2,errHandle2)) ->
+                do
+                        hClose outHandle1
+                        hClose outHandle2
+                        hClose errHandle1
+                        hClose errHandle2
+                        removeFile outFile1
+                        removeFile outFile2
+                        removeFile errFile1
+                        removeFile errFile2)
+        (\((outFile1,outHandle1),(errFile1,errHandle1),(outFile2,outHandle2),(errFile2,errHandle2)) -> do
+                htrue <- startCheck epp formula outHandle1 errHandle1
+                mvtrue <- newEmptyMVar
+                sem <- MSem.new 0
+                tidtrue <- forkIO $ waitForCheck htrue sem mvtrue
+                hfalse <- startCheck epp (BANot formula) outHandle2 errHandle2
+                mvfalse <- newEmptyMVar
+                tidfalse <- forkIO $ waitForCheck hfalse sem mvfalse
+                let hs = [htrue,hfalse]
+                tidTimeout <- forkIO $ timeoutSem 10000000 sem
+                MSem.wait sem
+                mapM_ terminateProcess hs
+                rtrue <- takeMVar mvtrue
+                rfalse <- takeMVar mvfalse
+                return $ if rtrue == ExitSuccess then
+                        trace "Proved." $ Just True 
+                        else if rfalse == ExitSuccess then trace "Disproved." $ Just False else trace "Unknown." $ Nothing)
 
 
 makeEPProver :: IO EPProver
