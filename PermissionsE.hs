@@ -172,7 +172,7 @@ checkBothWays epp formula = trace ("Calling E on:\n" ++ show formula) $ bracket
                 mvfalse <- newEmptyMVar
                 tidfalse <- forkIO $ waitForCheck hfalse sem mvfalse
                 let hs = [htrue,hfalse]
-                tidTimeout <- forkIO $ timeoutSem 10000000 sem
+                tidTimeout <- forkIO $ timeoutSem 100000000 sem
                 MSem.wait sem
                 mapM_ terminateProcess hs
                 rtrue <- takeMVar mvtrue
