@@ -1,21 +1,27 @@
 // Ticket lock
 
 function makeLock() {
-    var v;
+    var n, t, v;
     v := alloc(2);
-    [v + 0] := makeCounter();
-    [v + 1] := makeCounter();
+    n := makeCounter();
+    t := makeCounter();
+    [v + 0] := n;
+    [v + 1] := t;
     return v;
 }
 
 function lock(x) {
-    var v;
-    v := incr([x + 1]);
-    while (v != read([x + 0])) {
-        skip;
-    }
+    var n, t, v, w;
+    n := [x + 0];
+    t := [x + 1];
+    v := incr(t);
+    do {
+        w := read(n);
+    } while (v != w);
 }
 
 function unlock(x) {
-    incr([x + 0]);
+    var n;
+    n := [x + 0];
+    incr(n);
 }

@@ -11,7 +11,12 @@ function incr(x) {
     var v, b;
     do {
         v := [x];
-    } while (v = -1 or CAS(x, v, -1) = 0);
+        if (v = -1) {
+            b := 0;
+        } else {
+            b := CAS(x, v, -1);
+        }
+    } while (b = 0);
     [x] := v + 1;
     return v;
 }

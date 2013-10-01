@@ -168,4 +168,16 @@ function unlock(x)
 
 It may be necessary to add an invariant assertion to the loop.
 
+\section{Grammar}
+
+\[
+\begin{array}{rcl}
+  f & ::= & \mathtt{function} \ \mathtt{x}(\mathtt{x}) \ \{ \mathtt{var} \ \mathtt{x} ; c \} \\
+  c & ::= & c ; c \ | \ \mathtt{if} \ (b) \ \{ c \} \ \mathtt{else} \ \{ c \} \ | \ \mathtt{while} \ (b) \ \{ c \} \ | \ \mathtt{do} \ \{ c \} \ \mathtt{while} \ (b) \ \{ c \} \ | \ \\
+   & & \mathtt{x} := e \ | \ \mathtt{x} := [e] \ | \ [e] := e \ | \ \mathtt{x} := \mathtt{x}(e) \ | \ \mathtt{skip} \\
+  e & ::= & \mathtt{x} \ | \ n \ | \ e + e \ | \ e - e \ \\
+  b & ::= & e = e \ | \ e \ \text{!=} \ e \ | \ e > e \ | \ e \ge e \ | \ e < e \ | \ e \le e \ | \ b \ \mathtt{or} \ b \ | \ b \ \mathtt{and} \ b \ | \ \mathtt{not} \ b
+\end{array}
+\]
+
 \end{document}
