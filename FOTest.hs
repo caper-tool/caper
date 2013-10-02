@@ -4,6 +4,7 @@ import Test.QuickCheck
 import ProverDatatypes
 import PermissionsInterface
 import Permissions
+import PermissionsE
 import FirstOrder
 import Control.Monad
 import Prelude hiding (foldl, foldr)
@@ -44,7 +45,7 @@ instance Arbitrary v => Arbitrary (PermissionAtomic v) where
                 oneof [return $ PAEq e1 e2, return $ PADis e1 e2]
 
 instance (Arbitrary v, Arbitrary (a v), Eq v, Foldable a) => Arbitrary (FOF a v) where
-        arbitrary = sized arb
+        arbitrary = sized (\n -> if n > 100 then arb 100 else arb n)
                 where
                         arb 0 = frequency [(1,return FOFTrue),(1,return FOFFalse),(8,liftM FOFAtom arbitrary)]
                         arb n = frequency [(1,return FOFTrue),(1,return FOFFalse),(8,liftM FOFAtom arbitrary),
@@ -76,6 +77,15 @@ prop_SimplEquiv x = quantifierDepth (close x) == 4 ==> monadicIO $ do
                         r1 <- run $ time $ permCheck (TPProver ()) (fmap show x')
                         assert $ r1 == r2
 
+prop_ProverEquiv :: FOF PermissionAtomic StringVar -> Property
+prop_ProverEquiv x = let x' = simplify (close x) in
+                        quantifierDepth x' <= 4 ==> monadicIO $ do
+                                r1 <- run $ time $ permCheck (TPProver ()) (fmap show x')
+                                r2 <- run $ do
+                                        epp <- makeEPProver
+                                        time $ permCheck epp (fmap show x')
+                                assert $ r1 == r2
+
 args' = stdArgs {maxSize = 6}
 
 
@@ -84,7 +94,7 @@ time a = do
     start <- getCPUTime
     v <- a
     seq v $ print v
-    end   <- getCPUTime
+    end <- seq v getCPUTime
     let diff = (fromIntegral (end - start)) / (10^12)
     printf "Computation time: %0.6f sec\n" (diff :: Double)
     return v

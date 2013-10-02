@@ -185,7 +185,7 @@ checkBothWays epp formula = trace ("Calling E on:\n" ++ show formula) $ bracket
 makeEPProver :: IO EPProver
 makeEPProver = do
         prel <- tptpBAPrelude
-        return $ EPProver prel "c:\\cygwin\\home\\td202\\E\\bin\\eprover.exe"
+        return $ EPProver prel "c:\\cygwin64\\home\\Thomas\\E\\PROVER\\eprover.exe"
 
 instance PermissionsProver EPProver where
         permCheck epp = (checkBothWays epp) . toBAFormula

@@ -21,6 +21,9 @@ instance Show VariableID where
         show (VIDNamed _ s) = s
         show (VIDInternal _ s) = "__" ++ s
 
+vidToString :: VariableID -> String
+vidToString (VIDNamed _ n) = "n_" ++ n
+vidToString (VIDInternal _ n) = "i_" ++ n
 
 data EVariable = EVNormal VariableID | EVExistential () String -- | EVInternal () Int
         deriving (Eq, Ord, Typeable)
@@ -29,6 +32,11 @@ instance Show EVariable where
         show (EVNormal v) = show v
         show (EVExistential _ s) = "?" ++ s
 --        show (EVInternal _ n) = "?_" ++ show n
+
+evarToString :: EVariable -> String
+evarToString (EVExistential _ n) = "e_" ++ n
+evarToString (EVNormal v) = vidToString v
+
 
 data Literal a v = LPos (a v) | LNeg (a v) deriving (Functor, Foldable, Traversable)
 
@@ -56,6 +64,12 @@ instance Monad PermissionExpression where
         PECompl e >>= b = PECompl (e >>= b)
         PEFull >>= _ = PEFull
         PEZero >>= _ = PEZero
+
+class Expression e where
+        var :: v -> e v
+
+instance Expression PermissionExpression where
+        var = PEVar
 
 data PermissionAtomic v =
                  PAEq (PermissionExpression v) (PermissionExpression v)
@@ -93,6 +107,9 @@ data ValueExpression v =
         | VETimes (ValueExpression v) (ValueExpression v)
         deriving (Eq,Ord,Functor,Foldable,Traversable)
 
+instance Expression ValueExpression where
+        var = VEVar
+
 instance Show a => Show (ValueExpression a) where
         show (VEConst n) = show n
         show (VEVar v) = show v
@@ -116,7 +133,7 @@ data VariableType = VTPermission | VTValue
 
 data Provers = Provers {
                 permissionsProver :: FOF PermissionAtomic String -> IO (Maybe Bool),
-                valueProver :: FOF ValueExpression String -> IO (Maybe Bool)
+                valueProver :: FOF ValueAtomic String -> IO (Maybe Bool)
                 }
 
 instance Show VariableType where

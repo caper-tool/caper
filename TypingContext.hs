@@ -48,7 +48,7 @@ unify v1 v2 tc@(TContext (m, n)) = case (Map.lookup v1 m, Map.lookup v2 m) of
                 (Just t, Nothing) -> return $ TContext (Map.insert v2 t m, n)
                 (Just a@(Left _), Just b) -> return $ TContext (Map.map (\tt -> if tt == a then b else tt) m, n)
                 (Just a@(Right _), Just b@(Left _)) -> return $ TContext (Map.map (\tt -> if tt == b then a else tt) m, n)
-                (Just (Right t1), Just (Right t2)) -> if t1 == t2 then return tc else throw (TypeUnificationException v1 t1 t2)
+                (Just (Right t1), Just (Right t2)) -> if t1 == t2 then return tc else throw (TypeUnificationException2 v1 t1 v2 t2)
 
 toMap :: (Ord v) => TContext v t -> Map v (Maybe t)
 toMap (TContext (m, _)) = Map.map eitherToMaybe m
