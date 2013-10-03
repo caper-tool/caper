@@ -24,23 +24,31 @@ import Exceptions
 import Control.Lens
 
 
-type ProverT = StateT Assumptions
--- Invariant: All variables occuring free in assumptions MUST be bound in bindings
-
-
---check :: (MonadIO m, MonadPlus m) => Provers -> CheckerT m a -> ProverT m (a, EvarSubstitution)
--- Check that the assertions follow from the assumptions
--- If so, admit them as assumptions, returning the substitution of evars
--- If not, fail this path
-check = undefined
-
-isBound :: (Monad m) => VariableID -> ProverT m Bool
--- Determine if the given variable is bound.
-isBound = undefined
 
 data Condition v = PermissionCondition (FOF PermissionAtomic v)
                 | ValueCondition (FOF ValueAtomic v)
                 | EqualityCondition v v
+                deriving (Eq, Ord)
+
+data Expr v = PermissionExpr (PermissionExpression v)
+        | ValueExpr (ValueExpression v)
+        | VariableExpr v
+        deriving (Eq, Ord)
+
+instance Expression Expr where
+        var = VariableExpr
+
+class ProverExpression c where
+        toExpr :: c v -> Expr v
+
+instance ProverExpression PermissionExpression where
+        toExpr = PermissionExpr
+
+instance ProverExpression ValueExpression where
+        toExpr = ValueExpr
+
+--instance ProverExpression Identity where
+--        toExpr = VariableExpr
 
 instance FreeVariables Condition where
         foldrFree f x (PermissionCondition fof) = foldrFree f x fof
@@ -59,6 +67,18 @@ data Assumptions = Assumptions {
         }
 makeLenses ''Assumptions
 
+instance Show Assumptions where
+        show ass = foldl (++) "" $ map (('\n':) . show) $ ass ^. assumptions
+
+emptyAssumptions :: Assumptions
+emptyAssumptions = Assumptions TC.empty []
+
+type ProverT = StateT Assumptions
+-- Invariant: All variables occuring free in assumptions MUST be bound in bindings
+
+runProverT :: (Monad m) => ProverT m a -> m a
+-- run a ProverT from emptyAssumptions
+runProverT p = evalStateT p emptyAssumptions
 
 bindVarsAs :: (Monad m, Foldable f) => f VariableID -> VariableType -> ProverT m ()
 bindVarsAs s vt = do
@@ -75,11 +95,21 @@ unifyEqVars v1 v2 = do
 declareVars :: (Monad m, Foldable f) => f VariableID -> ProverT m ()
 declareVars s = bindings %= TC.declareAll s
 
+isBound :: (Monad m) => VariableID -> ProverT m Bool
+-- Determine if the given variable is bound.
+isBound v = do
+                b <- use bindings
+                return $ TC.lookup v b /= TC.NotBound
+
+
 -- Only use internally
 addAssumption :: (Monad m) => Condition VariableID -> ProverT m ()
 addAssumption c = assumptions %= (c :)
 
 assume :: Monad m => Condition VariableID -> ProverT m ()
+-- Add a condition to the list of assumptions, binding its
+-- variables at the appropriate type.  This can raise an
+-- error if a variable is not used with a consistent type.
 assume c@(PermissionCondition pass) = do
                         bindVarsAs (freeVariables c) VTPermission
                         addAssumption c
@@ -89,7 +119,6 @@ assume c@(ValueCondition cass) = do
 assume c@(EqualityCondition v1 v2) = do
                         unifyEqVars v1 v2
                         addAssumption c
-
 
 
 
@@ -144,4 +173,26 @@ isConsistent ps = get >>= ic
                                         (_, Just False) -> Just False
                                         (Just True, Just True) -> Just True
                                         _ -> Nothing
+
+assumptionContext :: (Functor a, Foldable a) =>
+        [VariableID] -> [FOF a VariableID] -> FOF a EVariable -> FOF a EVariable
+-- Wrap universal quantifiers and assumptions around an assertion
+assumptionContext vids asms ast = foldr FOFForAll (foldr (FOFImpl . fmap EVNormal) ast asms) (fmap EVNormal vids) 
+
+data Assertions = Assertions {
+        _evTypes :: TC.TContext String VariableType,
+        _evExprs :: Map.Map String (Expr VariableID),
+        _assertions :: [Condition EVariable]
+        }
+makeLenses ''Assertions
+
+type CheckerT m = StateT Assertions (ProverT m)
+
+
+--check :: (MonadIO m, MonadPlus m) => Provers -> CheckerT m a -> ProverT m (a, EvarSubstitution)
+-- Check that the assertions follow from the assumptions
+-- If so, admit them as assumptions, returning the substitution of evars
+-- If not, fail this path
+check = undefined
+
 

@@ -9,6 +9,9 @@ import Exceptions
 
 newtype TContext v t = TContext (Map v (Either Int t), Int)
 
+empty :: TContext v t
+empty = TContext (Map.empty, 0)
+
 data TypeResult t = JustType t | Undetermined | NotBound deriving (Eq, Ord)
 
 lookup :: Ord v => v -> TContext v t -> TypeResult t
