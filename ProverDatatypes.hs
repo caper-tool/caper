@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE UndecidableInstances #-}
 module ProverDatatypes where
 import Prelude hiding (sequence,foldl,foldr,elem,mapM_,mapM)
 import qualified Data.Map as Map
@@ -13,29 +14,12 @@ import Control.Monad hiding (mapM_,mapM)
 
 
 
-data VariableID = VIDNamed () String
-                | VIDInternal () String
-                deriving (Eq,Ord,Typeable)
+class Refreshable v where
+        freshen :: v -> [v]
 
-instance Show VariableID where
-        show (VIDNamed _ s) = s
-        show (VIDInternal _ s) = "__" ++ s
+instance Refreshable String where
+        freshen s = [ s ++ show x | x <- [0..] ]
 
-vidToString :: VariableID -> String
-vidToString (VIDNamed _ n) = "n_" ++ n
-vidToString (VIDInternal _ n) = "i_" ++ n
-
-data EVariable = EVNormal VariableID | EVExistential () String -- | EVInternal () Int
-        deriving (Eq, Ord, Typeable)
-
-instance Show EVariable where
-        show (EVNormal v) = show v
-        show (EVExistential _ s) = "?" ++ s
---        show (EVInternal _ n) = "?_" ++ show n
-
-evarToString :: EVariable -> String
-evarToString (EVExistential _ n) = "e_" ++ n
-evarToString (EVNormal v) = vidToString v
 
 
 data Literal a v = LPos (a v) | LNeg (a v) deriving (Functor, Foldable, Traversable)
@@ -65,6 +49,7 @@ instance Monad PermissionExpression where
         PEFull >>= _ = PEFull
         PEZero >>= _ = PEZero
 
+-- Note: could probably get rid of Expression and use Monad instead: return takes place of var
 class Expression e where
         var :: v -> e v
 
@@ -82,7 +67,7 @@ class ExpressionSub c e where
 instance Monad m => ExpressionSub m m where
         exprSub a b = b >>= a
 
-instance ExpressionSub PermissionAtomic PermissionExpression where
+instance ExpressionSub PermissionExpression e => ExpressionSub PermissionAtomic e where
         exprSub s (PAEq x y) = PAEq (exprSub s x) (exprSub s y)
         exprSub s (PADis x y) = PADis (exprSub s x) (exprSub s y)
 
@@ -90,7 +75,6 @@ instance Show v => Show (PermissionAtomic v) where
         show (PAEq v1 v2) = show v1 ++ " =p= " ++ show v2
         show (PADis v1 v2) = show v1 ++ " # " ++ show v2
 
-type VIDPermissionAtomic = PermissionAtomic VariableID
 
 type PermissionLiteral = Literal PermissionAtomic
 
@@ -110,6 +94,14 @@ data ValueExpression v =
 instance Expression ValueExpression where
         var = VEVar
 
+instance Monad ValueExpression where
+        return = VEVar
+        (VEConst c) >>= b = VEConst c
+        (VEVar v) >>= b = b v
+        VEPlus e1 e2 >>= b = VEPlus (e1 >>= b) (e2 >>= b)
+        VEMinus e1 e2 >>= b = VEMinus (e1 >>= b) (e2 >>= b)
+        VETimes e1 e2 >>= b = VETimes (e1 >>= b) (e2 >>= b)
+
 instance Show a => Show (ValueExpression a) where
         show (VEConst n) = show n
         show (VEVar v) = show v
@@ -121,6 +113,11 @@ data ValueAtomic v =
           VAEq (ValueExpression v) (ValueExpression v)
         | VALt (ValueExpression v) (ValueExpression v)
         deriving (Eq,Ord,Functor,Foldable,Traversable)
+
+instance ExpressionSub ValueExpression e => ExpressionSub ValueAtomic e where
+        exprSub s (VAEq v1 v2) = VAEq (exprSub s v1) (exprSub s v2)
+        exprSub s (VALt v1 v2) = VALt (exprSub s v1) (exprSub s v2)
+
 
 instance Show a => Show (ValueAtomic a) where
         show (VAEq e1 e2) = show e1 ++ " =v= " ++ show e2
@@ -140,10 +137,6 @@ instance Show VariableType where
         show VTPermission = "Permission"
         show VTValue = "Value"
 
-data Assertion = PermissionAssertion (Literal PermissionAtomic VariableID)
-
-instance Show Assertion where
-        show (PermissionAssertion pa) = show pa
 
 
 
@@ -194,3 +187,26 @@ instance (Foldable a) => FreeVariables (FOF a) where
 literalToFOF :: Literal a v -> FOF a v
 literalToFOF (LPos a) = FOFAtom a
 literalToFOF (LNeg a) = FOFNot $ FOFAtom a
+
+class ExpressionCASub c e where
+        exprCASub :: (Refreshable v, Eq v) => (v -> e v) -> c v -> c v
+
+instance (ExpressionSub a e, Functor a, Foldable a, Functor e, Monad e) => ExpressionCASub (FOF a) e where
+        exprCASub s = unhelpSub . helpSub (fmap Right . s) 
+            where
+                -- helpSub :: (v -> e (Either v v)) -> FOF a v -> FOF a (Either v v)
+                helpSub s (FOFForAll v p) = FOFForAll (Left v) (helpSub (\x -> if x == v then return $ Left v else s x) p)
+                helpSub s (FOFExists v p) = FOFExists (Left v) (helpSub (\x -> if x == v then return $ Left v else s x) p)
+                helpSub s (FOFAtom a) = FOFAtom (exprSub s a)
+                helpSub s (FOFAnd p1 p2) = FOFAnd (helpSub s p1) (helpSub s p2)
+                helpSub s (FOFOr p1 p2) = FOFOr (helpSub s p1) (helpSub s p2)
+                helpSub s (FOFImpl p1 p2) = FOFImpl (helpSub s p1) (helpSub s p2)
+                helpSub s (FOFNot p) = FOFNot (helpSub s p)
+                helpSub _ FOFFalse = FOFFalse
+                helpSub _ FOFTrue = FOFTrue
+                -- unhelpSub :: FOF a (Either v v) -> FOF a v
+                unhelpSub f = fmap refresh f
+                        where
+                                refresh (Left v) = head $ filter (\x -> not $ freeIn (Right x) f) ( v : freshen v )
+                                refresh (Right v) = v
+        

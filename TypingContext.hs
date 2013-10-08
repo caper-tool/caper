@@ -58,3 +58,11 @@ toMap (TContext (m, _)) = Map.map eitherToMaybe m
         where
                 eitherToMaybe (Left _) = Nothing
                 eitherToMaybe (Right t) = Just t
+
+firstFresh :: (Eq v, Ord v) => [v] -> TContext v t -> v
+-- Returns the first element of the list that is fresh
+firstFresh [] _ = error "firstFresh unable to find a fresh variable"
+firstFresh (v:vs) tc@(TContext (m,_)) = if v `Map.member` m then firstFresh vs tc else v
+
+difference :: (Eq v, Ord v) => TContext v t -> TContext v t -> TContext v t
+difference (TContext (m1, i1)) (TContext (m2, _)) = TContext (Map.difference m1 m2, i1)
