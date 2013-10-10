@@ -42,6 +42,40 @@ simplify (FOFImpl f1 f2) = FOFImpl (simplify f1) (simplify f2)
 simplify (FOFNot f1) = FOFNot (simplify f1)
 simplify x = x
 
+unmaybe :: (a -> Maybe a) -> (a -> a) -> a -> a
+unmaybe f g x = case f x of
+                Just y -> g y
+                Nothing -> x
+
+rewriteFOF :: (FOF a v -> Maybe (FOF a v)) -> FOF a v -> FOF a v
+rewriteFOF f = unmaybe f (rewriteFOF f) . business
+        where
+                business (FOFForAll v p) = FOFForAll v (rewriteFOF f p)
+                business (FOFExists v p) = FOFExists v (rewriteFOF f p)
+                business (FOFAnd p1 p2) = FOFAnd (rewriteFOF f p1) (rewriteFOF f p2)
+                business (FOFOr p1 p2) = FOFOr (rewriteFOF f p1) (rewriteFOF f p2)
+                business (FOFImpl p1 p2) = FOFImpl (rewriteFOF f p1) (rewriteFOF f p2)
+                business (FOFNot p) = FOFNot (rewriteFOF f p)
+                business z = z
+
+simplR :: FOF a v -> Maybe (FOF a v)
+simplR (FOFAnd FOFTrue x) = Just x
+simplR (FOFAnd x FOFTrue) = Just x
+simplR (FOFAnd FOFFalse x) = Just FOFFalse
+simplR (FOFAnd x FOFFalse) = Just FOFFalse
+simplR (FOFOr FOFTrue x) = Just FOFTrue
+simplR (FOFOr x FOFTrue) = Just FOFTrue
+simplR (FOFOr FOFFalse x) = Just x
+simplR (FOFOr x FOFFalse) = Just x
+simplR (FOFImpl FOFTrue x) = Just x
+simplR (FOFImpl x FOFTrue) = Just FOFTrue
+simplR (FOFImpl FOFFalse x) = Just x
+simplR (FOFImpl x FOFFalse) = Just FOFFalse
+simplR _ = Nothing
+
+
+
+
 boundIn :: (Eq v, Foldable a) => v -> FOF a v -> Bool
 boundIn v (FOFForAll v' f) = v == v' || boundIn v f
 boundIn v (FOFExists v' f) = v == v' || boundIn v f

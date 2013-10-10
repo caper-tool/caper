@@ -6,8 +6,16 @@ import Data.Foldable
 import Data.Map (Map)
 import Control.Monad.State hiding (mapM_)
 import Exceptions
+import Data.List hiding (foldl, foldr)
+import Data.Monoid
 
 newtype TContext v t = TContext (Map v (Either Int t), Int)
+
+instance (Show v, Show t) => Show (TContext v t) where
+        show (TContext (m, _)) = mconcat $ intersperse "," $ Map.foldWithKey (\v t -> ((show v ++ ":" ++ showType t) :)) [] m
+                where
+                        showType (Left i) = "?" ++ show i
+                        showType (Right t) = show t
 
 empty :: TContext v t
 empty = TContext (Map.empty, 0)
@@ -66,3 +74,6 @@ firstFresh (v:vs) tc@(TContext (m,_)) = if v `Map.member` m then firstFresh vs t
 
 difference :: (Eq v, Ord v) => TContext v t -> TContext v t -> TContext v t
 difference (TContext (m1, i1)) (TContext (m2, _)) = TContext (Map.difference m1 m2, i1)
+
+intersection :: (Eq v, Ord v) => TContext v t -> TContext v t -> TContext v t
+intersection (TContext (m1, i1)) (TContext (m2, _)) = TContext (Map.intersection m1 m2, i1)
