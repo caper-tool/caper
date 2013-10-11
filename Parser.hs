@@ -83,9 +83,8 @@ statement :: Parser Stmt
 statement =  ifElseStatement
          <|> whileStatement
          <|> doWhileStatement
-         <|> derefStatement
          <|> assignStatement
-         <|> expressionStatement
+         <|> derefStatement
          <|> varStatement
          <|> returnStatement
          <|> skipStatement
@@ -131,17 +130,18 @@ derefStatement =
 assignStatement :: Parser Stmt
 assignStatement =
   do pos <- getPosition
-     var <- funCallOrVar
-     case var of
-       VarAExpr _ _    -> do { reservedOp ":="; expr <- aExpression; semi; return (AssignStmt pos var expr) }
-       CallAExpr _ _ _ -> semi >> return (ExprStmt pos var)
+     var <- identifier
+     reservedOp ":="
+     return $ LocalAssignStmt pos var (VarAExpr pos var)
+--     <|>
+--     case var of
+--       VarAExpr _ _    -> do { reservedOp ":="; expr <- aExpression; semi; return (AssignStmt pos var expr) }
+--       CallAExpr _ _ _ -> semi >> return (ExprStmt pos var)
 
-expressionStatement :: Parser Stmt
-expressionStatement =
-  do pos  <- getPosition
-     expr <- aExpression
-     semi
-     return $ ExprStmt pos expr
+--list <- optionMaybe $ parens $ sepBy aExpression comma
+--     case list of
+--       Nothing -> return $ VarAExpr pos var
+--       Just l  -> return $ CallAExpr pos var l
 
 varStatement :: Parser Stmt
 varStatement =
@@ -185,22 +185,13 @@ bOperators = [ [Prefix (do { pos <- getPosition; reservedOp "not"; return (NotBE
              ]
 
 aTerm =  parens aExpression
-     <|> funCallOrVar
-     <|> deref
+     <|> variable
      <|> intConst
 
-funCallOrVar =
+variable =
   do pos <- getPosition
      var  <- identifier
-     list <- optionMaybe $ parens $ sepBy aExpression comma
-     case list of
-       Nothing -> return $ VarAExpr pos var
-       Just l  -> return $ CallAExpr pos var l
-
-deref =
-  do pos <- getPosition
-     e   <- brackets aExpression
-     return $ DerefAExpr pos e
+     return $ VarAExpr pos var
 
 intConst =
   do pos <- getPosition
