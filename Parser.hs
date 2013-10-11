@@ -29,6 +29,8 @@ languageDef =
                                      , "var"
                                      , "return"
                                      , "function"
+                                     , "fork"
+                                     , "join"
                                      , "region"
                                      , "predicate"
                                      , "("
