@@ -192,8 +192,8 @@ It may be necessary to add an invariant assertion to the loop.
   C & ::= & \psequence{C}{C} \ | \ \pifelse{B}{C}{C} \ | \ \pwhile{B}{C} \ | \ \pdowhile{C}{B} \ | \ \\
   & & \plassign{\mathtt{x}}{E} \ | \ \pderef{\mathtt{x}}{E} \ | \ \passign{E}{E} \ | \ \pfuncall{\mathtt{x}}{\mathtt{f}}{E} \ | \ \preturn{E} \ | \ \pskip \ | \ \\
   & & \pfork{\mathtt{x}}{\mathtt{f}}{E} \ | \ \pjoin{\mathtt{x}}{E} \\
-  E & ::= & \mathtt{x} \ | \ n \ | \ E + E \ | \ E - E \ | \ E * E \ | \ E / E\\
-  B & ::= & \mathtt{true} \ | \ \mathtt{false} \ | \ E = E \ | \ E \ \text{!=} \ E \ | \ E > E \ | \ \\
+  E & ::= & \mathtt{x} \ | \ n \ | \ ( E ) \ | \ E + E \ | \ E - E \ | \ E * E \ | \ E / E\\
+  B & ::= & \mathtt{true} \ | \ \mathtt{false} \ | \ ( B ) \ | \ E = E \ | \ E \ \text{!=} \ E \ | \ E > E \ | \ \\
   & & E \ge E \ | \ E < E \ | \ E \le E \ | \ E \ \mathtt{or} \ B \ | \ B \ \mathtt{and} \ B \ | \ \mathtt{not} \ B
 \end{array}
 \]
