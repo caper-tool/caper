@@ -84,7 +84,7 @@ statement =  ifElseStatement
          <|> whileStatement
          <|> doWhileStatement
          <|> assignStatement
-         <|> derefStatement
+         <|> otherAssignStatement
          <|> varStatement
          <|> returnStatement
          <|> skipStatement
@@ -118,8 +118,8 @@ doWhileStatement =
      semi
      return $ DoWhileStmt pos Nothing stmt cond
 
-derefStatement :: Parser Stmt
-derefStatement =
+assignStatement :: Parser Stmt
+assignStatement =
   do pos   <- getPosition
      expr1 <- brackets aExpression
      reservedOp ":="
@@ -127,21 +127,48 @@ derefStatement =
      semi
      return $ AssignStmt pos expr1 expr2
 
-assignStatement :: Parser Stmt
-assignStatement =
+otherAssignStatement :: Parser Stmt
+otherAssignStatement =
   do pos <- getPosition
      var <- identifier
      reservedOp ":="
-     return $ LocalAssignStmt pos var (VarAExpr pos var)
---     <|>
---     case var of
---       VarAExpr _ _    -> do { reservedOp ":="; expr <- aExpression; semi; return (AssignStmt pos var expr) }
---       CallAExpr _ _ _ -> semi >> return (ExprStmt pos var)
+     forkStatement pos var <|> joinStatement pos var <|> derefStatement pos var <|> callStatement pos var <|> localAssignStatement pos var
 
---list <- optionMaybe $ parens $ sepBy aExpression comma
---     case list of
---       Nothing -> return $ VarAExpr pos var
---       Just l  -> return $ CallAExpr pos var l
+forkStatement :: SourcePos -> String -> Parser Stmt
+forkStatement pos var =
+  do reserved "fork"
+     fun  <- identifier
+     args <- parens $ sepBy aExpression comma
+     semi
+     return $ ForkStmt pos var fun args  
+
+joinStatement :: SourcePos -> String -> Parser Stmt
+joinStatement pos var =
+  do reserved "join"
+     expr <- aExpression
+     semi
+     return $ JoinStmt pos var expr
+
+derefStatement :: SourcePos -> String -> Parser Stmt
+derefStatement pos var =
+  do expr <- brackets aExpression
+     semi
+     return $ DerefStmt pos var expr
+
+callStatement :: SourcePos -> String -> Parser Stmt
+callStatement pos var =
+  do var2 <- identifier
+     args <- optionMaybe $ parens $ sepBy aExpression comma
+     semi
+     case args of
+       Nothing -> return $ LocalAssignStmt pos var $ VarAExpr pos var2
+       Just l  -> return $ CallStmt pos var var2 l
+
+localAssignStatement :: SourcePos -> String -> Parser Stmt
+localAssignStatement pos var =
+  do expr <- aExpression
+     semi
+     return $ LocalAssignStmt pos var expr
 
 varStatement :: Parser Stmt
 varStatement =

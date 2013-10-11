@@ -21,9 +21,9 @@ function read(x) {
 }
 
 function parallelIncr(x) {
-    var t1, t2;
+    var t1, t2, v1, v2;
     t1 := fork incr(x);
     t2 := fork incr(x);
-    join t1;
-    join t2;
+    v1 := join t1;
+    v2 := join t2;
 }
