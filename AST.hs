@@ -10,24 +10,22 @@ data BExpr = ConstBExpr SourcePos Bool
            | RBinaryBExpr SourcePos RBinOp AExpr AExpr
 
 -- Binary Boolean Operators
-data BBinOp = And
-            | Or
+data BBinOp = Or
+            | And
 
 -- Relational Operators
 data RBinOp = Equal
             | NotEqual
             | Greater
-            | Less
             | GreaterOrEqual
+            | Less
             | LessOrEqual
 
 -- Arithmetic Expressions
 data AExpr = VarAExpr SourcePos String
-           | DerefAExpr SourcePos AExpr
            | ConstAExpr SourcePos Integer
            | NegAExpr SourcePos AExpr
            | BinaryAExpr SourcePos ABinOp AExpr AExpr
-           | CallAExpr SourcePos String [AExpr]
 
 -- Arithmetic Operations
 data ABinOp = Add
@@ -38,15 +36,17 @@ data ABinOp = Add
 -- Statements
 data Stmt = SeqStmt SourcePos [Stmt]
           | VarStmt SourcePos [String]
-          | AssignStmt SourcePos AExpr AExpr
-          | ExprStmt SourcePos AExpr
           | IfElseStmt SourcePos BExpr Stmt Stmt
           | WhileStmt SourcePos (Maybe LStmt) BExpr Stmt
           | DoWhileStmt SourcePos (Maybe LStmt) Stmt BExpr
+          | LocalAssignStmt SourcePos String AExpr
+          | DerefStmt SourcePos String AExpr
+          | AssignStmt SourcePos AExpr AExpr
+          | CallStmt SourcePos String String [AExpr]
           | ReturnStmt SourcePos (Maybe AExpr)
           | SkipStmt SourcePos
-          | ForkStmt SourcePos AExpr AExpr
-          | JoinStmt SourcePos AExpr
+          | ForkStmt SourcePos String String [AExpr]
+          | JoinStmt SourcePos String AExpr
           | AssertStmt SourcePos LStmt
 
 data LStmt = MapsTo SourcePos AExpr AExpr
@@ -61,24 +61,22 @@ instance Show BExpr where
   show (RBinaryBExpr _ op e1 e2) = "(" ++ show e1 ++ show op ++ show e2 ++ ")"
 
 instance Show BBinOp where
-  show And = " and "
   show Or  = " or "
+  show And = " and "
 
 instance Show RBinOp where
   show Equal          = " = "
   show NotEqual       = " != "
   show Greater        = " > "
-  show Less           = " < "
   show GreaterOrEqual = " >= "
+  show Less           = " <"
   show LessOrEqual    = " <= "
 
 instance Show AExpr where
   show (VarAExpr _ n)           = n
-  show (DerefAExpr _ e)         = "[" ++ show e ++ "]"
   show (ConstAExpr _ i)         = show i
   show (NegAExpr _ e)           = "-" ++ show e
   show (BinaryAExpr _ op e1 e2) = "(" ++ show e1 ++ show op ++ show e2 ++ ")"
-  show (CallAExpr _ n args)     = n ++ "(" ++ intercalate ", " (map show args) ++ ")"
 
 instance Show ABinOp where
   show Add      = " + "
@@ -89,18 +87,20 @@ instance Show ABinOp where
 instance Show Stmt where
   show (SeqStmt _ seq)               = unwords $ map show seq 
   show (VarStmt _ vars)              = "var " ++ intercalate ", " vars ++ ";"
-  show (AssignStmt _ e1 e2)          = show e1 ++ " := " ++ show e2 ++ ";"
-  show (ExprStmt _ e)                = show e ++ ";"
   show (IfElseStmt _ e s1 s2)        = "if (" ++ show e ++ ") {" ++ show s1 ++ "} else {" ++ show s2 ++ "}"
   show (WhileStmt _ Nothing e s)     = "while (" ++ show e ++ ") {" ++ show s ++ "}"
   show (WhileStmt _ (Just ls) e s)   = "while (" ++ show e ++ ") {" ++ show s ++ "}"
-  show (DoWhileStmt _ Nothing s e)   = "do {" ++ show s ++ "} while (" ++ show e ++ ")"
-  show (DoWhileStmt _ (Just ls) s e) = "do {" ++ show s ++ "} while (" ++ show e ++ ")"
+  show (DoWhileStmt _ Nothing s e)   = "do {" ++ show s ++ "} while (" ++ show e ++ ");"
+  show (DoWhileStmt _ (Just ls) s e) = "do {" ++ show s ++ "} while (" ++ show e ++ ");"
+  show (LocalAssignStmt _ n e)       = n ++ " := " ++ show e ++ ";"
+  show (DerefStmt _ n e)             = n ++ " := [" ++ show e ++ "];"  
+  show (AssignStmt _ e1 e2)          = "[" ++ show e1 ++ "] := " ++ show e2 ++ ";"
+  show (CallStmt _ n1 n2 es)         = n1 ++ " := " ++ n2 ++ "(" ++ intercalate ", " (map show es) ++ ");"
   show (ReturnStmt _ Nothing)        = "return;"
   show (ReturnStmt _ (Just e))       = "return " ++ show e ++ ";"
   show (SkipStmt _)                  = "skip;"
-  show (ForkStmt _ e1 e2)            = "fork " ++ show e1 ++ " := " ++ show e2 ++ ";"
-  show (JoinStmt _ e)                = "join " ++ show e ++ ";"
+  show (ForkStmt _ n1 n2 es)         = n1 ++ " := fork " ++ n2 ++ "(" ++ intercalate ", " (map show es) ++ ");"
+  show (JoinStmt _ n e)              = n ++ " := join " ++ show e ++ ";"
   show (AssertStmt _ ls)             = "assert " ++ show ls ++ ";"
 
 instance Show LStmt where
@@ -108,10 +108,10 @@ instance Show LStmt where
 
 instance Show Declr where
   show (FunctionDeclr _ n Nothing Nothing args s)       =
-    n ++ "(" ++ intercalate ", " args ++ ") {" ++ show s ++ "}"
+    "function " ++ n ++ "(" ++ intercalate ", " args ++ ") {" ++ show s ++ "}"
   show (FunctionDeclr _ n (Just ls) Nothing args s)     =
-    n ++ "(" ++ intercalate ", " args ++ ") requires " ++ show ls ++ " {" ++ show s ++ "}"
+    "function " ++ n ++ "(" ++ intercalate ", " args ++ ") requires " ++ show ls ++ " {" ++ show s ++ "}"
   show (FunctionDeclr _ n Nothing (Just ls) args s)     =
-    n ++ "(" ++ intercalate ", " args ++ ") ensures " ++ show ls ++  " {" ++ show s ++ "}"
+    "function " ++ n ++ "(" ++ intercalate ", " args ++ ") ensures " ++ show ls ++  " {" ++ show s ++ "}"
   show (FunctionDeclr _ n (Just ls1) (Just ls2) args s) =
-    n ++ "(" ++ intercalate ", " args ++ ") requires " ++ show ls1 ++ "; ensures " ++ show ls2 ++ " {" ++ show s ++ "}"
+    "function " ++ n ++ "(" ++ intercalate ", " args ++ ") requires " ++ show ls1 ++ "; ensures " ++ show ls2 ++ " {" ++ show s ++ "}"

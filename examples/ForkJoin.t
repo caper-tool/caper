@@ -1,5 +1,3 @@
-// Ticket lock
-
 function makeCounter() {
     var v;
     v := alloc(1);
