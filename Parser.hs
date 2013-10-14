@@ -274,5 +274,3 @@ parseBExpression str =
   case parse bExpressionParser "" str of
     Left e  -> error $ show e
     Right r -> r
-
-
