@@ -7,6 +7,7 @@ import Control.Monad.Trans
 import Data.List
 import Control.Monad.Error
 import System.IO
+import Text.ParserCombinators.Parsec
 
 data EnvError = NumArgs String Integer Integer
               | NotFunction String
@@ -14,6 +15,7 @@ data EnvError = NumArgs String Integer Integer
               | RedeclarationVar String
               | NotAllocated String Integer
               | NonPositiveAlloc
+              | Parser ParseError
               | Default String
 
 instance Show EnvError where
@@ -23,6 +25,7 @@ instance Show EnvError where
   show (RedeclarationVar name)          = "Variable " ++ name ++ " was previously declared"
   show (NotAllocated operation address) = "Cannot perform " ++ operation ++ " on non allocated heap address " ++ show address
   show (NonPositiveAlloc)               = "Cannot call alloc with a non positive argument"
+  show (Parser message)                 = "Parse error at " ++ show message
 
 instance Error EnvError where
   noMsg = Default "An error has occurred"

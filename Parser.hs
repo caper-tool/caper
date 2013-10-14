@@ -1,14 +1,16 @@
-module Parser(parseFile, parseString, parseAExpression, parseBExpression) where
+module Parser(parseFile, parseString, parseAExpression, parseBExpression, aExpressionParser, statementParser, parseStatement) where
 
 import Debug.Trace
 import System.IO
 import Control.Monad
+import Control.Monad.Error
 import Data.List
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as Token
 import AST
+import Environment
 
 languageDef =
   emptyDef { Token.commentStart    = "/*"
@@ -274,3 +276,12 @@ parseBExpression str =
   case parse bExpressionParser "" str of
     Left e  -> error $ show e
     Right r -> r
+
+statementParser :: Parser Stmt
+statementParser = whiteSpace >> statement
+
+parseStatement :: String -> ThrowsError Stmt
+parseStatement str =
+  case parse statementParser "" str of
+    Left e  -> throwError $ Parser e
+    Right r -> return r

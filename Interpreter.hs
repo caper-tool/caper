@@ -1,5 +1,4 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -7,52 +6,93 @@ module Interpreter where
 
 import AST
 import Parser
+import Environment
 import Control.Monad.State
-import Data.Map (Map)
-import qualified Data.Map as Map
-
-type Context = Map String Integer
-type Heap = Map Integer Integer
-
-type StateM = StateT Heap IO
-
-data StmtValue = NormalValue Integer
-               | ReturnValue Integer
+import Data.IORef
+import System.IO
+import Text.ParserCombinators.Parsec
 
 class Eval a b where
-  eval :: Context -> a -> b
+  eval :: Env -> a -> IOThrowsError b
 
 instance Eval BExpr Bool where
-  eval ctx (ConstBExpr _ b)                      = b
-  eval ctx (NotBExpr _ e)                        = not (eval ctx e)
-  eval ctx (BinaryBExpr _ And e1 e2)             = (eval ctx e1) && (eval ctx e2)
-  eval ctx (BinaryBExpr _ Or e1 e2)              = (eval ctx e1) || (eval ctx e2)
-  eval ctx (RBinaryBExpr _ Equal e1 e2)          = ((eval :: Context -> AExpr -> Integer) ctx e1) == ((eval :: Context -> AExpr -> Integer) ctx e2)
-  eval ctx (RBinaryBExpr _ NotEqual e1 e2)       = ((eval :: Context -> AExpr -> Integer) ctx e1) /= ((eval :: Context -> AExpr -> Integer) ctx e2)
-  eval ctx (RBinaryBExpr _ Greater e1 e2)        = ((eval :: Context -> AExpr -> Integer) ctx e1) > ((eval :: Context -> AExpr -> Integer) ctx e2)
-  eval ctx (RBinaryBExpr _ Less e1 e2)           = ((eval :: Context -> AExpr -> Integer) ctx e1) < ((eval :: Context -> AExpr -> Integer) ctx e2)
-  eval ctx (RBinaryBExpr _ GreaterOrEqual e1 e2) = ((eval :: Context -> AExpr -> Integer) ctx e1) >= ((eval :: Context -> AExpr -> Integer) ctx e2)
-  eval ctx (RBinaryBExpr _ LessOrEqual e1 e2)    = ((eval :: Context -> AExpr -> Integer) ctx e1) <= ((eval :: Context -> AExpr -> Integer) ctx e2)
+  eval env (ConstBExpr _ b)                      = return b
+  eval env (NotBExpr _ e)                        = (eval env e) >>= return . not
+  eval env (BinaryBExpr _ And e1 e2)             = do r1 <- (eval env e1)
+                                                      r2 <- (eval env e2)
+                                                      return $ r1 && r2
+  eval env (BinaryBExpr _ Or e1 e2)              = do r1 <- (eval env e1)
+                                                      r2 <- (eval env e2)
+                                                      return $ r1 || r2
+  eval env (RBinaryBExpr _ Equal e1 e2)          = do r1 <- ((eval :: Env -> AExpr -> IOThrowsError Integer) env e1)
+                                                      r2 <- ((eval :: Env -> AExpr -> IOThrowsError Integer) env e2)
+                                                      return $ r1 == r2
+  eval env (RBinaryBExpr _ NotEqual e1 e2)       = do r1 <- ((eval :: Env -> AExpr -> IOThrowsError Integer) env e1)
+                                                      r2 <- ((eval :: Env -> AExpr -> IOThrowsError Integer) env e2)
+                                                      return $ r1 /= r2
+  eval env (RBinaryBExpr _ Greater e1 e2)        = do r1 <- ((eval :: Env -> AExpr -> IOThrowsError Integer) env e1)
+                                                      r2 <- ((eval :: Env -> AExpr -> IOThrowsError Integer) env e2)
+                                                      return $ r1 > r2
+  eval env (RBinaryBExpr _ GreaterOrEqual e1 e2) = do r1 <- ((eval :: Env -> AExpr -> IOThrowsError Integer) env e1)
+                                                      r2 <- ((eval :: Env -> AExpr -> IOThrowsError Integer) env e2)
+                                                      return $ r1 >= r2
+  eval env (RBinaryBExpr _ Less e1 e2)           = do r1 <- ((eval :: Env -> AExpr -> IOThrowsError Integer) env e1)
+                                                      r2 <- ((eval :: Env -> AExpr -> IOThrowsError Integer) env e2)
+                                                      return $ r1 < r2
+  eval env (RBinaryBExpr _ LessOrEqual e1 e2)    = do r1 <- ((eval :: Env -> AExpr -> IOThrowsError Integer) env e1)
+                                                      r2 <- ((eval :: Env -> AExpr -> IOThrowsError Integer) env e2)
+                                                      return $ r1 >= r2
 
 instance Eval AExpr Integer where
-  eval ctx (VarAExpr _  n)                = 0
-  eval ctx (DerefAExpr _ e)               = eval ctx e
-  eval _ (ConstAExpr _ i)                 = i
-  eval ctx (NegAExpr _ e)                 = - (eval ctx e)
-  eval ctx (BinaryAExpr _ Add e1 e2)      = (eval ctx e1) + (eval ctx e2)
-  eval ctx (BinaryAExpr _ Subtract e1 e2) = (eval ctx e1) - (eval ctx e2)
-  eval ctx (BinaryAExpr _ Multiply e1 e2) = (eval ctx e1) * (eval ctx e2)
-  eval ctx (BinaryAExpr _ Divide e1 e2)   = quot (eval ctx e1) (eval ctx e2)
-  eval ctx (CallAExpr _ n args)           = 0
+  eval env (VarAExpr _  n)                = return 0
+  eval _ (ConstAExpr _ i)                 = return i
+  eval env (NegAExpr _ e)                 = (eval env e) >>= return . negate
+  eval env (BinaryAExpr _ Add e1 e2)      = do r1 <- (eval env e1)
+                                               r2 <- (eval env e2)
+                                               return $ r1 + r2
+  eval env (BinaryAExpr _ Subtract e1 e2) = do r1 <- (eval env e1)
+                                               r2 <- (eval env e2)
+                                               return $ r1 - r2
+  eval env (BinaryAExpr _ Multiply e1 e2) = do r1 <- (eval env e1)
+                                               r2 <- (eval env e2)
+                                               return $ r1 * r2
+  eval env (BinaryAExpr _ Divide e1 e2)   = do r1 <- (eval env e1)
+                                               r2 <- (eval env e2)
+                                               return $ quot r1 r2
 
-instance Eval Stmt StmtValue where
-  eval ctx (SeqStmt _ seq)         = NormalValue 0
-  eval ctx (VarStmt _ vars)        = NormalValue 0
-  eval ctx (AssignStmt _ e1 e2)    = NormalValue 0
-  eval ctx (ExprStmt _ e)          = NormalValue (eval ctx e)
-  eval ctx (IfElseStmt _ b s1 s2)  = if (eval ctx b) then (eval ctx s1) else (eval ctx s2)
-  eval ctx (WhileStmt _ _ e s)     = NormalValue 0
-  eval ctx (DoWhileStmt _ _ s e)   = NormalValue 0
-  eval ctx (ReturnStmt _ Nothing)  = ReturnValue 0
-  eval ctx (ReturnStmt _ (Just e)) = ReturnValue (eval ctx e)
-  eval ctx (SkipStmt _)            = NormalValue 0
+instance Eval Stmt () where
+  eval env (SeqStmt _ seq)         = return ()
+--  eval env (VarStmt _ vars)        = mapM (varStore env) x >> eval env xs
+  eval env (AssignStmt _ e1 e2)    = return ()
+  eval env (IfElseStmt _ b s1 s2)  = do c <- (eval env b)
+                                        if c
+                                          then (eval env s1) >>= return
+                                          else (eval env s2) >>= return
+  eval env (WhileStmt _ _ e s)     = return ()
+  eval env (DoWhileStmt _ _ s e)   = return ()
+  eval env (ReturnStmt _ Nothing)  = return ()
+  eval env (ReturnStmt _ (Just e)) = return ()
+  eval env (SkipStmt _)            = return ()
+
+--eval :: Env -> Integer -> IOThrowsError Integer
+--eval env var = allocHeap env var
+
+evalAndPrint :: Env -> String -> IO ()
+evalAndPrint env expr =  evalString env expr >>= putStrLn
+
+evalString :: Env -> String -> IO String
+evalString env expr = runIOThrows $ liftM show $ (liftThrows $ parseStatement expr) >>= (eval :: Env -> Stmt -> IOThrowsError ()) env
+
+until_ :: Monad m => (a -> Bool) -> m a -> (a -> m ()) -> m ()
+until_ pred prompt action = do 
+  result <- prompt
+  if pred result then return () else action result >> until_ pred prompt action
+
+flushStr :: String -> IO ()
+flushStr str = putStr str >> hFlush stdout
+
+readPrompt :: String -> IO String
+readPrompt prompt = flushStr prompt >> getLine
+
+runRepl :: IO ()
+runRepl = emptyEnv >>= until_ (== "quit") (readPrompt "> ") . evalAndPrint
