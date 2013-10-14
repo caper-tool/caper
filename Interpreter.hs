@@ -61,9 +61,14 @@ instance Eval AExpr Integer where
                                                return $ quot r1 r2
 
 instance Eval Stmt () where
-  eval env (SeqStmt _ seq)         = return ()
---  eval env (VarStmt _ vars)        = mapM (varStore env) x >> eval env xs
-  eval env (AssignStmt _ e1 e2)    = return ()
+  eval env (SeqStmt _ seq)         = mapM ((eval :: Env -> Stmt -> IOThrowsError ()) env) seq >> return ()
+  eval env (VarStmt _ vars)        = mapM (varStore env) vars >> return ()
+--  eval env (LocalAssignStmt _ n e) = n ++ " := " ++ show e ++ ";"
+--  eval env (DerefStmt _ n e)       = n ++ " := [" ++ show e ++ "];"  
+  eval env (AssignStmt _ e1 e2)    = do r1 <- (eval env e1)
+                                        r2 <- (eval env e2)
+                                        writeHeap env r1 r2
+                                        return ()
   eval env (IfElseStmt _ b s1 s2)  = do c <- (eval env b)
                                         if c
                                           then (eval env s1) >>= return
@@ -94,5 +99,5 @@ flushStr str = putStr str >> hFlush stdout
 readPrompt :: String -> IO String
 readPrompt prompt = flushStr prompt >> getLine
 
-runRepl :: IO ()
-runRepl = emptyEnv >>= until_ (== "quit") (readPrompt "> ") . evalAndPrint
+runInterpreter :: IO ()
+runInterpreter = emptyEnv >>= until_ (== "quit") (readPrompt "> ") . evalAndPrint
