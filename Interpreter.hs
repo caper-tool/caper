@@ -46,7 +46,7 @@ instance Eval BExpr Bool where
                                                       return $ r1 < r2
   eval env (RBinaryBExpr _ LessOrEqual e1 e2)    = do r1 <- ((eval :: Env -> AExpr -> IOThrowsError Integer) env e1)
                                                       r2 <- ((eval :: Env -> AExpr -> IOThrowsError Integer) env e2)
-                                                      return $ r1 >= r2
+                                                      return $ r1 <= r2
 
 instance Eval AExpr Integer where
   eval env (VarAExpr _  n)                = readStore env n
@@ -100,6 +100,10 @@ instance Eval Stmt (Maybe Integer) where
                                                r <- allocHeap env arg
                                                writeStore env n r
                                                return Nothing
+  eval env (CallStmt _ n "print" [m])     = do arg <- (eval :: Env -> AExpr -> IOThrowsError Integer) env m
+                                               liftIO $ print arg
+                                               writeStore env n 0
+                                               return Nothing
   eval env (CallStmt _ n "CAS" [m, p, q]) = do a <- (eval :: Env -> AExpr -> IOThrowsError Integer) env m
                                                b <- (eval :: Env -> AExpr -> IOThrowsError Integer) env p
                                                c <- (eval :: Env -> AExpr -> IOThrowsError Integer) env q
@@ -108,18 +112,18 @@ instance Eval Stmt (Maybe Integer) where
                                                return Nothing
   eval env (CallStmt _ n1 n2 es)          = do f@(FunctionDeclr _ _ _ _ a s) <- getDeclr env n2 (toInteger (genericLength es))
                                                args <- mapM ((eval :: Env -> AExpr -> IOThrowsError Integer) env) es
-                                               liftIO $ print args
                                                nEnv <- liftIO $ newEnv env (zip a args)
                                                r <- (eval :: Env -> Stmt -> IOThrowsError (Maybe Integer)) nEnv s
                                                writeStore env n1 (case r of
                                                                     Just v  -> v
                                                                     Nothing -> 0)
+                                               liftIO $ printEnv env
                                                return Nothing
   eval env (ReturnStmt _ Nothing)            = return $ Just 0
   eval env (ReturnStmt _ (Just e))           = (eval :: Env -> AExpr -> IOThrowsError Integer) env e >>= return . Just
   eval env (SkipStmt _)                      = return Nothing
---  show (ForkStmt _ n1 n2 es)         = n1 ++ " := fork " ++ n2 ++ "(" ++ intercalate ", " (map show es) ++ ");"
---  show (JoinStmt _ n e)              = n ++ " := join " ++ show e ++ ";"
+  eval env (ForkStmt _ n1 n2 es)             = return Nothing
+  eval env (JoinStmt _ n e)                  = return Nothing
 
 evalAndPrint :: Env -> String -> IO ()
 evalAndPrint env expr =  evalString env expr >>= putStrLn

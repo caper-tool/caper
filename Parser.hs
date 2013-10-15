@@ -161,12 +161,14 @@ derefStatement pos var =
 
 callStatement :: SourcePos -> String -> Parser Stmt
 callStatement pos var =
-  do var2 <- identifier
-     args <- optionMaybe $ parens $ sepBy aExpression comma
-     semi
-     case args of
-       Nothing -> return $ LocalAssignStmt pos var $ VarAExpr pos var2
-       Just l  -> return $ CallStmt pos var var2 l
+  do expr <- aExpression
+     case expr of
+       VarAExpr _ n -> do args <- optionMaybe $ parens $ sepBy aExpression comma
+                          semi
+                          case args of
+                            Nothing -> return $ LocalAssignStmt pos var $ VarAExpr pos n
+                            Just l  -> return $ CallStmt pos var n l
+       otherwise    -> semi >> return (LocalAssignStmt pos var expr)
 
 localAssignStatement :: SourcePos -> String -> Parser Stmt
 localAssignStatement pos var =

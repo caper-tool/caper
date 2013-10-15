@@ -69,6 +69,15 @@ newEnv envRef newStore =
      new <- newIORef (heapEnv env, newStore, declrEnv env)
      return new
 
+printEnv :: Env -> IO ()
+printEnv envRef =
+  do env <- liftIO $ readIORef envRef
+     liftIO $ print (storeEnv env)
+     heap  <- liftIO $ takeMVar $ heapEnv env
+     liftIO $ print heap
+     liftIO $ putMVar (heapEnv env) heap
+     return ()
+
 readHeap :: Env -> Integer -> IOThrowsError Integer
 readHeap envRef n =
   do env   <- liftIO $ readIORef envRef
@@ -101,7 +110,6 @@ allocHeap :: Env -> Integer -> IOThrowsError Integer
 allocHeap envRef n =
   do env   <- liftIO $ readIORef envRef
      heap  <- liftIO $ takeMVar $ heapEnv env
-     liftIO $ print heap
      if n > 0
        then (liftIO $ putMVar (heapEnv env) $ heap ++ (map (\a -> (a, 0)) (genericTake n [(newAddress heap)..]))) >> return (newAddress heap)
        else (liftIO $ putMVar (heapEnv env) heap) >> (throwError NonPositiveAlloc)
@@ -117,7 +125,6 @@ readStore envRef var =
 writeStore :: Env -> String -> Integer -> IOThrowsError ()
 writeStore envRef var n =
   do env <- liftIO $ readIORef envRef
-     liftIO $ print (storeEnv env)
      case lookup var (storeEnv env) of
        Just v  -> liftIO $ writeIORef envRef (heapEnv env, ((var, n) : filter (\a -> (fst a) /= var) (storeEnv env)), declrEnv env) >> return ()
        Nothing -> throwError $ UnboundVar var
@@ -125,7 +132,6 @@ writeStore envRef var n =
 varStore :: Env -> String -> IOThrowsError ()
 varStore envRef var =
   do env <- liftIO $ readIORef envRef
-     liftIO $ print (storeEnv env)
      case lookup var (storeEnv env) of
        Just v  -> throwError $ RedeclarationVar var
        Nothing -> liftIO $ writeIORef envRef (heapEnv env, (var, 0):(storeEnv env), declrEnv env)
