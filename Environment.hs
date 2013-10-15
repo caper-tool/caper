@@ -2,15 +2,14 @@ module Environment where
 
 import AST
 import Data.IORef
+import Data.List
 import Control.Concurrent
 import Control.Monad.Trans
-import Data.List
 import Control.Monad.Error
 import System.IO
 import Text.ParserCombinators.Parsec
 
-data EnvError = NumArgs String Integer Integer
-              | NotFunction String
+data EnvError = NotFunction String
               | UnboundVar String
               | RedeclarationVar String
               | NotAllocated String Integer
@@ -19,7 +18,6 @@ data EnvError = NumArgs String Integer Integer
               | Default String
 
 instance Show EnvError where
-  show (NumArgs name expected found)    = "Expected " ++ show expected ++ " arguments, but found " ++ show found ++ ", in function " ++ name
   show (NotFunction name)               = "Unknown function " ++ name
   show (UnboundVar name)                = "Unknown variable " ++ name
   show (RedeclarationVar name)          = "Variable " ++ name ++ " was previously declared"
@@ -61,9 +59,15 @@ declrEnv (_, _, d) = d
 
 emptyEnv :: IO Env
 emptyEnv =
-  do heap <- newMVar [(1, 2)]
-     env  <- newIORef (heap, [("a",1)], [])
+  do heap <- newMVar []
+     env  <- newIORef (heap, [], [])
      return env
+
+newEnv :: Env -> Store -> IO Env
+newEnv envRef newStore =
+  do env <- liftIO $ readIORef envRef
+     new <- newIORef (heapEnv env, newStore, declrEnv env)
+     return new
 
 readHeap :: Env -> Integer -> IOThrowsError Integer
 readHeap envRef n =
@@ -124,4 +128,18 @@ varStore envRef var =
      liftIO $ print (storeEnv env)
      case lookup var (storeEnv env) of
        Just v  -> throwError $ RedeclarationVar var
-       Nothing -> liftIO $ writeIORef envRef (heapEnv env, (var, 0):(storeEnv env), declrEnv env) >> return ()
+       Nothing -> liftIO $ writeIORef envRef (heapEnv env, (var, 0):(storeEnv env), declrEnv env)
+
+getDeclr :: Env -> String -> Integer -> IOThrowsError Declr
+getDeclr envRef name nargs =
+  do env <- liftIO $ readIORef envRef
+     let f = filter (\a -> isFunction a name nargs) (declrEnv env)
+     when (length f == 0) (throwError $ NotFunction name)
+     return (head f)
+  where isFunction (FunctionDeclr _ fname _ _ args _) n m = fname == n && toInteger (genericLength args) == m
+
+newDeclr :: Env -> [Declr] -> IO ()
+newDeclr envRef declr =
+  liftIO $ do env <- readIORef envRef
+              print (declrEnv env)
+              writeIORef envRef (heapEnv env, storeEnv env, declr ++ (declrEnv env))

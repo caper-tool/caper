@@ -76,6 +76,7 @@ function =
      stmt <- braces sequenceOfStmt
      return $ FunctionDeclr pos var Nothing Nothing args stmt
 
+sequenceOfStmt :: Parser Stmt
 sequenceOfStmt =
   do pos  <- getPosition
      list <- (sepEndBy statement whiteSpace)
@@ -97,10 +98,11 @@ ifElseStatement =
      reserved "if"
      cond  <- parens bExpression
      stmt1 <- braces sequenceOfStmt
-     reserved "else"
-     stmt2 <- braces sequenceOfStmt
-     semi
-     return $ IfElseStmt pos cond stmt1 stmt2
+     e     <- optionMaybe $ reserved "else"
+     case e of
+       Nothing -> return $ IfElseStmt pos cond stmt1 (SkipStmt pos)
+       Just l -> do stmt2 <- braces sequenceOfStmt
+                    return $ IfElseStmt pos cond stmt1 stmt2
 
 whileStatement :: Parser Stmt
 whileStatement =
@@ -278,7 +280,7 @@ parseBExpression str =
     Right r -> r
 
 statementParser :: Parser Stmt
-statementParser = whiteSpace >> statement
+statementParser = whiteSpace >> sequenceOfStmt
 
 parseStatement :: String -> ThrowsError Stmt
 parseStatement str =
