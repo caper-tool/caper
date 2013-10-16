@@ -17,6 +17,8 @@
 \newcommand{\passign}[2]{[#1] := #2}
 \newcommand{\pderef}[2]{#1 := [#2]}
 \newcommand{\pfuncall}[3]{#1 := #2(#3)}
+\newcommand{\pcas}[4]{#1 := \mathtt{CAS}(#2, #3, #4)}
+\newcommand{\palloc}[2]{#1 := \mathtt{alloc}(#2)}
 \newcommand{\preturn}[1]{\mathtt{return} \ #1}
 \newcommand{\pskip}[0]{\mathtt{skip}}
 \newcommand{\pfork}[2]{\mathtt{fork} \ #1(#2)} 
@@ -189,8 +191,8 @@ It may be necessary to add an invariant assertion to the loop.
 \begin{array}{rcl}
   F & ::= & \pfunction{\mathtt{f}}{\mathtt{x}}{C} \\
   C & ::= & \psequence{C}{C} \ | \ \pifelse{B}{C}{C} \ | \ \pwhile{B}{C} \ | \ \pdowhile{C}{B} \ | \ \\
-  & & \plassign{\mathtt{x}}{E} \ | \ \pderef{\mathtt{x}}{E} \ | \ \passign{E}{E} \ | \ \pfuncall{\mathtt{x}}{\mathtt{f}}{E} \ | \ \preturn{E} \ | \ \pskip \ | \ \\
-  & & \pfork{\mathtt{f}}{E} \\
+  & & \plassign{\mathtt{x}}{E} \ | \ \pderef{\mathtt{x}}{E} \ | \ \passign{E}{E} \ | \ \palloc{\mathtt{x}}{E} \ | \ \\
+  & & \pcas{\mathtt{x}}{E}{E}{E} \ | \ \pfuncall{\mathtt{x}}{\mathtt{f}}{E} \ | \ \preturn{E} \ | \ \pskip \ | \ \pfork{\mathtt{f}}{E} \\
   E & ::= & \mathtt{x} \ | \ n \ | \ ( E ) \ | \ E + E \ | \ E - E \ | \ E * E \ | \ E / E\\
   B & ::= & \mathtt{true} \ | \ \mathtt{false} \ | \ ( B ) \ | \ E = E \ | \ E \ \text{!=} \ E \ | \ E > E \ | \ \\
   & & E \ge E \ | \ E < E \ | \ E \le E \ | \ E \ \mathtt{or} \ B \ | \ B \ \mathtt{and} \ B \ | \ \mathtt{not} \ B
