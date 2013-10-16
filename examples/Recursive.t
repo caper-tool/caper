@@ -1,7 +1,6 @@
 // Recursive examples
 
 function factorial(n) {
-    var m;
     if (n = 0) {
         return 1;
     } else {
@@ -11,7 +10,6 @@ function factorial(n) {
 }
 
 function fibonacci(n) {
-    var m, p;
     if (n <= 1) {
         return 1;
     } else {

@@ -3,6 +3,7 @@ module Environment where
 import AST
 import Data.IORef
 import Data.List
+import Data.Maybe
 import Control.Concurrent
 import Control.Monad.Trans
 import Control.Monad.Error
@@ -11,18 +12,18 @@ import Text.ParserCombinators.Parsec
 
 data EnvError = NotFunction String
               | UnboundVar String
-              | RedeclarationVar String
               | NotAllocated String Integer
               | NonPositiveAlloc
+              | NoThread Integer
               | Parser ParseError
               | Default String
 
 instance Show EnvError where
   show (NotFunction name)               = "Unknown function " ++ name
   show (UnboundVar name)                = "Unknown variable " ++ name
-  show (RedeclarationVar name)          = "Variable " ++ name ++ " was previously declared"
   show (NotAllocated operation address) = "Cannot perform " ++ operation ++ " on non allocated heap address " ++ show address
   show (NonPositiveAlloc)               = "Cannot call alloc with a non positive argument"
+  show (NoThread tid)                   = "Cannot perform join on non existing thread " ++ show tid
   show (Parser message)                 = "Parse error at " ++ show message
 
 instance Error EnvError where
@@ -44,6 +45,11 @@ liftThrows (Right val) = return val
 runIOThrows :: IOThrowsError String -> IO String
 runIOThrows action = runErrorT (trapError action) >>= return . extractValue
 
+trapErrorFork action = catchError action (\a -> return ())
+
+runIOThrowsFork :: IOThrowsError () -> IO ()
+runIOThrowsFork action = runErrorT (trapErrorFork action) >>= return . extractValue
+
 type Heap = MVar [(Integer, Integer)]
 type Store = [(String, Integer)]
 type Env = IORef (Heap, Store, [Declr])
@@ -59,8 +65,8 @@ declrEnv (_, _, d) = d
 
 emptyEnv :: IO Env
 emptyEnv =
-  do heap <- newMVar []
-     env  <- newIORef (heap, [], [])
+  do heap      <- newMVar []
+     env       <- newIORef (heap, [], [])
      return env
 
 newEnv :: Env -> Store -> IO Env
@@ -124,17 +130,9 @@ readStore envRef var =
 
 writeStore :: Env -> String -> Integer -> IOThrowsError ()
 writeStore envRef var n =
-  do env <- liftIO $ readIORef envRef
-     case lookup var (storeEnv env) of
-       Just v  -> liftIO $ writeIORef envRef (heapEnv env, ((var, n) : filter (\a -> (fst a) /= var) (storeEnv env)), declrEnv env) >> return ()
-       Nothing -> throwError $ UnboundVar var
-
-varStore :: Env -> String -> IOThrowsError ()
-varStore envRef var =
-  do env <- liftIO $ readIORef envRef
-     case lookup var (storeEnv env) of
-       Just v  -> throwError $ RedeclarationVar var
-       Nothing -> liftIO $ writeIORef envRef (heapEnv env, (var, 0):(storeEnv env), declrEnv env)
+  do env    <- liftIO $ readIORef envRef
+     when (isNothing $ lookup var (storeEnv env)) (liftIO $ writeIORef envRef (heapEnv env, (var, 0):(storeEnv env), declrEnv env))
+     liftIO $ writeIORef envRef (heapEnv env, ((var, n) : filter (\a -> (fst a) /= var) (storeEnv env)), declrEnv env) >> return ()
 
 getDeclr :: Env -> String -> Integer -> IOThrowsError Declr
 getDeclr envRef name nargs =

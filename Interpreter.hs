@@ -13,7 +13,9 @@ import Data.IORef
 import Data.List
 import Data.Typeable
 import Control.Monad.State
+import Control.Monad.Error
 import Control.Exception;
+import Control.Concurrent
 import System.IO
 import Text.ParserCombinators.Parsec
 
@@ -66,7 +68,6 @@ instance Eval AExpr Integer where
                                                return $ quot r1 r2
 
 instance Eval Stmt (Maybe Integer) where
-  eval env (VarStmt _ vars)               = mapM (varStore env) vars >> return Nothing
   eval env (SeqStmt _ [])                 = return Nothing
   eval env (SeqStmt p (x:xs))             = do r <- (eval :: Env -> Stmt -> IOThrowsError (Maybe Integer)) env x
                                                case r of
@@ -119,14 +120,17 @@ instance Eval Stmt (Maybe Integer) where
                                                                     Nothing -> 0)
                                                liftIO $ printEnv env
                                                return Nothing
-  eval env (ReturnStmt _ Nothing)            = return $ Just 0
-  eval env (ReturnStmt _ (Just e))           = (eval :: Env -> AExpr -> IOThrowsError Integer) env e >>= return . Just
-  eval env (SkipStmt _)                      = return Nothing
-  eval env (ForkStmt _ n1 n2 es)             = return Nothing
-  eval env (JoinStmt _ n e)                  = return Nothing
+  eval env (ReturnStmt _ Nothing)         = return $ Just 0
+  eval env (ReturnStmt _ (Just e))        = (eval :: Env -> AExpr -> IOThrowsError Integer) env e >>= return . Just
+  eval env (SkipStmt _)                   = return Nothing
+  eval env (ForkStmt _ n es)              = do f@(FunctionDeclr _ _ _ _ a s) <- getDeclr env n (toInteger (genericLength es))
+                                               args <- mapM ((eval :: Env -> AExpr -> IOThrowsError Integer) env) es
+                                               nEnv <- liftIO $ newEnv env (zip a args)
+                                               liftIO $ forkIO $ runIOThrowsFork $ ((eval :: Env -> Stmt -> IOThrowsError (Maybe Integer)) nEnv s) >> return ()
+                                               return Nothing
 
 evalAndPrint :: Env -> String -> IO ()
-evalAndPrint env expr =  evalString env expr >>= putStrLn
+evalAndPrint env expr = evalString env expr >>= putStrLn
 
 evalString :: Env -> String -> IO String
 evalString env expr = runIOThrows $ liftM show $ (liftThrows $ parseStatement expr) >>= (eval :: Env -> Stmt -> IOThrowsError (Maybe Integer)) env
@@ -144,6 +148,6 @@ readPrompt prompt = flushStr prompt >> getLine
 
 runInterpreter :: IO ()
 runInterpreter = do env <- emptyEnv
-                    declr <- liftIO $ parseFile "examples/CASCounter.t"
+                    declr <- liftIO $ parseFile "examples/ForkJoin.t"
                     liftIO $ newDeclr env declr
                     (until_ (== "quit") (readPrompt "> ") . evalAndPrint) env

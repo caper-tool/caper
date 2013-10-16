@@ -15,7 +15,6 @@ region Lock(r,x) {
 function makeLock()
   requires emp;
   ensures Lock(r,ret,0) * r@LOCK[1]; {
-    var v;
     v := alloc(1);
     [v] := 0;
     return v;
@@ -24,7 +23,6 @@ function makeLock()
 function lock(x)
   requires Lock(r,x,_) * r@LOCK[p];
   ensures Lock(r,x,1) * r@(LOCK[p] * UNLOCK); {
-    var b;
     do {
         b := CAS(x, 0, 1);
     } while (b = 0);

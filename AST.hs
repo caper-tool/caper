@@ -35,7 +35,6 @@ data ABinOp = Add
 
 -- Statements
 data Stmt = SeqStmt SourcePos [Stmt]
-          | VarStmt SourcePos [String]
           | IfElseStmt SourcePos BExpr Stmt Stmt
           | WhileStmt SourcePos (Maybe LStmt) BExpr Stmt
           | DoWhileStmt SourcePos (Maybe LStmt) Stmt BExpr
@@ -45,8 +44,7 @@ data Stmt = SeqStmt SourcePos [Stmt]
           | CallStmt SourcePos String String [AExpr]
           | ReturnStmt SourcePos (Maybe AExpr)
           | SkipStmt SourcePos
-          | ForkStmt SourcePos String String [AExpr]
-          | JoinStmt SourcePos String AExpr
+          | ForkStmt SourcePos String [AExpr]
           | AssertStmt SourcePos LStmt
 
 data LStmt = MapsTo SourcePos AExpr AExpr
@@ -86,7 +84,6 @@ instance Show ABinOp where
 
 instance Show Stmt where
   show (SeqStmt _ seq)               = unwords $ map show seq 
-  show (VarStmt _ vars)              = "var " ++ intercalate ", " vars ++ ";"
   show (IfElseStmt _ e s1 s2)        = "if (" ++ show e ++ ") {" ++ show s1 ++ "} else {" ++ show s2 ++ "}"
   show (WhileStmt _ Nothing e s)     = "while (" ++ show e ++ ") {" ++ show s ++ "}"
   show (WhileStmt _ (Just ls) e s)   = "while (" ++ show e ++ ") {" ++ show s ++ "}"
@@ -99,8 +96,7 @@ instance Show Stmt where
   show (ReturnStmt _ Nothing)        = "return;"
   show (ReturnStmt _ (Just e))       = "return " ++ show e ++ ";"
   show (SkipStmt _)                  = "skip;"
-  show (ForkStmt _ n1 n2 es)         = n1 ++ " := fork " ++ n2 ++ "(" ++ intercalate ", " (map show es) ++ ");"
-  show (JoinStmt _ n e)              = n ++ " := join " ++ show e ++ ";"
+  show (ForkStmt _ n es)             = "fork " ++ n ++ "(" ++ intercalate ", " (map show es) ++ ");"
   show (AssertStmt _ ls)             = "assert " ++ show ls ++ ";"
 
 instance Show LStmt where

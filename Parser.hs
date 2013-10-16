@@ -28,11 +28,9 @@ languageDef =
                                      , "not"
                                      , "and"
                                      , "or"
-                                     , "var"
                                      , "return"
                                      , "function"
                                      , "fork"
-                                     , "join"
                                      , "region"
                                      , "predicate"
                                      , "("
@@ -86,9 +84,9 @@ statement :: Parser Stmt
 statement =  ifElseStatement
          <|> whileStatement
          <|> doWhileStatement
+         <|> forkStatement
          <|> assignStatement
          <|> otherAssignStatement
-         <|> varStatement
          <|> returnStatement
          <|> skipStatement
 
@@ -122,6 +120,15 @@ doWhileStatement =
      semi
      return $ DoWhileStmt pos Nothing stmt cond
 
+forkStatement :: Parser Stmt
+forkStatement =
+  do pos  <- getPosition
+     reserved "fork"
+     fun  <- identifier
+     args <- parens $ sepBy aExpression comma
+     semi
+     return $ ForkStmt pos fun args  
+
 assignStatement :: Parser Stmt
 assignStatement =
   do pos   <- getPosition
@@ -136,22 +143,7 @@ otherAssignStatement =
   do pos <- getPosition
      var <- identifier
      reservedOp ":="
-     forkStatement pos var <|> joinStatement pos var <|> derefStatement pos var <|> callStatement pos var <|> localAssignStatement pos var
-
-forkStatement :: SourcePos -> String -> Parser Stmt
-forkStatement pos var =
-  do reserved "fork"
-     fun  <- identifier
-     args <- parens $ sepBy aExpression comma
-     semi
-     return $ ForkStmt pos var fun args  
-
-joinStatement :: SourcePos -> String -> Parser Stmt
-joinStatement pos var =
-  do reserved "join"
-     expr <- aExpression
-     semi
-     return $ JoinStmt pos var expr
+     derefStatement pos var <|> callStatement pos var <|> localAssignStatement pos var
 
 derefStatement :: SourcePos -> String -> Parser Stmt
 derefStatement pos var =
@@ -175,14 +167,6 @@ localAssignStatement pos var =
   do expr <- aExpression
      semi
      return $ LocalAssignStmt pos var expr
-
-varStatement :: Parser Stmt
-varStatement =
-  do pos <- getPosition
-     reserved "var"
-     list <- (sepBy1 identifier comma)
-     semi
-     return $ VarStmt pos list
 
 returnStatement :: Parser Stmt
 returnStatement =

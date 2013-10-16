@@ -8,7 +8,7 @@
 
 % Programming language
 
-\newcommand{\pfunction}[4]{\mathtt{function} \ #1(#2) \ \{ \mathtt{var} \ #3 ; \ #4 \}}
+\newcommand{\pfunction}[3]{\mathtt{function} \ #1(#2) \ #3}
 \newcommand{\psequence}[2]{#1 ; #2}
 \newcommand{\pifelse}[3]{\mathtt{if} \ (#1) \ #2 \ \mathtt{else} \ #3}
 \newcommand{\pwhile}[2]{\mathtt{while} \ (#1) \ #2}
@@ -19,8 +19,7 @@
 \newcommand{\pfuncall}[3]{#1 := #2(#3)}
 \newcommand{\preturn}[1]{\mathtt{return} \ #1}
 \newcommand{\pskip}[0]{\mathtt{skip}}
-\newcommand{\pfork}[3]{#1 := \mathtt{fork} \ #2(#3)} 
-\newcommand{\pjoin}[2]{#1 := \mathtt{join} \ #2}
+\newcommand{\pfork}[2]{\mathtt{fork} \ #1(#2)} 
 
 \newtheorem*{extension}{Extension}
 
@@ -188,10 +187,10 @@ It may be necessary to add an invariant assertion to the loop.
 
 \[
 \begin{array}{rcl}
-  F & ::= & \pfunction{\mathtt{f}}{\mathtt{x}}{\mathtt{x}}{C} \\
+  F & ::= & \pfunction{\mathtt{f}}{\mathtt{x}}{C} \\
   C & ::= & \psequence{C}{C} \ | \ \pifelse{B}{C}{C} \ | \ \pwhile{B}{C} \ | \ \pdowhile{C}{B} \ | \ \\
   & & \plassign{\mathtt{x}}{E} \ | \ \pderef{\mathtt{x}}{E} \ | \ \passign{E}{E} \ | \ \pfuncall{\mathtt{x}}{\mathtt{f}}{E} \ | \ \preturn{E} \ | \ \pskip \ | \ \\
-  & & \pfork{\mathtt{x}}{\mathtt{f}}{E} \ | \ \pjoin{\mathtt{x}}{E} \\
+  & & \pfork{\mathtt{f}}{E} \\
   E & ::= & \mathtt{x} \ | \ n \ | \ ( E ) \ | \ E + E \ | \ E - E \ | \ E * E \ | \ E / E\\
   B & ::= & \mathtt{true} \ | \ \mathtt{false} \ | \ ( B ) \ | \ E = E \ | \ E \ \text{!=} \ E \ | \ E > E \ | \ \\
   & & E \ge E \ | \ E < E \ | \ E \le E \ | \ E \ \mathtt{or} \ B \ | \ B \ \mathtt{and} \ B \ | \ \mathtt{not} \ B

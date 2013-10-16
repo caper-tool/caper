@@ -1,14 +1,12 @@
 // Blocking counter
 
 function makeCounter() {
-    var v;
     v := alloc(1);
     [v] := 0;
     return v;
 }
 
 function incr(x) {
-    var v, b;
     do {
         v := [x];
         if (v = -1) {
@@ -22,7 +20,6 @@ function incr(x) {
 }
 
 function read(x) {
-    var v;
     do {
         v := [x];
     } while (v = -1);
