@@ -118,7 +118,6 @@ instance Eval Stmt (Maybe Integer) where
                                                writeStore env n1 (case r of
                                                                     Just v  -> v
                                                                     Nothing -> 0)
-                                               liftIO $ printEnv env
                                                return Nothing
   eval env (ReturnStmt _ Nothing)         = return $ Just 0
   eval env (ReturnStmt _ (Just e))        = (eval :: Env -> AExpr -> IOThrowsError Integer) env e >>= return . Just
@@ -148,6 +147,6 @@ readPrompt prompt = flushStr prompt >> getLine
 
 runInterpreter :: IO ()
 runInterpreter = do env <- emptyEnv
-                    declr <- liftIO $ parseFile "examples/ForkJoin.t"
+                    declr <- liftIO $ parseFile "examples/Paper.t"
                     liftIO $ newDeclr env declr
                     (until_ (== "quit") (readPrompt "> ") . evalAndPrint) env

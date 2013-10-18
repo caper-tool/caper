@@ -88,7 +88,6 @@ readHeap :: Env -> Integer -> IOThrowsError Integer
 readHeap envRef n =
   do env   <- liftIO $ readIORef envRef
      heap  <- liftIO $ takeMVar $ heapEnv env
-     liftIO $ print heap
      case lookup n heap of
        Just v  -> liftIO $ putMVar (heapEnv env) heap >> return v
        Nothing -> (liftIO $ putMVar (heapEnv env) heap) >> throwError (NotAllocated "read" n)
@@ -97,7 +96,6 @@ writeHeap :: Env -> Integer -> Integer -> IOThrowsError ()
 writeHeap envRef n m =
   do env   <- liftIO $ readIORef envRef
      heap  <- liftIO $ takeMVar $ heapEnv env
-     liftIO $ print heap
      case lookup n heap of
        Just v  -> liftIO $ putMVar (heapEnv env) ((n, m) : filter (\a -> (fst a) /= n) heap) >> return ()
        Nothing -> (liftIO $ putMVar (heapEnv env) heap) >> throwError (NotAllocated "wrote" n)
@@ -145,5 +143,4 @@ getDeclr envRef name nargs =
 newDeclr :: Env -> [Declr] -> IO ()
 newDeclr envRef declr =
   liftIO $ do env <- readIORef envRef
-              print (declrEnv env)
               writeIORef envRef (heapEnv env, storeEnv env, declr ++ (declrEnv env))
