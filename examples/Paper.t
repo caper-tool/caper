@@ -10,12 +10,10 @@ function lock(x) {
     do {
         b := CAS(x, 0, 1);
     } while (b = 0);
-    return 1;
 }
 
 function unlock(x) {
     [x] := 0;
-    return 0;
 }
 
 // DCAS
