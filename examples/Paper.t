@@ -18,6 +18,11 @@ function unlock(x) {
 
 // DCAS
 
+function makeMCL() {
+    l := makeLock();
+    return l;
+}
+
 function read(l, x) {
     tmp := lock(l);
     v := [x];
@@ -72,7 +77,7 @@ function makeNode(left, right, value) {
 }
 
 function makeDeque() {
-    lock := makeLock();
+    lock := makeMCL();
     dummy := makeNode(0, 0, 0);
     [dummy + 0] := dummy;
     [dummy + 1] := dummy;
