@@ -93,7 +93,11 @@ function pushRight(deque, value) {
     lock := [deque + 3];
     dummy := [deque + 2];
     node := makeNode(0, dummy, value);
-    while (true) {
+//    v := 1;
+//    while (v < 1000 * (20 - value)) {
+//    	v := v + 1;
+//	}
+	while (true) {
         rightHat := read(lock, deque + 1);
         rightHatR := read(lock, rightHat + 1);
         if (rightHatR = rightHat) {
@@ -171,8 +175,14 @@ function popLeft(deque) {
     while (true) {
         leftHat := read(lock, deque + 0);
         rightHat := read(lock, deque + 1);
+            v := 1;
+    while (v < 100000) {
+    	v := v + 1;
+	}
+
         leftHatL := read(lock, leftHat + 0);
         if (leftHatL = leftHat) {
+        tmp := print(9999);
             return 0; // empty
         }
         if (leftHat = rightHat) {
@@ -214,9 +224,19 @@ function printDeque(deque) {
 
 function main() {
     deque := makeDeque();
-    tmp := pushRight(deque, 9);
-    tmp := pushRight(deque, 9);
-    tmp := pushRight(deque, 9);
-    tmp := popLeft(deque);
+    tmp := pushLeft(deque, 30);
+    tmp := pushLeft(deque, 40);
+    fork popLeft(deque);
+    tmp := pushLeft(deque, 50);
+    tmp := pushLeft(deque, 60);
+    v := 1;
+	while (v < 3) {
+	    fork popRight(deque);
+	    v := v + 1;
+	}
+    v := 1;
+    while (v < 100000) {
+    	v := v + 1;
+    }
     tmp := printDeque(deque);
 }
