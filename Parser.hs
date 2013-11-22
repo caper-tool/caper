@@ -142,8 +142,12 @@ otherAssignStatement :: Parser Stmt
 otherAssignStatement =
   do pos <- getPosition
      var <- identifier
-     reservedOp ":="
-     derefStatement pos var <|> callStatement pos var <|> localAssignStatement pos var
+     args <- optionMaybe $ parens $ sepBy aExpression comma
+     case args of
+       Nothing -> reservedOp ":=" >> (derefStatement pos var
+                                      <|> callStatement pos var
+                                      <|> localAssignStatement pos var)
+       Just l  -> semi >> return (CallStmt pos Nothing var l)
 
 derefStatement :: SourcePos -> String -> Parser Stmt
 derefStatement pos var =
@@ -159,7 +163,7 @@ callStatement pos var =
                           semi
                           case args of
                             Nothing -> return $ LocalAssignStmt pos var $ VarAExpr pos n
-                            Just l  -> return $ CallStmt pos var n l
+                            Just l  -> return $ CallStmt pos (Just var) n l
        otherwise    -> semi >> return (LocalAssignStmt pos var expr)
 
 localAssignStatement :: SourcePos -> String -> Parser Stmt

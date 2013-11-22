@@ -41,7 +41,7 @@ data Stmt = SeqStmt SourcePos [Stmt]
           | LocalAssignStmt SourcePos String AExpr
           | DerefStmt SourcePos String AExpr
           | AssignStmt SourcePos AExpr AExpr
-          | CallStmt SourcePos String String [AExpr]
+          | CallStmt SourcePos (Maybe String) String [AExpr]
           | ReturnStmt SourcePos (Maybe AExpr)
           | SkipStmt SourcePos
           | ForkStmt SourcePos String [AExpr]
@@ -92,7 +92,8 @@ instance Show Stmt where
   show (LocalAssignStmt _ n e)       = n ++ " := " ++ show e ++ ";"
   show (DerefStmt _ n e)             = n ++ " := [" ++ show e ++ "];"  
   show (AssignStmt _ e1 e2)          = "[" ++ show e1 ++ "] := " ++ show e2 ++ ";"
-  show (CallStmt _ n1 n2 es)         = n1 ++ " := " ++ n2 ++ "(" ++ intercalate ", " (map show es) ++ ");"
+  show (CallStmt _ Nothing n2 es)    = n2 ++ "(" ++ intercalate ", " (map show es) ++ ");"
+  show (CallStmt _ (Just n1) n2 es)  = n1 ++ " := " ++ n2 ++ "(" ++ intercalate ", " (map show es) ++ ");"
   show (ReturnStmt _ Nothing)        = "return;"
   show (ReturnStmt _ (Just e))       = "return " ++ show e ++ ";"
   show (SkipStmt _)                  = "skip;"

@@ -10,6 +10,7 @@ import AST
 import Parser
 import Environment
 import Data.IORef
+import Data.Maybe
 import Data.List
 import Data.Typeable
 import Control.Monad.State
@@ -99,25 +100,25 @@ instance Eval Stmt (Maybe Integer) where
                                                return Nothing
   eval env (CallStmt _ n "alloc" [m])     = do arg <- (eval :: Env -> AExpr -> IOThrowsError Integer) env m
                                                r <- allocHeap env arg
-                                               writeStore env n r
+                                               when (isJust n) $ writeStore env (fromJust n) r
                                                return Nothing
   eval env (CallStmt _ n "print" [m])     = do arg <- (eval :: Env -> AExpr -> IOThrowsError Integer) env m
                                                liftIO $ print arg
-                                               writeStore env n 0
+                                               when (isJust n) $ writeStore env (fromJust n) 0
                                                return Nothing
   eval env (CallStmt _ n "CAS" [m, p, q]) = do a <- (eval :: Env -> AExpr -> IOThrowsError Integer) env m
                                                b <- (eval :: Env -> AExpr -> IOThrowsError Integer) env p
                                                c <- (eval :: Env -> AExpr -> IOThrowsError Integer) env q
                                                r <- casHeap env a b c
-                                               writeStore env n (if r then 1 else 0)
+                                               when (isJust n) $ writeStore env (fromJust n) (if r then 1 else 0)
                                                return Nothing
   eval env (CallStmt _ n1 n2 es)          = do f@(FunctionDeclr _ _ _ _ a s) <- getDeclr env n2 (toInteger (genericLength es))
                                                args <- mapM ((eval :: Env -> AExpr -> IOThrowsError Integer) env) es
                                                nEnv <- liftIO $ newEnv env (zip a args)
                                                r <- (eval :: Env -> Stmt -> IOThrowsError (Maybe Integer)) nEnv s
-                                               writeStore env n1 (case r of
-                                                                    Just v  -> v
-                                                                    Nothing -> 0)
+                                               when (isJust n1) $ writeStore env (fromJust n1) (case r of
+                                                                                                  Just v  -> v
+                                                                                                  Nothing -> 0)
                                                return Nothing
   eval env (ReturnStmt _ Nothing)         = return $ Just 0
   eval env (ReturnStmt _ (Just e))        = (eval :: Env -> AExpr -> IOThrowsError Integer) env e >>= return . Just

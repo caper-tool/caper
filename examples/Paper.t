@@ -24,22 +24,22 @@ function makeMCL() {
 }
 
 function read(l, x) {
-    tmp := lock(l);
+    lock(l);
     v := [x];
-    tmp := unlock(l);
+    unlock(l);
     return v;
 }
 
 function write(l, x, v) {
-    tmp := lock(l);
+    lock(l);
     [x] := v;
-    tmp := unlock(l);
+    unlock(l);
     return v;
 }
 
 
 function cas(l, x, v1, v2) {
-    tmp := lock(l);
+    lock(l);
     v := [x];
     if (v = v1) {
         [x] := v2;
@@ -47,12 +47,12 @@ function cas(l, x, v1, v2) {
     } else {
         r := 0;
     }
-    tmp := unlock(l);
+    unlock(l);
     return r;
 }
 
 function dcas(l, x, y, v1, w1, v2, w2) {
-    tmp := lock(l);
+    lock(l);
     v := [x];
     w := [y];
     if (v = v1 and w = w1) {
@@ -62,7 +62,7 @@ function dcas(l, x, y, v1, w1, v2, w2) {
     } else {
         r := 0;
     }
-    tmp := unlock(l);
+    unlock(l);
     return r;
 }
 
@@ -138,7 +138,7 @@ function popRight(deque) {
             b := dcas(lock, deque + 1, rightHat + 0, rightHat, rightHatL, rightHatL, rightHat);
             if (b = 1) {
                 value := read(lock, rightHat + 2);
-                tmp := write(lock, rightHat + 1, dummy);
+                write(lock, rightHat + 1, dummy);
                 return value;
             }
         }
@@ -182,7 +182,7 @@ function popLeft(deque) {
 
         leftHatL := read(lock, leftHat + 0);
         if (leftHatL = leftHat) {
-        tmp := print(9999);
+        print(9999);
             return 0; // empty
         }
         if (leftHat = rightHat) {
@@ -196,7 +196,7 @@ function popLeft(deque) {
             b := dcas(lock, deque + 0, leftHat + 1, leftHat, leftHatR, leftHatR, leftHat);
             if (b = 1) {
                 value := read(lock, leftHat + 2);
-                tmp := write(lock, leftHat + 0, dummy);
+                write(lock, leftHat + 0, dummy);
                 return value;
             }
         }
@@ -209,26 +209,26 @@ function recursivePrint(node) {
         return 0;
     }
     value := [node + 2];
-    tmp := print(value);
+    print(value);
     nextNode := [node + 1];
-    tmp := recursivePrint(nextNode);
+    recursivePrint(nextNode);
 }
 
 // not to run in parallel! here just to make sure it works...
 function printDeque(deque) {
     leftNode := [deque + 0];    
-    tmp := print(10000000001);
-    tmp := recursivePrint(leftNode);
-    tmp := print(10000000001);
+    print(10000000001);
+    recursivePrint(leftNode);
+    print(10000000001);
 }
 
 function main() {
     deque := makeDeque();
-    tmp := pushLeft(deque, 30);
-    tmp := pushLeft(deque, 40);
+    pushLeft(deque, 30);
+    pushLeft(deque, 40);
     fork popLeft(deque);
-    tmp := pushLeft(deque, 50);
-    tmp := pushLeft(deque, 60);
+    pushLeft(deque, 50);
+    pushLeft(deque, 60);
     v := 1;
 	while (v < 3) {
 	    fork popRight(deque);
@@ -238,5 +238,5 @@ function main() {
     while (v < 100000) {
     	v := v + 1;
     }
-    tmp := printDeque(deque);
+    printDeque(deque);
 }
