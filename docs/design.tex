@@ -199,4 +199,22 @@ It may be necessary to add an invariant assertion to the loop.
 \end{array}
 \]
 
+\section{Symbolic Execution}
+
+The symbolic state will consist of: program variable assignments; pure facts; predicates; guards; and regions.
+All of these can mention (logical) variables.
+
+The program variable assignment will associate value expressions with program variables.
+At the begining of executing a procedure, all program variables used in the procedure should be associated with a logical variable with the same name.
+
+The pure facts will be assertions about the logical variables.
+
+The predicates will be a multiset of (predicate name, expression list) pairs.
+There will be a built-in predicate called $\mathsf{\#cell}$ to represent heap cells.
+There will be a table of information about predicates that describes: their number and type of parameters; pure facts that can be obtained from predicates; how/when to roll and unroll them.
+For instance, $\mathsf{\#cell}$ will have two parameters of value type, and producing a cell will enforce that its address (first parameter) is distinct from the address of any other extant cell --- a pure fact.
+
+
+
+
 \end{document}

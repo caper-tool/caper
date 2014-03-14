@@ -89,6 +89,6 @@ dpllFiles (f:fs) = do
         dpllFiles fs
 
 main = do
-        --dpllFile "cnf/uuf250-077.cnf"
+        dpllFile "cnftest/uf20-01.cnf"
         --dpllFile "cnf/UUF50.218.1000/uuf50-01.cnf"
-        dpllFiles ["cnf/UUF100.430.1000/uuf100-0" ++ show n ++ ".cnf" | n <- [1..1000]]
+        --dpllFiles ["cnf/UUF100.430.1000/uuf100-0" ++ show n ++ ".cnf" | n <- [1..1000]]

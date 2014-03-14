@@ -27,6 +27,9 @@ import Control.Lens
 import Data.Functor.Identity
 
 
+
+-- Variable identifiers
+-- Strings should be alpha-numeric
 data VariableID = VIDNamed String               -- To represent user-named vars
                 | VIDInternal String            -- To represent internally generated vars
                 | VIDExistential String         -- To represent assertion vars
@@ -38,29 +41,38 @@ instance Show VariableID where
         show (VIDExistential s) = "_e" ++ s
 
 vidToString :: VariableID -> String
+-- Generates a String from a VariableID
+-- Unlike show, this should be injective, and is used to communicate variables to provers
 vidToString (VIDNamed n) = "n_" ++ n
 vidToString (VIDInternal n) = "i_" ++ n
 vidToString (VIDExistential n) = "e_" ++ n
 
+
+-- Refreshable instance allows us to generate a 'fresh' version of a variable
 instance Refreshable VariableID where
         freshen (VIDNamed s) = [VIDNamed s' | s' <- freshen s]
         freshen (VIDInternal s) = [VIDInternal s' | s' <- freshen s]
         freshen (VIDExistential s) = [VIDExistential s' | s' <- freshen s]
 
 
+-- Conditions are the basic assertions and assumptions that are handled by the provers
 data Condition v = PermissionCondition (FOF PermissionAtomic v)
                 | ValueCondition (FOF ValueAtomic v)
                 | EqualityCondition v v
                 deriving (Eq, Ord)
 
+
+-- The ConditionProp class allows us to convert other types to Conditions
 class ConditionProp c where
         toCondition :: c v -> Condition v
         negativeCondition :: c v -> Condition v
 
+-- First-order permission formulae are instances of ConditionProp
 instance ConditionProp (FOF PermissionAtomic) where
         toCondition = PermissionCondition
         negativeCondition = PermissionCondition . FOFNot
 
+-- First-order value formulae are instances of ConditionProp
 instance ConditionProp (FOF ValueAtomic) where
         toCondition = ValueCondition
         negativeCondition = ValueCondition . FOFNot
@@ -71,19 +83,30 @@ instance (ConditionProp (FOF a)) => ConditionProp a where
         negativeCondition = negativeCondition . FOFAtom
 --}
 
+-- Atomic permission assertions are instances of ConditionProp
 instance ConditionProp PermissionAtomic where
         toCondition = toCondition . FOFAtom
         negativeCondition = negativeCondition . FOFAtom
 
+-- Atomic value assertions are instances of ConditionProp
 instance ConditionProp ValueAtomic where
         toCondition = toCondition . FOFAtom
         negativeCondition = negativeCondition . FOFAtom
 
+-- Generalised expressions, which can refer to permissions or to values
 data Expr v = PermissionExpr (PermissionExpression v)
         | ValueExpr (ValueExpression v)
         | VariableExpr v
-        deriving (Eq, Ord, Functor)
+        deriving (Eq, Ord, Functor, Foldable)
 
+instance Show v => Show (Expr v) where
+        show (PermissionExpr pe) = show pe
+        show (ValueExpr ve) = show ve
+        show (VariableExpr v) = show v
+
+
+-- Generate an equality condition for two expressions
+-- An error occurs if the expressions are clearly incomparable (Permission-Variable comparison)
 exprEquality :: Expr v -> Expr v -> Condition v
 exprEquality (PermissionExpr pe1) (PermissionExpr pe2) = PermissionCondition $ FOFAtom $ PAEq pe1 pe2
 exprEquality (PermissionExpr pe1) (VariableExpr v2) = PermissionCondition $ FOFAtom $ PAEq pe1 (return v2)
@@ -94,6 +117,12 @@ exprEquality (VariableExpr v1) (ValueExpr ve2) = ValueCondition $ FOFAtom $ VAEq
 exprEquality (VariableExpr v1) (VariableExpr v2) = EqualityCondition v1 v2
 exprEquality _ _ = error "Equality declared between incomparable expressions."
 
+toValueExpr :: Show v => Expr v -> ValueExpression v
+toValueExpr (ValueExpr e) = e
+toValueExpr (VariableExpr v) = var v
+toValueExpr e = error $ "The expression '" ++ show e ++ "' cannot be coerced to a value expression."
+
+-- We can substitute Exprs for variables in PermissionExpressions
 instance ExpressionSub PermissionExpression Expr where
         exprSub s (PEVar v) = case s v of
                         (PermissionExpr pe) -> pe
@@ -104,6 +133,7 @@ instance ExpressionSub PermissionExpression Expr where
         exprSub _ PEFull = PEFull
         exprSub _ PEZero = PEZero
 
+-- We can substitute Exprs for variables in ValueExpressions
 instance ExpressionSub ValueExpression Expr where
         exprSub s (VEVar v) = case s v of
                         (ValueExpr ve) -> ve
@@ -125,6 +155,9 @@ instance Monad Expr where
         (ValueExpr ve) >>= s = ValueExpr $ exprSub s ve
         (VariableExpr v) >>= s = s v
 
+instance FreeVariables Expr where
+        foldrFree f x e = foldr f x e
+
 class ProverExpression c where
         toExpr :: c v -> Expr v
 
@@ -136,6 +169,8 @@ instance ProverExpression ValueExpression where
 
 instance ProverExpression Identity where
         toExpr = VariableExpr . runIdentity
+
+integerExpr = ValueExpr . VEConst
 
 instance FreeVariables Condition where
         foldrFree f x (PermissionCondition fof) = foldrFree f x fof
@@ -152,6 +187,8 @@ instance ExpressionCASub Condition Expr where
         exprCASub s (PermissionCondition pc) = PermissionCondition $ exprCASub s pc
         exprCASub s (ValueCondition vc) = ValueCondition $ exprCASub s vc
         exprCASub s (EqualityCondition v1 v2) = exprEquality (s v1) (s v2)
+
+
 
 type BindingContext = TC.TContext VariableID VariableType
 
@@ -204,6 +241,16 @@ unifyEqVars :: (Monad m) => VariableID -> VariableID -> ProverT m ()
 unifyEqVars = doUnifyEqVars bindings
 declareVars :: (Monad m, Foldable f) => f VariableID -> ProverT m ()
 declareVars s = bindings %= TC.declareAll s
+
+
+checkExpressionAtType :: Monad m => Expr VariableID -> VariableType -> ProverT m ()
+-- Check that the expression is of the appropriate type,
+-- binding the variables to be sure they are not inconsistently used
+-- First two cases are straightforward
+checkExpressionAtType (PermissionExpr c) VTValue = error $ "A value expression was expected, but '" ++ show c ++ "' is a permission expression."
+checkExpressionAtType (ValueExpr c) VTPermission = error $ "A permission expression was expected, but '" ++ show c ++ "' is a value expression."
+checkExpressionAtType e VTValue = bindVarsAs (freeVariables e) VTValue
+checkExpressionAtType e VTPermission = bindVarsAs (freeVariables e) VTPermission
 
 isBound :: (Monad m) => VariableID -> ProverT m Bool
 -- Determine if the given variable is bound.

@@ -2,9 +2,9 @@ import Test.HUnit
 import Prover
 import ProverDatatypes
 
-vx = VIDNamed () "x"
-vy = VIDNamed () "y"
-vz = VIDNamed () "z"
+vx = VIDNamed "x"
+vy = VIDNamed "y"
+vz = VIDNamed "z"
 
 
 pe0 = PEZero
