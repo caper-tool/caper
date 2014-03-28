@@ -77,3 +77,6 @@ difference (TContext (m1, i1)) (TContext (m2, _)) = TContext (Map.difference m1 
 
 intersection :: (Eq v, Ord v) => TContext v t -> TContext v t -> TContext v t
 intersection (TContext (m1, i1)) (TContext (m2, _)) = TContext (Map.intersection m1 m2, i1)
+
+filter :: (Eq v, Ord v) => (v -> Bool) -> TContext v t -> TContext v t
+filter f (TContext (m, i)) = TContext (Map.filterWithKey (\a b -> f a) m, i)

@@ -8,6 +8,7 @@ module Prover where
 
 import Prelude hiding (sequence,foldl,foldr,mapM_,mapM,elem,notElem)
 import qualified Data.Map as Map
+import Data.Set (Set)
 import qualified Data.Set as Set
 import Control.Monad.State hiding (mapM_,mapM)
 import Control.Monad.Trans.Maybe
@@ -25,6 +26,7 @@ import FirstOrder
 import Exceptions
 import Control.Lens
 import Data.Functor.Identity
+import Debug.Trace
 
 
 
@@ -170,6 +172,9 @@ instance ProverExpression ValueExpression where
 instance ProverExpression Identity where
         toExpr = VariableExpr . runIdentity
 
+instance ProverExpression Expr where
+        toExpr = id
+
 integerExpr = ValueExpr . VEConst
 
 instance FreeVariables Condition where
@@ -200,16 +205,35 @@ type BindingContext = TC.TContext VariableID VariableType
  -}
 
 data Assumptions = Assumptions {
-        _bindings :: BindingContext,
-        _assumptions :: [Condition VariableID]
+        _assmBindings :: BindingContext,
+        _assmAssumptions :: [Condition VariableID]
         }
 makeLenses ''Assumptions
+
+-- AssumptionLenses is the typeclass for assumption state information
+-- An assumption state must provide a type binding for variables and
+-- a list of conditions that are the assumptions
+class AssumptionLenses a where
+        theAssumptions :: Simple Lens a Assumptions
+        theAssumptions = lens (\s -> Assumptions (s ^. bindings) (s ^. assumptions))
+                                (\s (Assumptions bs as) -> (assumptions .~ as) $ (bindings .~ bs) s)
+        bindings :: Simple Lens a BindingContext
+        bindings = theAssumptions . assmBindings
+        assumptions :: Simple Lens a [Condition VariableID]
+        assumptions = theAssumptions . assmAssumptions
+
+instance AssumptionLenses Assumptions where
+        theAssumptions = lens id (\x y -> y)
+        bindings = assmBindings
+        assumptions = assmAssumptions
 
 instance Show Assumptions where
         show ass = foldl (++) "" $ map (('\n':) . show) $ ass ^. assumptions
 
 emptyAssumptions :: Assumptions
 emptyAssumptions = Assumptions TC.empty []
+
+
 
 type ProverT = StateT Assumptions
 -- Invariant: All variables occuring free in assumptions MUST be bound in bindings
@@ -221,29 +245,28 @@ runProverT p = evalStateT p emptyAssumptions
 -- Can I be bothered to use this monad?
 -- type Proving m = ReaderT Provers (ProverT m)
 
-doBindVarsAs :: (Monad m, Foldable f) => Simple Lens a BindingContext -> f VariableID -> VariableType -> StateT a m ()
-doBindVarsAs l s vt = do
-                        b0 <- use l
+boundVars :: (AssumptionLenses a) => Getter a (Set VariableID)
+boundVars = to $ Set.fromDistinctAscList . map fst . Map.toAscList . TC.toMap . (^.bindings)
+
+bindVarsAs :: (MonadState s m, AssumptionLenses s, Foldable f) => f VariableID -> VariableType -> m ()
+bindVarsAs s vt = do
+                        b0 <- use bindings
                         bs <- runEMT $ TC.bindAll s vt b0 `catch` (\(e :: TypeUnificationException VariableID VariableType) -> error (show e))
-                        l .= bs
+                        bindings .= bs
 
-bindVarsAs :: (Monad m, Foldable f) => f VariableID -> VariableType -> ProverT m ()
-bindVarsAs = doBindVarsAs bindings
 
-doUnifyEqVars :: (Monad m) => Simple Lens a BindingContext -> VariableID -> VariableID -> StateT a m ()
-doUnifyEqVars l v1 v2 = do
-                        b0 <- use l
+unifyEqVars :: (MonadState s m, AssumptionLenses s) => VariableID -> VariableID -> m ()
+unifyEqVars v1 v2 = do
+                        b0 <- use bindings
                         bs <- runEMT $ TC.unify v1 v2 b0 `catch` (\(e :: TypeUnificationException VariableID VariableType) -> error (show e))
-                        l .= bs
+                        bindings .= bs
 
 
-unifyEqVars :: (Monad m) => VariableID -> VariableID -> ProverT m ()
-unifyEqVars = doUnifyEqVars bindings
-declareVars :: (Monad m, Foldable f) => f VariableID -> ProverT m ()
+declareVars :: (MonadState s m, AssumptionLenses s, Foldable f) => f VariableID -> m ()
 declareVars s = bindings %= TC.declareAll s
 
 
-checkExpressionAtType :: Monad m => Expr VariableID -> VariableType -> ProverT m ()
+checkExpressionAtType :: (MonadState s m, AssumptionLenses s) => Expr VariableID -> VariableType -> m ()
 -- Check that the expression is of the appropriate type,
 -- binding the variables to be sure they are not inconsistently used
 -- First two cases are straightforward
@@ -252,7 +275,7 @@ checkExpressionAtType (ValueExpr c) VTPermission = error $ "A permission express
 checkExpressionAtType e VTValue = bindVarsAs (freeVariables e) VTValue
 checkExpressionAtType e VTPermission = bindVarsAs (freeVariables e) VTPermission
 
-isBound :: (Monad m) => VariableID -> ProverT m Bool
+isBound :: (MonadState s m, AssumptionLenses s) => VariableID -> m Bool
 -- Determine if the given variable is bound.
 isBound v = do
                 b <- use bindings
@@ -260,10 +283,10 @@ isBound v = do
 
 
 -- Only use internally
-addAssumption :: (Monad m) => Condition VariableID -> ProverT m ()
+addAssumption :: (MonadState s m, AssumptionLenses s) => Condition VariableID -> m ()
 addAssumption c = assumptions %= (c :)
 
-assume :: Monad m => Condition VariableID -> ProverT m ()
+assume :: (MonadState s m, AssumptionLenses s) => Condition VariableID -> m ()
 -- Add a condition to the list of assumptions, binding its
 -- variables at the appropriate type.  This can raise an
 -- error if a variable is not used with a consistent type.
@@ -277,10 +300,10 @@ assume c@(EqualityCondition v1 v2) = do
                         unifyEqVars v1 v2
                         addAssumption c
 
-assumeTrue :: (ConditionProp c, Monad m) => c VariableID -> ProverT m ()
+assumeTrue :: (ConditionProp c, MonadState s m, AssumptionLenses s) => c VariableID -> m ()
 assumeTrue = assume . toCondition
 
-assumeFalse :: (ConditionProp c, Monad m) => c VariableID -> ProverT m ()
+assumeFalse :: (ConditionProp c, MonadState s m, AssumptionLenses s) => c VariableID -> m ()
 assumeFalse = assume . negativeCondition
 
 
@@ -293,13 +316,13 @@ permissionConditions tc (_ : xs) = permissionConditions tc xs
 
 -- WARNING: don't use these in a CheckT context!
 -- The types in the Assumptions may be outdated by those in the Assertions
-permissionAssumptions :: Assumptions -> [FOF PermissionAtomic VariableID]
+permissionAssumptions :: (AssumptionLenses a) => a -> [FOF PermissionAtomic VariableID]
 -- Extract the assumptions pertaining to permissions
 permissionAssumptions ass = permissionConditions (ass ^. bindings) (ass ^. assumptions)
 
-permissionVariables :: Assumptions -> [VariableID]
+permissionVariables :: (AssumptionLenses a) => a -> [VariableID]
 -- Return a list of the permission variables
-permissionVariables = Map.keys . Map.filter (== Just VTPermission) . TC.toMap . _bindings
+permissionVariables = Map.keys . Map.filter (== Just VTPermission) . TC.toMap . (^. bindings)
 
 valueConditions :: (Ord v) => TC.TContext v VariableType -> [Condition v] -> [FOF ValueAtomic v]
 valueConditions tc [] = []
@@ -311,14 +334,14 @@ valueConditions tc (EqualityCondition v1 v2 : xs) =
 valueConditions tc (ValueCondition cass : xs) = cass : valueConditions tc xs
 valueConditions tc (_ : xs) = valueConditions tc xs
 
-valueAssumptions :: Assumptions -> [FOF ValueAtomic VariableID]
+valueAssumptions :: (AssumptionLenses a) => a -> [FOF ValueAtomic VariableID]
 -- Extract the assumptions pertaining to values (integers)
 -- Equality assumptions where the variable type is indeterminate are treated as value assumptions
 valueAssumptions ass = valueConditions (ass ^. bindings) (ass ^. assumptions)
 
-valueVariables :: Assumptions -> [VariableID]
+valueVariables :: (AssumptionLenses a) => a -> [VariableID]
 -- Return a list of value variables; variables with no other type are treated as value variables
-valueVariables = Map.keys . Map.filter (\x -> (x == Just VTValue) || (x == Nothing)) . TC.toMap . _bindings
+valueVariables = Map.keys . Map.filter (\x -> (x == Just VTValue) || (x == Nothing)) . TC.toMap . (^. bindings)
 
 checkConsistency :: (Functor a, Foldable a) => (FOF a String -> IO (Maybe Bool)) -> [VariableID] -> [FOF a VariableID] -> IO (Maybe Bool)
 -- Given a first-order prover, check whether a list of assertions (with free variables from a given list) is consistent.
@@ -327,7 +350,8 @@ checkConsistency p vars asss = do
                         rp <- p $ FOFNot $ fmap vidToString $ foldr FOFExists (foldr FOFAnd FOFTrue asss) vars
                         return $ fmap not rp
 
-isConsistent :: (MonadIO m) => Provers -> ProverT m (Maybe Bool)
+-- TODO: Use MonadReader to get the provers
+isConsistent :: (MonadIO m, MonadState s m, AssumptionLenses s) => Provers -> m (Maybe Bool)
 -- Check whether the current set of assumptions is consistent
 -- (i.e. False does not follow)
 isConsistent ps = get >>= ic
@@ -349,7 +373,7 @@ assumptionContext :: (Functor a, Foldable a) =>
 assumptionContext vids asms ast = foldr FOFForAll (foldr FOFImpl ast asms) vids
 
 
-{--
+{-
  - So I was thinking of effectively binding existential variables
  - to values and doing substitutions with these.  This may have
  - the benefit of reducing the number of variables that are introduced.
@@ -358,8 +382,47 @@ assumptionContext vids asms ast = foldr FOFForAll (foldr FOFImpl ast asms) vids
  - performance goes to hell.)
  - Instead, you'll just have to introduce existential variables and
  - make assertions about them being equal to things.
- --}
+ -}
 
+
+data Assertions = Assertions {
+        _assrAssumptions :: Assumptions,
+        _assrEVars :: Set VariableID,
+        _assrAssertions :: [Condition VariableID]
+}
+makeLenses ''Assertions
+
+-- AssertionLenses
+
+class (AssumptionLenses a) => AssertionLenses a where
+        theAssertions :: Simple Lens a Assertions
+        theAssertions = lens (\s -> Assertions (s ^. theAssumptions) (s ^. existentials) (s ^. assertions))
+                                (\s (Assertions ams es ats) -> (assertions .~ ats) $ (existentials .~ es) $ (theAssumptions .~ ams) s)
+        existentials :: Simple Lens a (Set VariableID)
+        existentials = theAssertions . assrEVars
+        assertions :: Simple Lens a [Condition VariableID]
+        assertions = theAssertions . assrAssertions
+
+universalBindings :: (AssertionLenses a) => Getter a BindingContext
+universalBindings = to $ \s -> TC.filter (flip Set.notMember $ s ^. existentials) (s ^. bindings)
+
+existentialBindings :: (AssertionLenses a) => Getter a BindingContext
+existentialBindings = to $ \s -> TC.filter (flip Set.member $ s ^. existentials) (s ^. bindings)
+
+
+instance AssumptionLenses Assertions where
+        theAssumptions = assrAssumptions
+        bindings = assrAssumptions . bindings
+        assumptions = assrAssumptions . assumptions
+
+instance AssertionLenses Assertions where
+        theAssertions = lens id (\x y -> y)
+        existentials = assrEVars
+        assertions = assrAssertions
+
+
+
+{-
 data Assertions = Assertions {
         -- Context that binds both assumption and assertion variables to their types
         _variableTypes :: BindingContext,
@@ -369,19 +432,23 @@ data Assertions = Assertions {
         _assertions :: [Condition VariableID]
         }
 makeLenses ''Assertions
+-}
 
-instance Show Assertions where
-        show asts = "Assumptions: !["
-                ++ show (TC.intersection (asts ^. variableTypes) (asts ^. initialAssumptions ^. bindings))
+showAssertions :: (AssertionLenses a) => a -> String
+showAssertions asts = "Assumptions: !["
+                ++ show (asts ^. universalBindings)
                 ++ "] "
-                ++ show (asts ^. initialAssumptions ^. assumptions)
+                ++ show (asts ^. assumptions)
                 ++ "\nAssertions: ?["
-                ++ show (TC.difference (asts ^. variableTypes) (asts ^. initialAssumptions ^. bindings))
+                ++ show (asts ^. existentialBindings)
                 ++ "] "
                 ++ show (asts ^. assertions)
 
+instance Show Assertions where
+        show = showAssertions
+
 emptyAssertions :: Assumptions -> Assertions
-emptyAssertions asmts = Assertions (asmts ^. bindings) asmts []
+emptyAssertions asmts = Assertions asmts Set.empty []
 
 type CheckerT = StateT Assertions
 {--
@@ -391,53 +458,82 @@ showCheckerT = do
                 return $ "Assumptions: !" ++ show ( Map.intersection (TC.toMap $ asts ^. variableTypes) (TC.toMap $ asts ^. initialAssumptions ^. bindings) ) ++ " " ++ show (asts ^. initialAssumptions ^. assumptions) ++ "\nAssertions: ?" ++ show ( Map.intersection (TC.toMap $ asts ^. variableTypes) (TC.toMap $ asts ^. initialAssumptions ^. bindings) ) ++ " " ++ show (asts ^. assertions)
 --}
 
-printCheckerT :: (MonadIO m, Monad m) => CheckerT m ()
-printCheckerT = get >>= liftIO . print
 
-bindAtExprType :: VariableID -> Expr VariableID -> TC.TContext VariableID VariableType -> TC.TContext VariableID VariableType
+printAssertions :: (MonadIO m, MonadState s m, AssertionLenses s) => m ()
+printAssertions = get >>= liftIO . print . showAssertions
+
+bindAtExprType :: VariableID -> Expr VariableID -> BindingContext -> BindingContext
 bindAtExprType v (PermissionExpr _) c = runEM $ TC.bind v VTPermission c `catch` (\(e :: TypeUnificationException VariableID VariableType) -> error (show e))
 bindAtExprType v (ValueExpr _) c = runEM $ TC.bind v VTValue c `catch` (\(e :: TypeUnificationException VariableID VariableType) -> error (show e))
 bindAtExprType v (VariableExpr v') c = runEM $ TC.unify v v' c `catch` (\(e :: TypeUnificationException VariableID VariableType) -> error (show e))
 
-newEvar :: Monad m => String -> CheckerT m VariableID
+
+
+newEvar :: (MonadState s m, AssertionLenses s) => String -> m VariableID
 -- Generate a new assertion variable with a name like the one given
 -- WARNING: No other mechanism should generate VIDExistential variables.
 newEvar vname = do
-                vt <- use variableTypes
+                vt <- use bindings
                 let evin = TC.firstFresh [ VIDExistential $ vname ++ suffix | suffix <- "" : map show [0..] ] vt
-                variableTypes %= TC.declare evin
+                bindings %= TC.declare evin
+                existentials %= Set.insert evin
                 return evin
 
+
+eBindVarsAs :: (MonadState s m, AssertionLenses s, Foldable f) =>
+                f VariableID -> VariableType -> m ()
+eBindVarsAs s vt = do
+                        b0 <- use boundVars
+                        let newvars = Set.difference ((Set.fromList . toList) s) b0
+                        unless (Set.null newvars) $
+                                trace ("WARNING: the variables " ++ show newvars ++ " are being automatically bound as existentials.") $
+                                existentials %= flip Set.union newvars
+                        bindVarsAs s vt
+
+eUnifyEqVars :: (MonadState s m, AssertionLenses s) =>
+                VariableID -> VariableID -> m ()
+eUnifyEqVars v1 v2 = do
+                        b0 <- use boundVars
+                        let newvars = Set.difference (Set.fromList [v1, v2]) b0
+                        unless (Set.null newvars) $ 
+                                trace ("WARNING: the variables " ++ show newvars ++ " are being automatically bound as existentials.") $
+                                existentials %= flip Set.union newvars
+                        unifyEqVars v1 v2
+
+
+{-
 bindVarsAsCk :: (Monad m, Foldable f) => f VariableID -> VariableType -> CheckerT m ()
 bindVarsAsCk = doBindVarsAs variableTypes
 
 unifyEqVarsCk :: (Monad m) => VariableID -> VariableID -> CheckerT m ()
 unifyEqVarsCk = doUnifyEqVars variableTypes
+-}
 
-assert :: Monad m => Condition VariableID -> CheckerT m ()
+
+assert :: (MonadState s m, AssertionLenses s) => Condition VariableID -> m ()
 -- Assert that a given condition holds
 -- We assume that all of the variables are already bound correctly
 assert c@(PermissionCondition _) = do
-                        bindVarsAsCk (freeVariables c) VTPermission
+                        eBindVarsAs (freeVariables c) VTPermission
                         assertions %= (c :)
 assert c@(ValueCondition _) = do
-                        bindVarsAsCk (freeVariables c) VTValue
+                        eBindVarsAs (freeVariables c) VTValue
                         assertions %= (c :)
 assert c@(EqualityCondition v1 v2) = do
-                        unifyEqVarsCk v1 v2
+                        eUnifyEqVars v1 v2
                         assertions %= (c :)
 
-assertEqual :: (ProverExpression e, Monad m) => e VariableID -> e VariableID -> CheckerT m ()
+
+assertEqual :: (ProverExpression e, MonadState s m, AssertionLenses s) => e VariableID -> e VariableID -> m ()
 assertEqual e1 e2 = assert $ exprEquality (toExpr e1) (toExpr e2)
 
 
 
-assertTrue :: (ConditionProp c, Monad m) => c VariableID -> CheckerT m ()
+assertTrue :: (ConditionProp c, MonadState s m, AssertionLenses s) => c VariableID -> m ()
 assertTrue = assert . toCondition
 
-assertFalse :: (ConditionProp c, Monad m) => c VariableID -> CheckerT m ()
+assertFalse :: (ConditionProp c, MonadState s m, AssertionLenses s) => c VariableID -> m ()
 assertFalse = assert . negativeCondition
-
 
 makeEquality :: v -> Expr v -> Condition v
 -- Given a variable and an expression, generate a condition that
@@ -467,44 +563,58 @@ assertionsSubstitution :: Assertions -> EvarSubstitution
 assertionsSubstitution assts v = Map.findWithDefault (return v) v (assts ^. evExprs)
 --}
 
-filterEvars :: (Maybe VariableType -> Bool) -> Assertions -> [VariableID]
-filterEvars f asts = let asms = asts ^. initialAssumptions in
-        Map.keys $ Map.filter f $ TC.toMap $ TC.difference (asts ^. variableTypes) (asms ^. bindings)
+filterEvars :: (AssertionLenses a) => (Maybe VariableType -> Bool) -> Getter a [VariableID]
+filterEvars f = to $ Map.keys . Map.filter f . TC.toMap . (^.existentialBindings)
 
+permissionEvars :: (AssertionLenses a) => Getter a [VariableID]
 permissionEvars = filterEvars (== Just VTPermission)
+valueEvars :: (AssertionLenses a) => Getter a [VariableID]
 valueEvars = filterEvars (\x -> (x == Just VTValue) || (x == Nothing))
 
-filterAvars :: (Maybe VariableType -> Bool) -> Assertions -> [VariableID]
-filterAvars f asts = let asms = asts ^. initialAssumptions in
-        Map.keys $ Map.filter f $ Map.intersection (TC.toMap $ asts ^. variableTypes) (TC.toMap $ asms ^. bindings)
+filterAvars :: (AssertionLenses a) => (Maybe VariableType -> Bool) -> Getter a [VariableID]
+filterAvars f = to $ Map.keys . Map.filter f . TC.toMap . (^.universalBindings)
 
+permissionAvars :: (AssertionLenses a) => Getter a [VariableID]
 permissionAvars = filterAvars (== Just VTPermission)
+valueAvars :: (AssertionLenses a) => Getter a [VariableID]
 valueAvars = filterAvars (\x -> (x == Just VTValue) || (x == Nothing))
 
-justCheck :: (MonadIO m, MonadPlus m) => Provers -> CheckerT m ()
+justCheck :: (MonadIO m, MonadPlus m, MonadState s m, AssertionLenses s) => Provers -> m ()
 -- Check that the assertions follow from the assumptions
 -- If not, fail this path
 justCheck ps = do
-        printCheckerT
-        assts <- get
+        printAssertions
+        bdgs <- use bindings
+        asms <- use assumptions
+        asts <- use assertions
         -- Check the permission assertions
-        let lpermissionAssumptions = permissionConditions (assts ^. variableTypes) (assts ^. initialAssumptions ^. assumptions)
-        let permissionAssertions = permissionConditions (assts ^. variableTypes) (assts ^. assertions)
-        let passt = foldr FOFExists (foldr FOFAnd FOFTrue permissionAssertions) (permissionEvars assts)
-        liftIO $ print $ fmap vidToString $ assumptionContext (permissionAvars assts) lpermissionAssumptions passt
-        rp <- liftIO $ permissionsProver ps $ fmap vidToString $ assumptionContext (permissionAvars assts) lpermissionAssumptions passt
+        let lpermissionAssumptions = permissionConditions bdgs asms
+        let permissionAssertions = permissionConditions bdgs asts
+        pevs <- use permissionEvars
+        pavs <- use permissionAvars
+        let passt = foldr FOFExists (foldr FOFAnd FOFTrue permissionAssertions) pevs
+        liftIO $ print $ fmap vidToString $ assumptionContext pavs lpermissionAssumptions passt
+        rp <- liftIO $ permissionsProver ps $ fmap vidToString $ assumptionContext pavs lpermissionAssumptions passt
         if rp /= Just True then
                 mzero
         else do
                 -- Check the value assertions
-                let lvalueAssumptions = valueConditions (assts ^. variableTypes) (assts ^. initialAssumptions ^. assumptions)
-                let valueAssertions = valueConditions (assts ^. variableTypes) (assts ^. assertions)
-                let vasst = foldr FOFExists (foldr FOFAnd FOFTrue valueAssertions) (valueEvars assts)
-                rv <- liftIO $ valueProver ps $ fmap vidToString $ assumptionContext (valueAvars assts) lvalueAssumptions vasst
-                liftIO $ print $ fmap vidToString $ assumptionContext (valueAvars assts) lvalueAssumptions vasst
+                let lvalueAssumptions = valueConditions bdgs asms
+                let valueAssertions = valueConditions bdgs asts
+                vevs <- use valueEvars
+                vavs <- use valueAvars
+                let vasst = foldr FOFExists (foldr FOFAnd FOFTrue valueAssertions) vevs
+                rv <- liftIO $ valueProver ps $ fmap vidToString $ assumptionContext vavs lvalueAssumptions vasst
+                liftIO $ print $ fmap vidToString $ assumptionContext vavs lvalueAssumptions vasst
                 liftIO $ print rv
                 if rv /= Just True then mzero else return ()
 
+admitAssertions :: (AssertionLenses a) => a -> Assumptions
+admitAssertions asts = Assumptions (asts^.bindings) (asts^.assertions ++ asts^.assumptions)
+
+
+
+{----------
 admitChecks :: (Monad m) => CheckerT m a -> ProverT m a
 -- Admit the assumptions as assertions
 admitChecks c = do
@@ -556,4 +666,4 @@ declareAssertionNames = doDeclareNames variableTypes
 
 declareAssumptionNames :: (Monad m, Traversable f) => f String -> ProverT m (f VariableID)
 declareAssumptionNames = doDeclareNames bindings
-
+-}

@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveFunctor #-}
 module SymbolicState where
 
 import Prelude hiding (sequence,foldl,foldr,mapM_,mapM,elem,notElem)
@@ -9,7 +10,7 @@ import qualified Data.Map as Map
 import Data.MultiSet (MultiSet)
 import qualified Data.MultiSet as MultiSet
 import Control.Lens
-import Control.Monad.State hiding (mapM_,mapM)
+import Control.Monad.State hiding (mapM_,mapM,msum)
 import Data.Foldable
 
 import AST
@@ -21,7 +22,7 @@ data PredicateName = PName String | PCell | PCells deriving (Eq, Ord)
 instance Show PredicateName where
         show (PName s) = s
         show PCell = "#cell"
-        show PCell = "#cells"
+        show PCells = "#cells"
 
 -- A (default) map from predicate names to the list of
 -- types of the predicate parameters.  Here, we'll just
@@ -41,35 +42,56 @@ type PVarBindings = Map String (Expr VariableID)
 -- instead of MultiSet?)
 type Predicates = Map PredicateName (MultiSet [Expr VariableID])
 
+predicateLookup :: PredicateName -> Predicates -> MultiSet [Expr VariableID]
+predicateLookup = Map.findWithDefault MultiSet.empty
+
 type Predicate = (PredicateName, [Expr VariableID])
 
 -- Symbolic States!
-data SymbState = SymbState {
-        _pureFacts :: Assumptions,
-        _progVars :: PVarBindings,
-        _preds :: Predicates
-        }
+data SymbState p = SymbState {
+        _proverState :: p,
+        _ssProgVars :: PVarBindings,
+        _ssPreds :: Predicates
+        } deriving (Functor)
 makeLenses ''SymbState
 
--- Symbolic state monad transformer
-type MSState = StateT SymbState
 
--- Convert a ProverT to an MSState
+instance AssumptionLenses p => AssumptionLenses (SymbState p) where
+        theAssumptions = proverState . theAssumptions
+
+instance AssertionLenses p => AssertionLenses (SymbState p) where
+        theAssertions = proverState . theAssertions
+
+class AssumptionLenses s => SymbStateLenses s where
+        progVars :: Simple Lens s PVarBindings
+        preds :: Simple Lens s Predicates
+
+instance AssumptionLenses p => SymbStateLenses (SymbState p) where
+        progVars = ssProgVars
+        preds = ssPreds
+
+-- Symbolic state monad transformer
+type MSState = StateT (SymbState Assumptions)
+
+
+{-- Convert a ProverT to an MSState
 proverToSState :: (Monad m) => ProverT m a -> MSState m a
 proverToSState pt = do
                 pfs <- use pureFacts
                 (r, pfs') <- lift $ runStateT pt pfs
                 pureFacts .= pfs'
                 return r
+--}
+
 
 -- Add a pure assumption
-syAssume :: (Monad m) => Condition VariableID -> MSState m ()
-syAssume = proverToSState . assume
+--syAssume :: (Monad m) => Condition VariableID -> MSState m ()
+--syAssume = proverToSState . assume
 
 
-validatePredicate :: Monad m => Predicate -> MSState m ()
+validatePredicate :: (MonadState s m, SymbStateLenses s) => Predicate -> m ()
 -- Check that a predicate has the correct number and type of parameters
-validatePredicate (n, exprs) = proverToSState $ chkTypes exprs
+validatePredicate (n, exprs) = chkTypes exprs
         (Map.findWithDefault (error $ "The predicate name '" ++ show n ++ "' is not defined.") n predicateTypes)
         where
                 chkTypes [] [] = return ()
@@ -83,7 +105,7 @@ predicateAssumptions (PCell, e1 : _) preds = (toCondition $ VALt (VEConst 0) e0)
         where
                 genCond (e1' : _) = [negativeCondition $ VAEq (toValueExpr e1') e0]
                 e0 = toValueExpr e1
-predicateAssumptions (PCells, [e1, e2]) _ = [(toCondition $ VALt (VEConst 0) e1'),  (toCondition $ VALt (VEConst -1) e2')]
+predicateAssumptions (PCells, [e1, e2]) _ = [(toCondition $ VALt (VEConst 0) e1'),  (toCondition $ VALt (VEConst (-1)) e2')]
         where
                 e1' = toValueExpr e1
                 e2' = toValueExpr e2
@@ -92,7 +114,7 @@ predicateAssumptions _ _ = []
 generatePredicateAssumptions :: Monad m => Predicate -> MSState m ()
 generatePredicateAssumptions p = do
                                 ps <- use preds
-                                mapM_ syAssume (predicateAssumptions p ps)
+                                mapM_ assume (predicateAssumptions p ps)
 
 insertPredicate :: Predicate -> Predicates -> Predicates
 insertPredicate (n, es) = Map.insertWith (flip MultiSet.union) n (MultiSet.singleton es)
@@ -109,7 +131,54 @@ producePredicate p = do
                 generatePredicateAssumptions p
                 addPredicate p
 
-aexprToExpr :: Monad m => AExpr -> MSState m (Expr VariableID)
+
+takingEachPredInstance :: (MonadPlus m, MonadState s m, SymbStateLenses s) => PredicateName -> m [Expr VariableID]
+-- Given a predicate name, will branch on each different
+-- instance of the predicate, removing it (one copy) from the
+-- predicates and returning the instantiation.
+takingEachPredInstance pname = do
+                prds <- use preds
+                p <- msum $ map return (MultiSet.distinctElems (predicateLookup pname prds))
+                preds %= Map.adjust (MultiSet.delete p) pname
+                return p
+
+-- Deal with having assertions
+type MSCheck = StateT (SymbState Assertions)
+
+wrapStateT :: (Monad m) => (t -> s) -> (s -> t) -> StateT s m a -> StateT t m a
+wrapStateT init fin op = StateT $ \s0 -> do
+                        (r, t1) <- runStateT op (init s0)
+                        return (r, fin t1)
+
+admitChecks :: (Monad m) => MSCheck m a -> MSState m a
+-- Admit the assumptions as assertions
+admitChecks = wrapStateT (fmap emptyAssertions) (fmap admitAssertions)
+
+
+
+check :: (MonadIO m, MonadPlus m) => Provers -> MSCheck m a -> MSState m a
+check ps c = admitChecks $ do
+                r <- c
+                justCheck ps
+                return r
+
+consumePred :: (Monad m, MonadPlus m) => Predicate -> MSCheck m ()
+consumePred (PCell, [x, y]) = do
+                [e1,e2] <- takingEachPredInstance PCell
+                assertEqual x e1
+                assertEqual y e2
+                -- add justCheck to fail faster?
+
+
+
+consumePredicate :: (Monad m, MonadPlus m) => Predicate -> MSCheck m ()
+consumePredicate p = do
+                validatePredicate p
+                consumePred p
+
+
+
+aexprToExpr :: (MonadState s m, SymbStateLenses s) => AExpr -> m (Expr VariableID)
 -- Generate an expression that represents the
 -- value of an arithmetic expression in the current
 -- symbolic state
@@ -134,6 +203,7 @@ aexprToExpr (BinaryAExpr s op e1 e2) = do
 
 
 
+
 --------------------------------------------
 -- Symbolic execution of basic statements --
 --------------------------------------------
@@ -143,7 +213,7 @@ symExLocalAssign target expr = do
                 progVars %= Map.insert target newval
 
 symExAllocate :: (Monad m, MonadPlus m) => String -> AExpr -> MSState m ()
-symExAllocate target lenExpr = do
+symExAllocate target lenExpr = undefined
                 -- Check that the length is positive
                 
-
+--}
