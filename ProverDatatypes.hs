@@ -123,6 +123,28 @@ instance Show a => Show (ValueAtomic a) where
         show (VAEq e1 e2) = show e1 ++ " =v= " ++ show e2
         show (VALt e1 e2) = show e1 ++ " < " ++ show e2
 
+class ValueExpressionCastable t v where
+        toValueExpr :: t v -> ValueExpression v
+
+instance ValueExpressionCastable ValueExpression v where
+        toValueExpr = id
+
+
+($+$) :: (ValueExpressionCastable a v, ValueExpressionCastable b v) => a v -> b v -> ValueExpression v
+($+$) x y = toValueExpr x `VEPlus` toValueExpr y
+($-$) :: (ValueExpressionCastable a v, ValueExpressionCastable b v) => a v -> b v -> ValueExpression v
+($-$) x y = toValueExpr x `VEMinus` toValueExpr y
+($*$) :: (ValueExpressionCastable a v, ValueExpressionCastable b v) => a v -> b v -> ValueExpression v
+($*$) x y = toValueExpr x `VETimes` toValueExpr y
+
+infixl 6 $+$, $-$
+infixl 6 $*$
+
+instance Num (ValueExpression v) where
+        (+) = VEPlus
+        (-) = VEMinus
+        (*) = VETimes
+        fromInteger = VEConst
 
 
 data VariableType = VTPermission | VTValue
@@ -209,4 +231,14 @@ instance (ExpressionSub a e, Functor a, Foldable a, Functor e, Monad e) => Expre
                         where
                                 refresh (Left v) = head $ filter (\x -> not $ freeIn (Right x) f) ( v : freshen v )
                                 refresh (Right v) = v
-        
+
+($=$) :: (ValueExpressionCastable a v, ValueExpressionCastable b v) => a v -> b v -> FOF ValueAtomic v
+($=$) x y = FOFAtom $ toValueExpr x `VAEq` toValueExpr y
+($/=$) :: (ValueExpressionCastable a v, ValueExpressionCastable b v) => a v -> b v -> FOF ValueAtomic v
+($/=$) x y = FOFNot $ FOFAtom $ toValueExpr x `VAEq` toValueExpr y
+($<$) :: (ValueExpressionCastable a v, ValueExpressionCastable b v) => a v -> b v -> FOF ValueAtomic v
+($<$) x y = FOFAtom $ toValueExpr x `VALt` toValueExpr y
+($<=$) :: (ValueExpressionCastable a v, ValueExpressionCastable b v) => a v -> b v -> FOF ValueAtomic v
+($<=$) x y = FOFNot $ FOFAtom $ toValueExpr y `VALt` toValueExpr x
+
+infix 4 $=$, $/=$, $<$, $<=$

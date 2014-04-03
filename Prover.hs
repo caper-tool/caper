@@ -119,10 +119,10 @@ exprEquality (VariableExpr v1) (ValueExpr ve2) = ValueCondition $ FOFAtom $ VAEq
 exprEquality (VariableExpr v1) (VariableExpr v2) = EqualityCondition v1 v2
 exprEquality _ _ = error "Equality declared between incomparable expressions."
 
-toValueExpr :: Show v => Expr v -> ValueExpression v
-toValueExpr (ValueExpr e) = e
-toValueExpr (VariableExpr v) = var v
-toValueExpr e = error $ "The expression '" ++ show e ++ "' cannot be coerced to a value expression."
+instance (Show v) => ValueExpressionCastable Expr v where
+        toValueExpr (ValueExpr e) = e
+        toValueExpr (VariableExpr v) = var v
+        toValueExpr e = error $ "The expression '" ++ show e ++ "' cannot be coerced to a value expression."
 
 -- We can substitute Exprs for variables in PermissionExpressions
 instance ExpressionSub PermissionExpression Expr where
@@ -460,7 +460,7 @@ showCheckerT = do
 
 
 printAssertions :: (MonadIO m, MonadState s m, AssertionLenses s) => m ()
-printAssertions = get >>= liftIO . print . showAssertions
+printAssertions = get >>= liftIO . putStrLn . showAssertions
 
 bindAtExprType :: VariableID -> Expr VariableID -> BindingContext -> BindingContext
 bindAtExprType v (PermissionExpr _) c = runEM $ TC.bind v VTPermission c `catch` (\(e :: TypeUnificationException VariableID VariableType) -> error (show e))
@@ -479,6 +479,13 @@ newEvar vname = do
                 existentials %= Set.insert evin
                 return evin
 
+newAvar :: (MonadState s m, AssumptionLenses s) => String -> m VariableID
+-- Generate a new assumption variable with a name like the one given
+newAvar vname = do
+                vt <- use bindings
+                let avin = TC.firstFresh [ VIDInternal $ vname ++ suffix | suffix <- "" : map show [0..] ] vt
+                bindings %= TC.declare avin
+                return avin
 
 eBindVarsAs :: (MonadState s m, AssertionLenses s, Foldable f) =>
                 f VariableID -> VariableType -> m ()

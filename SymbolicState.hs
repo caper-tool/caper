@@ -2,7 +2,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 module SymbolicState where
 
-import Prelude hiding (sequence,foldl,foldr,mapM_,mapM,elem,notElem)
+import Prelude hiding (sequence,foldl,foldr,mapM_,mapM,elem,notElem,concat)
 import ProverDatatypes
 import Prover
 import Data.Map (Map)
@@ -11,9 +11,14 @@ import Data.MultiSet (MultiSet)
 import qualified Data.MultiSet as MultiSet
 import Control.Lens
 import Control.Monad.State hiding (mapM_,mapM,msum)
+import Control.Monad.RWS hiding (mapM_,mapM,msum)
 import Data.Foldable
+import Data.List (intersperse)
 
 import AST
+
+
+-- default (ValueExpression VariableID, Integer, Double)
 
 
 -- Predicate names are either Strings or the special 
@@ -28,7 +33,9 @@ instance Show PredicateName where
 -- types of the predicate parameters.  Here, we'll just
 -- have a mapping for PCell
 predicateTypes :: Map PredicateName [VariableType]
-predicateTypes = Map.fromList [(PCell, [VTValue, VTValue])] -- A #cell has two value parameters
+predicateTypes = Map.fromList [(PCell, [VTValue, VTValue]), -- A #cell has two value parameters
+                        (PCells, [VTValue, VTValue])    -- A #cells has two value parameters (start and length)
+                        ]
 
 
 -- PVarBindings map program variables (modelled a Strings) to
@@ -47,6 +54,14 @@ predicateLookup = Map.findWithDefault MultiSet.empty
 
 type Predicate = (PredicateName, [Expr VariableID])
 
+toPredicateList :: Predicates -> [Predicate]
+toPredicateList = Map.foldWithKey (\key val rest -> map ((,) key) (MultiSet.toList val) ++ rest) []
+
+showPredicate :: Predicate -> String
+showPredicate (PCell, [x, y]) = show x ++ " |-> " ++ show y
+showPredicate (PCells, [x, y]) = show x ++ " |-> #cells(" ++ show y ++ ")"
+showPredicate (PName s, l) = show s ++ show l
+
 -- Symbolic States!
 data SymbState p = SymbState {
         _proverState :: p,
@@ -54,6 +69,15 @@ data SymbState p = SymbState {
         _ssPreds :: Predicates
         } deriving (Functor)
 makeLenses ''SymbState
+
+emptySymbState :: SymbState Assumptions
+emptySymbState = SymbState emptyAssumptions Map.empty Map.empty
+
+showPVarBindings :: PVarBindings -> String
+showPVarBindings vs = Map.foldWithKey (\pv var s-> (pv ++ " := " ++ show var ++ "\n" ++ s)) "" vs
+
+instance (Show p) => Show (SymbState p) where
+        show (SymbState p vs preds) = "Pure facts:" ++ show p ++ "\nProgram variables:\n" ++ showPVarBindings vs ++ "Heap:\n" ++ (concat . intersperse "\n" . map showPredicate . toPredicateList) preds
 
 
 instance AssumptionLenses p => AssumptionLenses (SymbState p) where
@@ -70,8 +94,14 @@ instance AssumptionLenses p => SymbStateLenses (SymbState p) where
         progVars = ssProgVars
         preds = ssPreds
 
+emptySymbStateWithVars :: [String] -> SymbState Assumptions
+emptySymbStateWithVars vs = execState (do
+                bindVarsAs (map VIDNamed vs) VTValue
+                ssProgVars .= Map.fromList [(x, var (VIDNamed x)) | x <- vs]) emptySymbState
+
+
 -- Symbolic state monad transformer
-type MSState = StateT (SymbState Assumptions)
+type MSState = RWST Provers () (SymbState Assumptions)
 
 
 {-- Convert a ProverT to an MSState
@@ -111,7 +141,7 @@ predicateAssumptions (PCells, [e1, e2]) _ = [(toCondition $ VALt (VEConst 0) e1'
                 e2' = toValueExpr e2
 predicateAssumptions _ _ = []
 
-generatePredicateAssumptions :: Monad m => Predicate -> MSState m ()
+generatePredicateAssumptions :: (MonadState s m, SymbStateLenses s) => Predicate -> m ()
 generatePredicateAssumptions p = do
                                 ps <- use preds
                                 mapM_ assume (predicateAssumptions p ps)
@@ -119,10 +149,10 @@ generatePredicateAssumptions p = do
 insertPredicate :: Predicate -> Predicates -> Predicates
 insertPredicate (n, es) = Map.insertWith (flip MultiSet.union) n (MultiSet.singleton es)
 
-addPredicate :: Monad m => Predicate -> MSState m ()
+addPredicate :: (MonadState s m, SymbStateLenses s) => Predicate -> m ()
 addPredicate p = preds %= (insertPredicate p)
                 
-producePredicate :: Monad m => Predicate -> MSState m ()
+producePredicate :: (MonadState s m, SymbStateLenses s) => Predicate -> m ()
 -- Check that a predicate is appropriately typed,
 -- generate any pure assumptions from it, and
 -- add it to the symbolic state
@@ -143,30 +173,53 @@ takingEachPredInstance pname = do
                 return p
 
 -- Deal with having assertions
-type MSCheck = StateT (SymbState Assertions)
+type MSCheck = RWST Provers () (SymbState Assertions)
 
 wrapStateT :: (Monad m) => (t -> s) -> (s -> t) -> StateT s m a -> StateT t m a
 wrapStateT init fin op = StateT $ \s0 -> do
                         (r, t1) <- runStateT op (init s0)
                         return (r, fin t1)
 
+wrapRWST :: (Monad m) => (t -> s) -> (s -> t) -> RWST r w s m a -> RWST r w t m a
+wrapRWST init fin op = RWST $ \rd s0 -> do
+                        (r, t1, w) <- runRWST op rd (init s0)
+                        return (r, fin t1, w)
+
+
 admitChecks :: (Monad m) => MSCheck m a -> MSState m a
 -- Admit the assumptions as assertions
-admitChecks = wrapStateT (fmap emptyAssertions) (fmap admitAssertions)
+admitChecks = wrapRWST (fmap emptyAssertions) (fmap admitAssertions)
 
 
 
-check :: (MonadIO m, MonadPlus m) => Provers -> MSCheck m a -> MSState m a
-check ps c = admitChecks $ do
+check :: (MonadIO m, MonadPlus m) => MSCheck m a -> MSState m a
+check c = admitChecks $ do
+                ps <- ask
                 r <- c
                 justCheck ps
                 return r
 
+
 consumePred :: (Monad m, MonadPlus m) => Predicate -> MSCheck m ()
-consumePred (PCell, [x, y]) = do
+consumePred (PCell, [x, y]) = (do
                 [e1,e2] <- takingEachPredInstance PCell
                 assertEqual x e1
-                assertEqual y e2
+                assertEqual y e2) `mplus`
+        (do
+                [e1,e2] <- takingEachPredInstance PCells
+                assertTrue $ e1 $<=$ x
+                assertTrue $ x $<$ e1 $+$ e2
+                yval <- newAvar "unk"
+                assertEqual y (var yval)
+                (assertEqual e1 x `mplus`
+                    (do
+                        addPredicate (PCells, [e1, toExpr (x $-$ e1)])
+                        assertTrue $ (e1 $<$ x)))
+                (assertEqual (e1 $+$ e2) (x $+$ VEConst 1) `mplus`
+                    (do
+                        addPredicate (PCells, [toExpr (x $+$ VEConst 1), toExpr (e1 $+$ e2 $-$ x $-$ VEConst 1)])
+                        assertTrue $ (x $+$ VEConst 1) $<$ (e1 $+$ e2))))
+                -- TODO: havoc y
                 -- add justCheck to fail faster?
 
 
@@ -212,8 +265,35 @@ symExLocalAssign target expr = do
                 newval <- aexprToExpr expr
                 progVars %= Map.insert target newval
 
-symExAllocate :: (Monad m, MonadPlus m) => String -> AExpr -> MSState m ()
-symExAllocate target lenExpr = undefined
-                -- Check that the length is positive
+symExAllocate :: (MonadIO m, MonadPlus m) => String -> AExpr -> MSState m ()
+symExAllocate target lenExpr = do
+                lenval <- aexprToExpr lenExpr
+                check $ do
+                        -- Check that the length is positive
+                        assertTrue $ VEConst 0 $<$ lenval
+                loc <- newAvar target
+                producePredicate (PCells, [var loc, lenval])
+                progVars %= Map.insert target (var loc)
+
+symExWrite :: (MonadIO m, MonadPlus m) => AExpr -> AExpr -> MSState m ()
+symExWrite target expr = do
+                loc <- aexprToExpr target
+                check $ do
+                        oldval <- newEvar "val"
+                        consumePredicate (PCell, [loc, var oldval])
+                newval <- aexprToExpr expr
+                producePredicate (PCell, [loc, newval])
+
+symExRead :: (MonadIO m, MonadPlus m) => String -> AExpr -> MSState m ()
+symExRead target eloc = do
+                loc <- aexprToExpr eloc
+                oldval <- check $ do
+                        oldval <- newEvar target
+                        consumePredicate (PCell, [loc, var oldval])
+                        return oldval
+                producePredicate (PCell, [loc, var oldval])
+                progVars %= Map.insert target (var oldval)
+
+                
                 
 --}
