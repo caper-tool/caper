@@ -6,7 +6,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Prover where
 
-import Prelude hiding (sequence,foldl,foldr,mapM_,mapM,elem,notElem)
+import Prelude hiding (sequence,foldl,foldr,mapM_,mapM,elem,notElem,any)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -61,7 +61,7 @@ instance Refreshable VariableID where
 data Condition v = PermissionCondition (FOF PermissionAtomic v)
                 | ValueCondition (FOF ValueAtomic v)
                 | EqualityCondition v v
-                deriving (Eq, Ord)
+                deriving (Eq, Ord, Foldable)
 
 
 -- The ConditionProp class allows us to convert other types to Conditions
@@ -351,7 +351,7 @@ checkConsistency p vars asss = do
                         return $ fmap not rp
 
 -- TODO: Use MonadReader to get the provers
-isConsistent :: (MonadIO m, MonadState s m, AssumptionLenses s) => Provers -> m (Maybe Bool)
+isConsistent :: (MonadIO m, MonadState s m, AssumptionLenses s, Provers p) => p -> m (Maybe Bool)
 -- Check whether the current set of assumptions is consistent
 -- (i.e. False does not follow)
 isConsistent ps = get >>= ic
@@ -586,7 +586,7 @@ permissionAvars = filterAvars (== Just VTPermission)
 valueAvars :: (AssertionLenses a) => Getter a [VariableID]
 valueAvars = filterAvars (\x -> (x == Just VTValue) || (x == Nothing))
 
-justCheck :: (MonadIO m, MonadPlus m, MonadState s m, AssertionLenses s) => Provers -> m ()
+justCheck :: (MonadIO m, MonadPlus m, MonadState s m, AssertionLenses s, Provers p) => p -> m ()
 -- Check that the assertions follow from the assumptions
 -- If not, fail this path
 justCheck ps = do
@@ -617,8 +617,9 @@ justCheck ps = do
                 if rv /= Just True then mzero else return ()
 
 admitAssertions :: (AssertionLenses a) => a -> Assumptions
-admitAssertions asts = Assumptions (asts^.bindings) (asts^.assertions ++ asts^.assumptions)
-
+admitAssertions asts = Assumptions (asts^.bindings) (afilter (asts^.assertions) ++ asts^.assumptions)
+        where
+                afilter = filter (any (\x -> Set.member x (asts^.existentials)))
 
 
 {----------

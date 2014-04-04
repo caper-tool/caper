@@ -98,7 +98,7 @@ toBAFormula (FOFForAll v f) = BAForAll [NewString v] (toBAFormula f)
 toBAFormula (FOFExists v f) = BAExists [NewString v] (toBAFormula f)
 
 
-data EPProver = EPProver { tptpPrelude :: String, proverPath :: String }
+data EPProver = EPProver { tptpPrelude :: String, proverPath :: String, eTimeout :: Int }
 
 {--
 var :: String -> BAExpression NewString
@@ -141,7 +141,7 @@ waitForCheck ph sem res = do
 
 timeoutSem :: Int -> MSem Int -> IO ()
 -- terminate the handles after timeout
-timeoutSem n sem = do
+timeoutSem n sem = if n <= 0 then return () else do
         threadDelay n
         MSem.signal sem
 
@@ -172,7 +172,7 @@ checkBothWays epp formula = trace ("Calling E on:\n" ++ show formula) $ bracket
                 mvfalse <- newEmptyMVar
                 tidfalse <- forkIO $ waitForCheck hfalse sem mvfalse
                 let hs = [htrue,hfalse]
-                tidTimeout <- forkIO $ timeoutSem 100000000 sem
+                tidTimeout <- forkIO $ timeoutSem (eTimeout epp) sem
                 MSem.wait sem
                 mapM_ terminateProcess hs
                 rtrue <- takeMVar mvtrue
@@ -182,10 +182,11 @@ checkBothWays epp formula = trace ("Calling E on:\n" ++ show formula) $ bracket
                         else if rfalse == ExitSuccess then trace "Disproved." $ Just False else trace "Unknown." $ Nothing)
 
 
-makeEPProver :: IO EPProver
-makeEPProver = do
+makeEPProver :: String -> Int -> IO EPProver
+makeEPProver execpath timeout = do
         prel <- tptpBAPrelude
-        return $ EPProver prel "c:\\cygwin64\\home\\Thomas\\E\\PROVER\\eprover.exe"
+        return $ EPProver prel execpath (timeout * 1000) 
+        -- "c:\\cygwin64\\home\\Thomas\\E\\PROVER\\eprover.exe"
 
 instance PermissionsProver EPProver where
         permCheck epp = (checkBothWays epp) . toBAFormula

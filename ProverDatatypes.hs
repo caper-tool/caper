@@ -1,3 +1,4 @@
+{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -140,20 +141,30 @@ instance ValueExpressionCastable ValueExpression v where
 infixl 6 $+$, $-$
 infixl 6 $*$
 
+{-
 instance Num (ValueExpression v) where
         (+) = VEPlus
         (-) = VEMinus
         (*) = VETimes
         fromInteger = VEConst
-
+-}
 
 data VariableType = VTPermission | VTValue
         deriving (Eq, Ord, Typeable)
 
-data Provers = Provers {
-                permissionsProver :: FOF PermissionAtomic String -> IO (Maybe Bool),
-                valueProver :: FOF ValueAtomic String -> IO (Maybe Bool)
+class Provers a where
+        permissionsProver :: a -> FOF PermissionAtomic String -> IO (Maybe Bool)
+        valueProver :: a -> FOF ValueAtomic String -> IO (Maybe Bool)
+
+data ProverRecord = Provers {
+                _permissionsProver :: FOF PermissionAtomic String -> IO (Maybe Bool),
+                _valueProver :: FOF ValueAtomic String -> IO (Maybe Bool)
                 }
+
+instance Provers ProverRecord where
+        permissionsProver = _permissionsProver
+        valueProver = _valueProver
+
 
 instance Show VariableType where
         show VTPermission = "Permission"

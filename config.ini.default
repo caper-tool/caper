@@ -1,0 +1,34 @@
+# config.ini.default
+# Copy this file to config.ini and set the configuration options
+
+[Provers]
+# Choose the prover for permissions
+# options: internal | e
+# default: internal
+permissions = internal
+
+# Choose the prover for values
+# options: z3
+# default: z3
+values = z3
+
+[EProver]
+# Path to the eprover executable
+executable = C:\Users\tyoung\Local Documents\eprover\E\PROVER\eprover.exe
+
+# Timeout for E theorem prover in ms
+# A zero or negative value indicates no timeout
+# default: 1000
+timeout = 1000
+
+[InternalProver]
+# Mode for internal permissions prover
+# options: tree
+# default: tree
+mode = tree
+
+[Z3Prover]
+# Timeout for Z3 SMT solver in ms
+# A zero or negative value indicates no timeout
+# default: 1000
+timeout = 1000

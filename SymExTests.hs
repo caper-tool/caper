@@ -1,3 +1,4 @@
+import ProverDatatypes
 import Provers
 import SymbolicState
 import Choice
@@ -8,11 +9,11 @@ import Parser
 
 posCons = newPos "[console]" 0 0
 
-type MyMonad = MSState (ChoiceM IO)
+type MyMonad = MSState ProverRecord (ChoiceM IO)
 
 runMyMv :: [String] -> MyMonad a -> IO (Maybe a)
 runMyMv vs m = do
-        provers <- getInternalZ3Provers
+        provers <- initProvers
         firstChoice $ do
                 (a, s, w) <- runRWST m provers (emptySymbStateWithVars vs)
                 liftIO $ putStrLn "\nFinal state\n===========" >> print s
@@ -21,7 +22,7 @@ runMyM = runMyMv []
 
 runMyMvAll :: [String] -> MyMonad a -> IO [a]
 runMyMvAll vs m = do
-        provers <- getInternalZ3Provers
+        provers <- initProvers
         allChoices $ do
                 (a, s, w) <- runRWST m provers (emptySymbStateWithVars vs)
                 liftIO $ putStrLn "\nFinal state\n===========" >> print s

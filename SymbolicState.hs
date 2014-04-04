@@ -101,7 +101,7 @@ emptySymbStateWithVars vs = execState (do
 
 
 -- Symbolic state monad transformer
-type MSState = RWST Provers () (SymbState Assumptions)
+type MSState r = RWST r () (SymbState Assumptions)
 
 
 {-- Convert a ProverT to an MSState
@@ -135,7 +135,7 @@ predicateAssumptions (PCell, e1 : _) preds = (toCondition $ VALt (VEConst 0) e0)
         where
                 genCond (e1' : _) = [negativeCondition $ VAEq (toValueExpr e1') e0]
                 e0 = toValueExpr e1
-predicateAssumptions (PCells, [e1, e2]) _ = [(toCondition $ VALt (VEConst 0) e1'),  (toCondition $ VALt (VEConst (-1)) e2')]
+predicateAssumptions (PCells, [e1, e2]) _ = [(toCondition $ VALt (VEConst 0) e1'),  (toCondition $ VALt (VEConst 0) e2')]
         where
                 e1' = toValueExpr e1
                 e2' = toValueExpr e2
@@ -173,7 +173,7 @@ takingEachPredInstance pname = do
                 return p
 
 -- Deal with having assertions
-type MSCheck = RWST Provers () (SymbState Assertions)
+type MSCheck r = RWST r () (SymbState Assertions)
 
 wrapStateT :: (Monad m) => (t -> s) -> (s -> t) -> StateT s m a -> StateT t m a
 wrapStateT init fin op = StateT $ \s0 -> do
@@ -186,13 +186,13 @@ wrapRWST init fin op = RWST $ \rd s0 -> do
                         return (r, fin t1, w)
 
 
-admitChecks :: (Monad m) => MSCheck m a -> MSState m a
+admitChecks :: (Monad m) => MSCheck r m a -> MSState r m a
 -- Admit the assumptions as assertions
 admitChecks = wrapRWST (fmap emptyAssertions) (fmap admitAssertions)
 
 
 
-check :: (MonadIO m, MonadPlus m) => MSCheck m a -> MSState m a
+check :: (MonadIO m, MonadPlus m, Provers p) => MSCheck p m a -> MSState p m a
 check c = admitChecks $ do
                 ps <- ask
                 r <- c
@@ -200,7 +200,7 @@ check c = admitChecks $ do
                 return r
 
 
-consumePred :: (Monad m, MonadPlus m) => Predicate -> MSCheck m ()
+consumePred :: (Monad m, MonadPlus m) => Predicate -> MSCheck r m ()
 consumePred (PCell, [x, y]) = (do
                 [e1,e2] <- takingEachPredInstance PCell
                 assertEqual x e1
@@ -219,12 +219,12 @@ consumePred (PCell, [x, y]) = (do
                     (do
                         addPredicate (PCells, [toExpr (x $+$ VEConst 1), toExpr (e1 $+$ e2 $-$ x $-$ VEConst 1)])
                         assertTrue $ (x $+$ VEConst 1) $<$ (e1 $+$ e2))))
-                -- TODO: havoc y
                 -- add justCheck to fail faster?
 
 
 
-consumePredicate :: (Monad m, MonadPlus m) => Predicate -> MSCheck m ()
+
+consumePredicate :: (Monad m, MonadPlus m) => Predicate -> MSCheck r m ()
 consumePredicate p = do
                 validatePredicate p
                 consumePred p
@@ -260,12 +260,12 @@ aexprToExpr (BinaryAExpr s op e1 e2) = do
 --------------------------------------------
 -- Symbolic execution of basic statements --
 --------------------------------------------
-symExLocalAssign :: (Monad m, MonadPlus m) => String -> AExpr -> MSState m ()
+symExLocalAssign :: (Monad m, MonadPlus m, Provers p) => String -> AExpr -> MSState p m ()
 symExLocalAssign target expr = do
                 newval <- aexprToExpr expr
                 progVars %= Map.insert target newval
 
-symExAllocate :: (MonadIO m, MonadPlus m) => String -> AExpr -> MSState m ()
+symExAllocate :: (MonadIO m, MonadPlus m, Provers p) => String -> AExpr -> MSState p m ()
 symExAllocate target lenExpr = do
                 lenval <- aexprToExpr lenExpr
                 check $ do
@@ -275,23 +275,23 @@ symExAllocate target lenExpr = do
                 producePredicate (PCells, [var loc, lenval])
                 progVars %= Map.insert target (var loc)
 
-symExWrite :: (MonadIO m, MonadPlus m) => AExpr -> AExpr -> MSState m ()
+symExWrite :: (MonadIO m, MonadPlus m, Provers p) => AExpr -> AExpr -> MSState p m ()
 symExWrite target expr = do
                 loc <- aexprToExpr target
                 check $ do
                         oldval <- newEvar "val"
                         consumePredicate (PCell, [loc, var oldval])
                 newval <- aexprToExpr expr
-                producePredicate (PCell, [loc, newval])
+                addPredicate (PCell, [loc, newval])
 
-symExRead :: (MonadIO m, MonadPlus m) => String -> AExpr -> MSState m ()
+symExRead :: (MonadIO m, MonadPlus m, Provers p) => String -> AExpr -> MSState p m ()
 symExRead target eloc = do
                 loc <- aexprToExpr eloc
                 oldval <- check $ do
                         oldval <- newEvar target
                         consumePredicate (PCell, [loc, var oldval])
                         return oldval
-                producePredicate (PCell, [loc, var oldval])
+                addPredicate (PCell, [loc, var oldval])
                 progVars %= Map.insert target (var oldval)
 
                 

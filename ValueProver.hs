@@ -40,5 +40,5 @@ toPredicate s (FOFNot f1) = do
 toPredicate s (FOFFalse) = return false
 toPredicate s (FOFTrue) = return true
 
-valueCheck :: (Eq v, Show v) => FOF ValueAtomic v -> IO (Maybe Bool)
-valueCheck f = isTheorem Nothing $ toPredicate (\v -> error $ "Unquantified variable " ++ show v ++ " in formula:\n" ++ show f) f
+valueCheck :: (Eq v, Show v) => Maybe Int -> FOF ValueAtomic v -> IO (Maybe Bool)
+valueCheck timeout f = isTheorem timeout $ toPredicate (\v -> error $ "Unquantified variable " ++ show v ++ " in formula:\n" ++ show f) f

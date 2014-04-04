@@ -1,0 +1,35 @@
+===================================
+=  CAPER usage notes              =
+=  author: T. Dinsdale-Young      =
+=  date: 2014-04-04               =
+===================================
+
+ 1. External Provers
+
+  1.1 Z3
+
+CAPER uses the Z3 SMT solver from Microsoft Research, via the Haskell SBV
+library.  This requires a version of Z3 of *at least 4.3.2*, which is only
+available as an unstable version.  I have been using
+z3-4.3.2.ff265c6c6ccf-x64-win.
+
+Z3 can be downloaded from: http://z3.codeplex.com/
+
+The Z3 executable must be in your path.
+
+  1.2 E
+
+CAPER optionally uses the E theorem prover by Stephan Schulz.  I have been using
+version 1.8 "Gopaldhara".
+
+E can be downloaded from: http://www4.informatik.tu-muenchen.de/~schulz/E/E.html
+
+The executable for E should be specified in config.ini.  To build E on Windows,
+you will probably use Cygwin, and must therefore ensure cygwin.dll is in the
+path.
+
+ 2. Configuration: config.ini
+
+The file config.ini specifies configuration options for CAPER.  A template file
+config.ini.default is provided, which lists the various available options.
+
