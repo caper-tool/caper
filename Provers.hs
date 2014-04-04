@@ -8,6 +8,7 @@ import ValueProver
 import FirstOrder
 import Data.ConfigFile
 import Control.Monad.Error
+import MemoIO
 
 configDefaults :: MonadError CPError m => m ConfigParser
 configDefaults = readstring emptyCP "[Provers]\npermissions = internal\nvalues = z3\n[EProver]\ntimeout=1000\n[InternalProver]\nmode=tree\n[Z3Prover]\ntimeout=1000"
@@ -21,13 +22,14 @@ proversFromConfig :: (MonadError CPError m, MonadIO m) => m ProverRecord
 proversFromConfig = do
                 conf <- configFile
                 permProver <- get conf "Provers" "permissions"
-                pp <- if permProver == "e" then do
+                pp0 <- if permProver == "e" then do
                         exec <- get conf "EProver" "executable"
                         timeout <- get conf "EProver" "timeout"
                         epp <- liftIO $ makeEPProver exec timeout
                         return (permCheck epp . simplify)
                     else do
                         return (permCheck (TPProver ()) . simplify . (rewriteFOF simplR))
+                pp <- liftIO $ memoIO pp0 -- cache results from the permissions prover
                 timeout <- get conf "Z3Prover" "timeout"
                 let vp = valueCheck (if timeout <= 0 then Nothing else Just $ (timeout - 1) `div` 1000 + 1)
                 return $ Provers pp vp
