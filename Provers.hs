@@ -5,6 +5,7 @@ import PermissionsInterface
 import Permissions
 import PermissionsE
 import ValueProver
+import qualified ValueProver2 as VP2
 import FirstOrder
 import Data.ConfigFile
 import Control.Monad.Error
@@ -30,8 +31,11 @@ proversFromConfig = do
                     else do
                         return (permCheck (TPProver ()) . simplify . (rewriteFOF simplR))
                 pp <- liftIO $ memoIO pp0 -- cache results from the permissions prover
+                valProver <- get conf "Provers" "values"
                 timeout <- get conf "Z3Prover" "timeout"
-                let vp = valueCheck (if timeout <= 0 then Nothing else Just $ (timeout - 1) `div` 1000 + 1)
+                let vp = if valProver == "z3-ffi" then
+                        VP2.valueCheck else 
+                        valueCheck (if timeout <= 0 then Nothing else Just $ (timeout - 1) `div` 1000 + 1)
                 return $ Provers pp vp
                         
 initProvers :: IO ProverRecord

@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFunctor, ExistentialQuantification #-}
 
 -- A module for implementing non-deterministic computation
 -- lazy side-effects.  For practical purposes, the side-effects
@@ -18,7 +18,15 @@ data ChoiceM m a =
         | Result a                              -- A result
         | NoChoice                              -- This computation path fails to give a result
         | Lazy (m (ChoiceM m a))                -- This computation path requires side-effects to continue
-                deriving (Functor)
+        | forall b. OrElse (ChoiceM m b) (ChoiceM m b) (b -> ChoiceM m a)
+--                deriving (Functor)
+
+instance Functor m => Functor (ChoiceM m) where
+        fmap f (Choice x y) = Choice (fmap f x) (fmap f y)
+        fmap f (Result r) = Result (f r)
+        fmap f NoChoice = NoChoice
+        fmap f (Lazy k) = Lazy (fmap (fmap f) k)
+        fmap f (OrElse x y z) = OrElse x y (\k -> fmap f (z k))
 
 -- Monad instance for ChoiceM.
 -- Binding composes non-deterministic computations
@@ -29,6 +37,7 @@ instance Monad m => Monad (ChoiceM m) where
                         (Choice x y) -> Choice (x >>= b) (y >>= b)
                         NoChoice -> NoChoice
                         (Lazy l) -> Lazy $ liftM (>>= b) l
+                        (OrElse x y z) -> OrElse x y (\k -> z k >>= b)
         fail s = trace s NoChoice
 
 -- MonadPlus instance for ChoiceM.
@@ -59,9 +68,19 @@ firstChoice (Choice x y) = do
                                         (Just _) -> return cx
                                         Nothing -> firstChoice y
 firstChoice (Lazy x) = x >>= firstChoice
+firstChoice (OrElse x y z) = do
+                                cx <- firstChoice x
+                                case cx of
+                                        (Just r) -> firstChoice (z r)
+                                        Nothing -> do
+                                                cy <- firstChoice y
+                                                case cy of
+                                                        (Just r) -> firstChoice (z r)
+                                                        Nothing -> return Nothing
 
 -- Get the first choice that doesn't require any side-effects
 -- to evaluate.
+-- BROKEN FOR OrElse
 firstAvailableChoice :: ChoiceM m a -> Maybe a
 firstAvailableChoice (Result a) = Just a
 firstAvailableChoice (Choice x y) = case firstAvailableChoice x of
@@ -82,6 +101,15 @@ nextChoice (Choice x y) = do
                                         (Just _) -> return (cx, Choice rx y)
                                         Nothing -> nextChoice y
 nextChoice (Lazy l) = l >>= nextChoice
+nextChoice (OrElse x y z) = do
+                        (cx, rx) <- nextChoice x
+                        case cx of
+                                (Just r) -> do
+                                        (cz, rz) <- nextChoice (z r)
+                                        case cz of
+                                                (Just r) -> return (cz, Choice rz (rx >>= z))
+                                                Nothing -> nextChoice (rx >>= z)
+                                Nothing -> nextChoice (y >>= z)
 
 -- Get all choices, performing side-effects as necessary
 allChoices :: Monad m => ChoiceM m a -> m [a]
