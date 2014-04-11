@@ -23,19 +23,20 @@ proversFromConfig :: (MonadError CPError m, MonadIO m) => m ProverRecord
 proversFromConfig = do
                 conf <- configFile
                 permProver <- get conf "Provers" "permissions"
-                pp0 <- if permProver == "e" then do
-                        exec <- get conf "EProver" "executable"
-                        timeout <- get conf "EProver" "timeout"
-                        epp <- liftIO $ makeEPProver exec timeout
-                        return (permCheck epp . simplify)
-                    else do
-                        return (permCheck (TPProver ()) . simplify . (rewriteFOF simplR))
+                pp0 <- case permProver of
+                        "e" -> do
+                                exec <- get conf "EProver" "executable"
+                                timeout <- get conf "EProver" "timeout"
+                                epp <- liftIO $ makeEPProver exec timeout
+                                return (permCheck epp . simplify)
+                        _ -> do
+                                return (permCheck (TPProver ()) . simplify . (rewriteFOF simplR))
                 pp <- liftIO $ memoIO pp0 -- cache results from the permissions prover
                 valProver <- get conf "Provers" "values"
                 timeout <- get conf "Z3Prover" "timeout"
-                let vp = if valProver == "z3-ffi" then
-                        VP2.valueCheck else 
-                        valueCheck (if timeout <= 0 then Nothing else Just $ (timeout - 1) `div` 1000 + 1)
+                let vp = case valProver of
+                        "z3-ffi" -> VP2.valueCheck (Just timeout)
+                        _ -> valueCheck (if timeout <= 0 then Nothing else Just $ (timeout - 1) `div` 1000 + 1)
                 return $ Provers pp vp
                         
 initProvers :: IO ProverRecord
