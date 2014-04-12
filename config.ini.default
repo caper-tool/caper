@@ -8,7 +8,7 @@
 permissions = internal
 
 # Choose the prover for values
-# options: z3
+# options: z3 | z3-ffi
 # default: z3
 values = z3
 

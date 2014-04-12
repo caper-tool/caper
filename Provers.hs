@@ -1,4 +1,6 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE CPP #-}
+-- #define z3ffi
 module Provers where
 import ProverDatatypes
 import PermissionsInterface
@@ -6,6 +8,9 @@ import Permissions
 import Permissions2
 import PermissionsE
 import ValueProver
+#ifdef z3ffi
+import qualified ValueProver2 as VP2
+#endif
 import FirstOrder
 import Data.ConfigFile
 import Control.Monad.Error
@@ -23,18 +28,24 @@ proversFromConfig :: (MonadError CPError m, MonadIO m) => m ProverRecord
 proversFromConfig = do
                 conf <- configFile
                 permProver <- get conf "Provers" "permissions"
-                pp0 <- if permProver == "e" then do
-                        exec <- get conf "EProver" "executable"
-                        timeout <- get conf "EProver" "timeout"
-                        epp <- liftIO $ makeEPProver exec timeout
-                        return (permCheck epp . simplify)
-                    else do
-                        mode <- get conf "InternalProver" "mode"
-                        let ipp = if mode == "bigint" then permCheck (IPProver ()) else permCheck (TPProver ())
-                        return (ipp . simplify . (rewriteFOF simplR))
+                pp0 <- case permProver of
+                        "e" -> do
+                                exec <- get conf "EProver" "executable"
+                                timeout <- get conf "EProver" "timeout"
+                                epp <- liftIO $ makeEPProver exec timeout
+                                return (permCheck epp . simplify)
+                        _ -> do
+                                mode <- get conf "InternalProver" "mode"
+                                let ipp = if mode == "bigint" then permCheck (IPProver ()) else permCheck (TPProver ())
+                                return (ipp . simplify . (rewriteFOF simplR))
                 pp <- liftIO $ memoIO pp0 -- cache results from the permissions prover
+                valProver <- get conf "Provers" "values"
                 timeout <- get conf "Z3Prover" "timeout"
-                let vp = valueCheck (if timeout <= 0 then Nothing else Just $ (timeout - 1) `div` 1000 + 1)
+                let vp = case valProver :: String of
+#ifdef z3ffi
+                        "z3-ffi" -> VP2.valueCheck (Just timeout)
+#endif
+                        _ -> valueCheck (if timeout <= 0 then Nothing else Just $ (timeout - 1) `div` 1000 + 1)
                 return $ Provers pp vp
                         
 initProvers :: IO ProverRecord
