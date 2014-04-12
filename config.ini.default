@@ -23,7 +23,7 @@ timeout = 1000
 
 [InternalProver]
 # Mode for internal permissions prover
-# options: tree
+# options: tree | bigint
 # default: tree
 mode = tree
 

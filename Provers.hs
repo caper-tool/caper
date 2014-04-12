@@ -3,6 +3,7 @@ module Provers where
 import ProverDatatypes
 import PermissionsInterface
 import Permissions
+import Permissions2
 import PermissionsE
 import ValueProver
 import FirstOrder
@@ -28,7 +29,9 @@ proversFromConfig = do
                         epp <- liftIO $ makeEPProver exec timeout
                         return (permCheck epp . simplify)
                     else do
-                        return (permCheck (TPProver ()) . simplify . (rewriteFOF simplR))
+                        mode <- get conf "InternalProver" "mode"
+                        let ipp = if mode == "bigint" then permCheck (IPProver ()) else permCheck (TPProver ())
+                        return (ipp . simplify . (rewriteFOF simplR))
                 pp <- liftIO $ memoIO pp0 -- cache results from the permissions prover
                 timeout <- get conf "Z3Prover" "timeout"
                 let vp = valueCheck (if timeout <= 0 then Nothing else Just $ (timeout - 1) `div` 1000 + 1)
