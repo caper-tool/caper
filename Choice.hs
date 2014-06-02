@@ -10,6 +10,7 @@ import Control.Monad hiding (sequence)
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 import Debug.Trace
+import NondetClasses
 
 -- ChoiceM datatype represents a non-determinstic choice of
 -- values of type a, having (lazy) side-effects in monad m.
@@ -45,6 +46,10 @@ instance Monad m => Monad (ChoiceM m) where
 instance Monad m => MonadPlus (ChoiceM m) where
         mzero = NoChoice
         mplus c1 c2 = Choice c1 c2
+
+-- MonadOrElse instance for ChoiceM.
+instance Monad m => MonadOrElse (ChoiceM m) where
+        orElse c1 c2 = OrElse c1 c2 return
 
 -- ChoiceM is a monad transformer.
 -- lift records the side-effects for lazy execution
