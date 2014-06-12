@@ -42,12 +42,12 @@ instance Show VariableID where
         show (VIDInternal s) = "__" ++ s
         show (VIDExistential s) = "_e" ++ s
 
-vidToString :: VariableID -> String
--- Generates a String from a VariableID
--- Unlike show, this should be injective, and is used to communicate variables to provers
-vidToString (VIDNamed n) = "n_" ++ n
-vidToString (VIDInternal n) = "i_" ++ n
-vidToString (VIDExistential n) = "e_" ++ n
+instance StringVariable VariableID where
+        -- Generates a String from a VariableID
+        -- Unlike show, this should be injective, and is used to communicate variables to provers
+        varToString (VIDNamed n) = "n_" ++ n
+        varToString (VIDInternal n) = "i_" ++ n
+        varToString (VIDExistential n) = "e_" ++ n
 
 
 -- Refreshable instance allows us to generate a 'fresh' version of a variable
@@ -347,7 +347,7 @@ checkConsistency :: (Functor a, Foldable a) => (FOF a String -> IO (Maybe Bool))
 -- Given a first-order prover, check whether a list of assertions (with free variables from a given list) is consistent.
 -- Consistent if the formula ¬(E) x1, ..., xn . P1 /\ ... /\ Pm /\ True is invalid. 
 checkConsistency p vars asss = do
-                        rp <- p $ FOFNot $ fmap vidToString $ foldr FOFExists (foldr FOFAnd FOFTrue asss) vars
+                        rp <- p $ FOFNot $ fmap varToString $ foldr FOFExists (foldr FOFAnd FOFTrue asss) vars
                         return $ fmap not rp
 
 -- TODO: Use MonadReader to get the provers
@@ -600,8 +600,8 @@ justCheck ps = do
         pevs <- use permissionEvars
         pavs <- use permissionAvars
         let passt = foldr FOFExists (foldr FOFAnd FOFTrue permissionAssertions) pevs
-        liftIO $ print $ fmap vidToString $ assumptionContext pavs lpermissionAssumptions passt
-        rp <- liftIO $ permissionsProver ps $ fmap vidToString $ assumptionContext pavs lpermissionAssumptions passt
+        liftIO $ print $ fmap varToString $ assumptionContext pavs lpermissionAssumptions passt
+        rp <- liftIO $ permissionsProver ps $ fmap varToString $ assumptionContext pavs lpermissionAssumptions passt
         if rp /= Just True then
                 mzero
         else do
@@ -611,8 +611,8 @@ justCheck ps = do
                 vevs <- use valueEvars
                 vavs <- use valueAvars
                 let vasst = foldr FOFExists (foldr FOFAnd FOFTrue valueAssertions) vevs
-                rv <- liftIO $ valueProver ps $ fmap vidToString $ assumptionContext vavs lvalueAssumptions vasst
-                liftIO $ print $ fmap vidToString $ assumptionContext vavs lvalueAssumptions vasst
+                rv <- liftIO $ valueProver ps $ fmap varToString $ assumptionContext vavs lvalueAssumptions vasst
+                liftIO $ print $ fmap varToString $ assumptionContext vavs lvalueAssumptions vasst
                 liftIO $ print rv
                 if rv /= Just True then mzero else return ()
 

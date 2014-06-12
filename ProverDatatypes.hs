@@ -149,6 +149,15 @@ instance Num (ValueExpression v) where
         fromInteger = VEConst
 -}
 
+class StringVariable v where
+        -- Convert a variable to a string, for passing to a prover
+        -- Each variable should have a unique string representation:
+        -- if two variables have the same representation, they are
+        -- considered to be the same variable.
+        -- Care should be taken to ensure that variables conform to
+        -- syntax restrictions: [a-zA-Z0-9_]* 
+        varToString :: v -> String
+
 data VariableType = VTPermission | VTValue
         deriving (Eq, Ord, Typeable)
 
