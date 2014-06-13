@@ -12,6 +12,7 @@ import Data.Foldable
 import Data.Traversable
 import Data.Typeable
 import Control.Monad hiding (mapM_,mapM)
+import Control.Monad.Reader.Class
 
 
 
@@ -169,6 +170,18 @@ data ProverRecord = Provers {
                 _permissionsProver :: FOF PermissionAtomic String -> IO (Maybe Bool),
                 _valueProver :: FOF ValueAtomic String -> IO (Maybe Bool)
                 }
+
+valueCheck :: (MonadIO m, MonadReader r m, Provers r, StringVariable v) =>
+        FOF ValueAtomic v -> m (Maybe Bool)
+valueCheck f = do
+                p <- ask
+                let sf = fmap varToString f
+                liftIO $ do
+                        putStrLn $ "Checking: " ++ show sf
+                        r <- valueProver p sf
+                        print r
+                        return r
+
 
 instance Provers ProverRecord where
         permissionsProver = _permissionsProver

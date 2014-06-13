@@ -1,5 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
-module FloydWashall where
+module FloydWarshall where
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as VM
@@ -26,7 +26,7 @@ matrixGet :: Matrix a -> Int -> Int -> a
 matrixGet mx x y = (mx V.! x) V.! y
 
 floydInit :: Int -> (Int -> Int -> a) -> Matrix a
--- floydInit d f = V.generate d (\x -> V.generate d (\y -> f x y))
+--floydInit d f = V.generate d (\x -> V.generate d (\y -> f x y))
 floydInit d f = V.create $ do
         mx <- VM.new d
         forM_ [0..(d-1)] $ \i -> do
@@ -38,8 +38,11 @@ floydInit d f = V.create $ do
                         return row
         return mx
 
+floydInitM :: Monad m => Int -> (Int -> Int -> m a) -> m (Matrix a)
+floydInitM d f = V.generateM d (\x -> V.generateM d (\y -> f x y))
+
 floydStep :: (Floydable a) => Int -> Matrix a -> Matrix a
-floydStep k mx = floydInit (V.length mx) (\i j -> fmin (matrixGet mx i j) (fadd (matrixGet mx i k) (matrixGet mx k j)))
+floydStep k !mx = floydInit (V.length mx) (\i j -> fmin (matrixGet mx i j) (fadd (matrixGet mx i k) (matrixGet mx k j)))
 
 runFloyd :: (Floydable a) => Matrix a -> Matrix a
 runFloyd mx = foldl' (flip floydStep) mx [0..(V.length mx - 1)]
@@ -51,7 +54,7 @@ instance Floydable Bool where
 
 test1 = floydInit 10 (==)
 test2 = floydInit 10 (\a b -> a + 1 == b)
-test3 = floydInit 10 (\a b -> a + 4 == b || a == b + 4)
+test3 = floydInit 100 (\a b -> a + 4 == b || a == b + 4)
 
 showbm :: Matrix Bool -> String
 showbm = foldMap ((++"\n") . foldMap (\b -> if b then "1" else "."))

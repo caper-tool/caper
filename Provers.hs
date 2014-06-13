@@ -7,13 +7,14 @@ import PermissionsInterface
 import Permissions
 import Permissions2
 import PermissionsE
-import ValueProver
+import qualified ValueProver as VP
 #ifdef z3ffi
 import qualified ValueProver2 as VP2
 #endif
 import FirstOrder
 import Data.ConfigFile
 import Control.Monad.Error
+import Control.Monad.Reader
 import MemoIO
 
 configDefaults :: MonadError CPError m => m ConfigParser
@@ -45,7 +46,7 @@ proversFromConfig = do
 #ifdef z3ffi
                         "z3-ffi" -> VP2.valueCheck (Just timeout)
 #endif
-                        _ -> valueCheck (if timeout <= 0 then Nothing else Just $ (timeout - 1) `div` 1000 + 1)
+                        _ -> VP.valueCheck (if timeout <= 0 then Nothing else Just $ (timeout - 1) `div` 1000 + 1)
                 return $ Provers pp vp
                         
 initProvers :: IO ProverRecord
@@ -55,6 +56,8 @@ initProvers = do
                         (Left e) -> error $ "Failed parsing configuration file: " ++ show e
                         (Right r) -> return r
 
+runWithProvers :: (MonadIO m) => ReaderT ProverRecord m a -> m a
+runWithProvers o = liftIO initProvers >>= runReaderT o
 
 {-
 getEZ3Provers :: IO ProverRecord
