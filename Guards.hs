@@ -105,8 +105,15 @@ data GuardAST v =
                 | ParametrisedG String (ValueExpression v)
                 | CoParametrisedG String [ValueExpression v]
                 | StarG (GuardAST v) (GuardAST v)
-                deriving (Show,Functor,Foldable,Traversable)
+                deriving (Functor,Foldable,Traversable)
 
+instance (Show v) => Show (GuardAST v) where
+        show EmptyG = "0"
+        show (NamedG g) = g
+        show (NamedPermissionG g p) = g ++ "[" ++ show p ++ "]"
+        show (ParametrisedG g p) = g ++ "(" ++ show p ++ ")"
+        show (CoParametrisedG g p) = g ++ "{" ++ show p ++ "}"
+        show (StarG a b) = show a ++ " * " ++ show b
 
 
 

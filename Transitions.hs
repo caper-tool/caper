@@ -8,7 +8,7 @@ import Prover
 import FloydWarshall
 import Prelude hiding (foldl', elem, foldr)
 import Data.Foldable
-
+import RegionTypes
 import Provers -- TODO: remove (used for testing)
 
 data ClosureVariable v = Context v | Local String deriving (Eq, Ord)
@@ -21,20 +21,6 @@ instance (StringVariable v) => StringVariable (ClosureVariable v) where
         varToString (Context v) = "c_" ++ (varToString v)
         varToString (Local s) = "l_" ++ s
 
--- ssLowerBound and ssUpperBound are the (inclusive) lower
--- and upper bounds of the state space.
--- invariant: ssLowerBound <= ssUpperBound (if both are not Nothing)
-data StateSpace = StateSpace {
-                ssLowerBound :: Maybe Int,
-                ssUpperBound :: Maybe Int
-                }
-isFinite :: StateSpace -> Bool
-isFinite (StateSpace (Just _) (Just _)) = True
-isFinite _ = False
-
-ssSize :: (MonadPlus m) => StateSpace -> m Int
-ssSize (StateSpace (Just x) (Just y)) = return $ y - x + 1
-ssSize _ = mzero
 
 {- OK.
  - I want to compute a formula that represents the transitive closure of
@@ -105,6 +91,8 @@ computeCondition i j t = do
                                 Just True -> return FOFTrue
                                 _ -> return cond
 
+-- Uses computeCondition to determine how to instantiate the matrix.
+-- Reflexive transitions are always allowed.
 computeConditions :: (MonadIO m, MonadReader r m, Provers r, Eq v, StringVariable v) =>
         [GuardedTransition v] -> Int -> Int -> m (FOF ValueAtomic v)
 computeConditions gts i j = if i == j then return FOFTrue else
@@ -114,13 +102,34 @@ computeConditions gts i j = if i == j then return FOFTrue else
                                 b' <- computeCondition i j b
                                 return (fmin a b')
 
--- This assumes the diagonal is true.
+translateIn :: Int -> (Int -> Int -> a) -> (Int -> Int -> a)
+translateIn offset f x y = f (x - offset) (y - offset)
+
+computeInitialMatrix :: (MonadIO m, MonadReader r m, Provers r, Eq v, StringVariable v) =>
+        Int -> Int -> [GuardedTransition v] -> m (Matrix (FOF ValueAtomic v))
+computeInitialMatrix lower upper gts = floydInitM (upper - lower + 1) (translateIn lower $ computeConditions gts)
+
+
+-- This assumes the diagonal is true (which it will be if produced from a reflexive matrix).
 matrixToReflRelation :: (Eq v) => Matrix (FOF ValueAtomic v) -> Integer -> ValueExpression v -> ValueExpression v -> FOF ValueAtomic v
 matrixToReflRelation mx lower pre post = fmin (pre $=$ post) $ fst $ foldl' op1 (FOFFalse, lower) mx
                 where
                         op1 (f, i) v = (fst $ foldl' (op2 i) (f, lower) v, i + 1)
                         op2 i (f, j) e | i == j = (f, j + 1)
                                        | otherwise = (fmin f (fadd e (FOFAnd (VEConst i $=$ pre) (VEConst j $=$ post))), j + 1)
+
+computeClosureRelation :: (MonadIO m, MonadReader r m, Provers r, Eq v, StringVariable v) =>
+        StateSpace -> [GuardedTransition v] -> m (ValueExpression v -> ValueExpression v -> FOF ValueAtomic v)
+-- Best case scenario: no actions!
+computeClosureRelation _ [] = return (\x y -> FOFAtom $ VAEq x y)
+-- Finite state scenario
+computeClosureRelation (StateSpace (Just lower) (Just upper)) gts = do
+                        mx <- computeInitialMatrix lower upper gts
+                        let mx' = runFloyd mx
+                        return $ matrixToReflRelation mx' (toInteger lower)
+-- Fallback: universal relation
+computeClosureRelation _ _ = return (\x y -> FOFTrue)
+
 
 
 testgts = [ GuardedTransition [VIDNamed "x"] (FOFAnd ((VEConst 7) $<$ (VEVar $ VIDNamed "a")) ((VEVar $ VIDNamed "x") $=$ (VEConst 1))) (VEVar $ VIDNamed "x") ((VEConst 1) $-$ (VEVar $ VIDNamed "x")) ]
