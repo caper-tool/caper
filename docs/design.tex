@@ -5,6 +5,7 @@
 \usepackage{amssymb}
 \usepackage{listings}
 \usepackage{color}
+\usepackage[nounderscore]{syntax}
 
 % Programming language
 
@@ -199,13 +200,86 @@ It may be necessary to add an invariant assertion to the loop.
 \end{array}
 \]
 
+\begin{grammar}
+  <lower> ::= "a" | "b" | \ldots | "z"
+
+  <upper> ::= "A" | "B" | \ldots | "Z"
+
+  <letter> ::= <lower> | <upper>
+
+  <digit> ::= "0" | "1" | \ldots | "9"
+
+  <idchar> ::= <lower> | <upper> | <digit> | "_"
+
+  <variable> ::= <letter> <idchar>*
+
+  <ovariable> ::= <variable> | "_"
+
+  <predicate> ::= <lower> <idchar>*
+
+  <region> ::= <upper> <idchar>*
+
+  <guardname> ::= <letter> <idchar>*
+
+  <abinop> ::= \verb|&*&|
+
+  <assertion> ::= <pureassn> | <predassn> | <assertion> <abinop> <assertion> \\
+              | {\color{blue} <pureassn> \verb|?| <assertion> \verb|:| <assertion>}
+
+
+  <eqrel> ::= \verb|==| | \verb|!=|
+
+  <valconst> ::= \{<digit>\}
+
+  <valbinop> ::= \verb|+| | \verb|-| | \verb|*| | {\color{blue} \verb|/|}
+
+  <valunop> ::= \verb|-|
+
+  <valexpr> ::= <ovariable> | <valconst> | <valexpr> <valbinop> <valexpr> \\
+    | <valunop> <valexpr> \\
+    | {\color{blue} \verb|{| <valexpr> \{ "," <valexpr> \} \verb|}| }
+
+  <valrel> ::= <eqrel> | \verb|<| | \verb|<=| | \verb|>| | \verb|>=|
+
+  <permconst> ::= "0p" | "1p"
+
+  <permbinop> ::= \verb|$|
+
+  <permunop> ::= \verb|~|
+
+  <permexpr> ::= <ovariable> | <permconst> | <permexpr> <permop> <permexpr> | <permunop> <permexpr>
+
+  <permrel> ::= <eqrel> | \verb|#|
+
+  <pureassn> ::= "true" | "false" | \verb|!| <pureassn> \\
+    | <variable> <eqrel> <variable>
+    | <valexpr> <valrel> <valexpr> \\
+    | <permexpr> <permrel> <permexpr>
+
+  <expression> ::= <ovariable> | <valueexpr> | <permexpr>
+
+  <regionassn> ::= <region> "(" <variable> "," \{ <expression> "," \} <valexpr> ")"
+
+  <pred> ::= <predicate> [ "(" [ <expression> ] \{ "," <expression> \} ")"]
+
+  <cell> ::= <valueexpr> "|->" <valueexpr> | <valueexpr> "|->" "#cells" "(" <valueexpr> ")"
+
+  <guard> ::= <guardname> | <guardname> "[" <permexpr> "]" \\
+  | {\color{blue} <guardname> "(" <expression> \{ "," <expression> \} ")" }
+
+  <guards> ::= <variable> "@" <guard> | <variable> "@" "(" <guard> \{ \verb|*| <guard> \} ")"
+
+  <predassn> ::= <regionassn> | <pred> | <cell> | <guards>
+
+\end{grammar}
+
 \section{Symbolic Execution}
 
 The symbolic state will consist of: program variable assignments; pure facts; predicates; guards; and regions.
 All of these can mention (logical) variables.
 
 The program variable assignment will associate value expressions with program variables.
-At the begining of executing a procedure, all program variables used in the procedure should be associated with a logical variable with the same name.
+At the beginning of executing a procedure, all program variables used in the procedure should be associated with a logical variable with the same name.
 
 The pure facts will be assertions about the logical variables.
 
@@ -215,6 +289,21 @@ There will be a table of information about predicates that describes: their numb
 For instance, $\mathsf{\#cell}$ will have two parameters of value type, and producing a cell will enforce that its address (first parameter) is distinct from the address of any other extant cell --- a pure fact.
 
 
+\section{Concerning region identifiers}
 
+Within the symbolic state, region identifiers are associated with:
+\begin{itemize}
+  \item Region type information;
+  \item Region state information; and
+  \item Guard resources.
+\end{itemize}
+
+The only interesting condition on region identifiers is their equality.
+If region identifiers are equal, then the region type information and region state information must agree.
+In theory, we might have information about two regions, and not know if they are actually the same region.
+At some future time, we may come to identify these two regions (or discriminate them).
+In addition, we may wish to introduce aliases for existing regions.
+
+At the very least, we should have some mechanism for handling the aliasing of regions.
 
 \end{document}
