@@ -10,9 +10,21 @@ import ProverDatatypes
 -- The internal representation of a region type identifier
 type RTId = Integer
 
+-- Variables for use with region type declarations
+-- There will be a few different binding locations, including
+-- top level
+
+newtype RTDVar = RTDVar String deriving (Eq,Ord)
+instance Show RTDVar where
+        show (RTDVar s) = s
+instance StringVariable RTDVar where
+        varToString (RTDVar s) = s
+
+
 data RegionType = RegionType
         {
                 rtRegionTypeName :: String,
+                rtParameters :: [(RTDVar, VariableType)],
                 rtGuardType :: GuardTypeAST,
                 rtStateSpace :: StateSpace,
                 rtTransitionSystem :: [TransitionRule],
@@ -36,24 +48,19 @@ ssSize :: (MonadPlus m) => StateSpace -> m Int
 ssSize (StateSpace (Just x) (Just y)) = return $ y - x + 1
 ssSize _ = mzero
 
-newtype TrVar = TrVar String deriving (Eq,Ord)
-instance Show TrVar where
-        show (TrVar s) = s
-instance StringVariable TrVar where
-        varToString (TrVar s) = s
 
 
 data TransitionRule = TransitionRule
         {
                 -- The guard that is required to perform the transition
-                trGuard :: GuardAST TrVar,
+                trGuard :: GuardAST RTDVar,
                 -- Some (pure) predicate that conditions the transition
                 -- (Not Implemented Yet)
                 trPredicate :: (),
                 -- An expression describing the state to transition from
-                trPreState :: ValueExpression TrVar,
+                trPreState :: ValueExpression RTDVar,
                 -- An expression describing the state to transition to
-                trPostState :: ValueExpression TrVar
+                trPostState :: ValueExpression RTDVar
         }
 
 instance Show TransitionRule where

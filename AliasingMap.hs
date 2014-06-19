@@ -13,6 +13,7 @@ import qualified Data.Map as Map
 import Data.List (intercalate)
 import Data.Maybe
 import Control.Monad
+import Control.Monad.Trans.Maybe
 
 
 {- AliasMap.
@@ -91,3 +92,6 @@ mergeAliases mop k1 k2 am@(AliasMap m) = if k1' == k2' then return am else do
                 (k1', v1) = eresolve k1
                 (k2', v2) = eresolve k2
                 eresolve k = fromMaybe (error "mergeAliases: provided key does not exist") $ resolve k am
+
+mergeAliasesM :: (Monad m, Ord a) => (b -> b -> m (Maybe b)) -> a -> a -> AliasMap a b -> m (Maybe (AliasMap a b))
+mergeAliasesM mop k1 k2 am = runMaybeT $ mergeAliases (\x y -> MaybeT $ mop x y) k1 k2 am

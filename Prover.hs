@@ -79,6 +79,8 @@ instance ConditionProp (FOF ValueAtomic) where
         toCondition = ValueCondition
         negativeCondition = ValueCondition . FOFNot
 
+condFalse = ValueCondition FOFFalse
+
 {-- This would probably be a bad idea
 instance (ConditionProp (FOF a)) => ConditionProp a where        
         toCondition = toCondition . FOFAtom
@@ -272,8 +274,11 @@ checkExpressionAtType :: (MonadState s m, AssumptionLenses s) => Expr VariableID
 -- First two cases are straightforward
 checkExpressionAtType (PermissionExpr c) VTValue = error $ "A value expression was expected, but '" ++ show c ++ "' is a permission expression."
 checkExpressionAtType (ValueExpr c) VTPermission = error $ "A permission expression was expected, but '" ++ show c ++ "' is a value expression."
+checkExpressionAtType (PermissionExpr c) VTRegionID = error $ "A region identifier was expected, but '" ++ show c ++ "' is a permission expression."
+checkExpressionAtType (ValueExpr c) VTRegionID = error $ "A region identifier was expected, but '" ++ show c ++ "' is a value expression."
 checkExpressionAtType e VTValue = bindVarsAs (freeVariables e) VTValue
 checkExpressionAtType e VTPermission = bindVarsAs (freeVariables e) VTPermission
+checkExpressionAtType e VTRegionID = bindVarsAs (freeVariables e) VTRegionID
 
 isBound :: (MonadState s m, AssumptionLenses s) => VariableID -> m Bool
 -- Determine if the given variable is bound.

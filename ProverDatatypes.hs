@@ -159,7 +159,7 @@ class StringVariable v where
         -- syntax restrictions: [a-zA-Z0-9_]* 
         varToString :: v -> String
 
-data VariableType = VTPermission | VTValue
+data VariableType = VTPermission | VTValue | VTRegionID
         deriving (Eq, Ord, Typeable)
 
 class Provers a where
