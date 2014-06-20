@@ -2,6 +2,9 @@ module RegionTypes where
 import Control.Monad
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Control.Lens
+import Data.Maybe
+
 import Guards
 import ProverDatatypes
 
@@ -25,11 +28,13 @@ data RegionType = RegionType
         {
                 rtRegionTypeName :: String,
                 rtParameters :: [(RTDVar, VariableType)],
-                rtGuardType :: GuardTypeAST,
+                rtGuardType :: TopLevelGuardTypeAST,
                 rtStateSpace :: StateSpace,
                 rtTransitionSystem :: [TransitionRule],
                 rtInterpretation :: () -- TODO: replace with appropriate repr. of assertion
         }
+
+rtWeakGT = topLevelToWeakGuardType . rtGuardType
 
 -- StateSpace
 
@@ -72,6 +77,17 @@ data RegionTypeContext = RegionTypeContext
                 rtcIds :: Map String RTId,
                 rtcRegionTypes :: Map RTId RegionType
         }
+
+class RTCGetter a where
+        theRTContext :: Getter a RegionTypeContext
+        resolveRTName :: Getter a (String -> Maybe RTId)
+        resolveRTName = to $ \c s -> Map.lookup s (rtcIds (c ^. theRTContext))
+        resolveRType :: Getter a (RTId -> RegionType)
+        resolveRType = to $ \c s -> fromMaybe
+                        (resError s)
+                        (Map.lookup s (rtcRegionTypes (c ^. theRTContext)))
+                where
+                        resError s = (error $ "The region identifier " ++ show s ++ " could not be resolved.")
 
 createRegionTypeContext :: [RegionType] -> RegionTypeContext
 createRegionTypeContext = crtcs 0 (RegionTypeContext Map.empty Map.empty)

@@ -11,6 +11,8 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Control.Monad.State hiding (mapM_,mapM)
+import Control.Monad.Reader
+import Control.Monad.RWS
 import Control.Monad.Trans.Maybe
 import PermissionsInterface
 import Permissions
@@ -620,6 +622,16 @@ justCheck ps = do
                 liftIO $ print $ fmap varToString $ assumptionContext vavs lvalueAssumptions vasst
                 liftIO $ print rv
                 if rv /= Just True then mzero else return ()
+
+hypotheticalCheck :: (MonadIO m, MonadState s m, AssumptionLenses s, MonadReader r m, Provers r) => 
+                RWST r () Assertions (MaybeT IO) () -> m Bool
+hypotheticalCheck mn = do
+                        rr <- ask
+                        assms <- use theAssumptions
+                        ans <- liftIO $ runMaybeT $ runRWST (mn >> justCheck rr) rr (emptyAssertions assms)
+                        case ans of
+                                Just _ -> return True
+                                Nothing -> return False
 
 admitAssertions :: (AssertionLenses a) => a -> Assumptions
 admitAssertions asts = Assumptions (asts^.bindings) (afilter (asts^.assertions) ++ asts^.assumptions)

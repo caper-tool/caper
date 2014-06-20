@@ -1,6 +1,8 @@
 {- Regions -}
 module Regions where
 import Control.Monad.State hiding (mapM_,mapM)
+import Control.Monad.Reader hiding (mapM_,mapM)
+import Control.Lens
 
 import RegionTypes
 import AliasingMap
@@ -46,3 +48,23 @@ mergeValueExpressions :: (MonadState s m, AssumptionLenses s) =>
         ValueExpression VariableID ->
         ValueExpression VariableID -> m (ValueExpression VariableID)
 mergeValueExpressions ve1 ve2 = (assumeTrue $ ve1 $=$ ve2) >> return ve1
+
+mergeRegions :: (MonadState s m, AssumptionLenses s, MonadReader r m, RTCGetter r) =>
+        Region -> Region -> m Region
+mergeRegions r1 r2 = do
+                let dirty = regDirty r1 || regDirty r2
+                ti <- mergeMaybe mergeRegionInstances (regTypeInstance r1) (regTypeInstance r2)
+                s <- mergeMaybe mergeValueExpressions (regState r1) (regState r2)
+                g <- mergeGuards (regGuards r1) (regGuards r2)
+                case ti of
+                        (Just (RegionInstance rtid _)) -> do
+                                res <- view resolveRType
+                                let gt = rtWeakGT $ res rtid
+                                if checkGuardAtType g gt then
+                                        return ()
+                                else
+                                        assume condFalse
+                        _ -> return ()
+                return $ Region dirty ti s g
+
+-- Check if a guard is compatible 

@@ -9,7 +9,7 @@ import Prelude hiding (catch,mapM,sequence,foldl,mapM_)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Control.Monad.Exception
-import Control.Monad hiding (mapM)
+import Control.Monad hiding (mapM,sequence)
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Maybe
 import ProverDatatypes
@@ -19,7 +19,7 @@ import Data.Foldable
 import Data.Traversable
 import Data.Maybe
 import Choice
-import Control.Monad.State hiding (mapM_,mapM)
+import Control.Monad.State hiding (mapM_,mapM,sequence)
 --import System.IO.Unsafe -- TODO: Don't depend on this.
 import Debug.Trace
 
@@ -189,6 +189,26 @@ fullGuards = Prelude.map (GD . (Map.map gtToG)) . Set.toList
 
 guardJoin :: Guard v -> Guard v -> Guard v
 guardJoin (GD g1) (GD g2) = GD $ Map.union g1 g2
+
+
+-- Merge two guards, generating assumptions in the process
+mergeGuards :: (MonadState s m, AssumptionLenses s) =>
+                Guard VariableID -> Guard VariableID -> m (Guard VariableID)
+mergeGuards (GD g1) (GD g2) = (sequence $ Map.unionWith unionop (fmap return g1) (fmap return g2)) >>= (return . GD)
+        where
+                unionop p1 p2 = do
+                                v1 <- p1
+                                v2 <- p2
+                                case (v1, v2) of
+                                        (PermissionGP perm1, PermissionGP perm2) -> do
+                                                assumeTrue $ PADis perm1 perm2
+                                                return $ PermissionGP $ PESum perm1 perm2
+                                        _ -> do
+                                                assume condFalse
+                                                -- Since we've assumed false, it shouldn't
+                                                -- matter what we return here...
+                                                return v1
+
 
 guardEquivalence :: GuardTypeAST -> Guard v1 -> Guard v2 -> (Guard v3, Guard v4)
 -- Given a GuardTypeAST and a pair of guards, find a pair of guards that
