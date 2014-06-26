@@ -1,7 +1,12 @@
 module RegionTypes where
 import Control.Monad
+import Control.Monad.Reader.Class
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
+import Data.Monoid
+import Data.Foldable
 import Control.Lens
 import Data.Maybe
 
@@ -17,7 +22,7 @@ type RTId = Integer
 -- There will be a few different binding locations, including
 -- top level
 
-newtype RTDVar = RTDVar String deriving (Eq,Ord)
+newtype RTDVar = RTDVar { rtdvStr :: String } deriving (Eq,Ord)
 instance Show RTDVar where
         show (RTDVar s) = s
 instance StringVariable RTDVar where
@@ -35,6 +40,9 @@ data RegionType = RegionType
         }
 
 rtWeakGT = topLevelToWeakGuardType . rtGuardType
+
+rtParamVars :: RegionType -> Set RTDVar
+rtParamVars = Set.fromList . map fst . rtParameters
 
 -- StateSpace
 
@@ -68,6 +76,9 @@ data TransitionRule = TransitionRule
                 trPostState :: ValueExpression RTDVar
         }
 
+trVariables :: TransitionRule -> Set RTDVar
+trVariables (TransitionRule g prd pre post) = Set.fromList $ toList g ++ toList pre ++ toList post
+
 instance Show TransitionRule where
         show (TransitionRule gd pred pre post) =
                 show gd ++ " : " ++ show pred ++ " ~> " ++ show post
@@ -88,6 +99,8 @@ class RTCGetter a where
                         (Map.lookup s (rtcRegionTypes (c ^. theRTContext)))
                 where
                         resError s = (error $ "The region identifier " ++ show s ++ " could not be resolved.")
+lookupRType :: (MonadReader r m, RTCGetter r) => RTId -> m RegionType
+lookupRType rtid = view resolveRType `ap` return rtid 
 
 createRegionTypeContext :: [RegionType] -> RegionTypeContext
 createRegionTypeContext = crtcs 0 (RegionTypeContext Map.empty Map.empty)

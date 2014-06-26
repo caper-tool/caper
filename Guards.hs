@@ -141,6 +141,14 @@ instance ExpressionSub GuardParameters PermissionExpression where
 instance ExpressionSub Guard PermissionExpression where
         exprSub s (GD g) = GD $ Map.map (exprSub s) g
 
+-- This is duplicated code, but to avoid that would need UndecidableInstances
+instance ExpressionSub GuardParameters Expr where
+        exprSub _ NoGP = NoGP
+        exprSub s (PermissionGP pe) = PermissionGP (exprSub s pe)
+
+instance ExpressionSub Guard Expr where
+        exprSub s (GD g) = GD $ Map.map (exprSub s) g
+
 toGuard :: (Typeable v, Show v, Throws (GuardException v) l) => GuardAST v -> EM l (Guard v)
 toGuard gast = tg (Map.empty) gast
         where

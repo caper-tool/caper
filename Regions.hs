@@ -1,14 +1,21 @@
 {- Regions -}
 module Regions where
-import Control.Monad.State hiding (mapM_,mapM)
-import Control.Monad.Reader hiding (mapM_,mapM)
+import Prelude hiding (mapM_,mapM,concat)
+import Control.Monad.State hiding (mapM_,mapM,forM_)
+import Control.Monad.Reader hiding (mapM_,mapM,forM_)
 import Control.Lens
+import Data.Foldable
+import Data.Traversable
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 
 import RegionTypes
-import AliasingMap
+import AliasingMap (AliasMap)
+import qualified AliasingMap as AM
 import ProverDatatypes
 import Prover -- TODO: move some stuff from Prover to ProverDatatypes?
 import Guards
+import Transitions
 
 
 data RegionInstance = RegionInstance {
@@ -22,6 +29,9 @@ data Region = Region {
         regState :: Maybe (ValueExpression VariableID),
         regGuards :: Guard VariableID
 }
+
+class RegionLenses a where
+        regions :: Simple Lens a (AliasMap VariableID Region)
 
 -- TODO: possibly move somewhere more relevant
 mergeMaybe :: (Monad m) => (a -> a -> m a) -> Maybe a -> Maybe a -> m (Maybe a)
@@ -66,5 +76,99 @@ mergeRegions r1 r2 = do
                                         assume condFalse
                         _ -> return ()
                 return $ Region dirty ti s g
+
+-- Stabilise all regions
+stabiliseRegions :: (ProverM s r m, RegionLenses s, RTCGetter r) =>
+                        m ()
+stabiliseRegions = do
+                        regs <- use regions
+                        regs' <- mapM stabiliseRegion regs
+                        regions .= regs'
+
+{-
+-- Stabilise a region (only if it is dirty)
+stabiliseRegion :: (ProverM s r m, RTCGetter r) =>
+                        Region -> m Region
+stabiliseRegion reg = if regDirty reg then
+                                stabiliseDirtyRegion reg
+                        else
+                                return reg -}
+
+-- Stabilise a region
+stabiliseRegion :: (ProverM s r m, RTCGetter r) =>
+                        Region -> m Region
+-- Not dirty, so nothing to do!
+stabiliseRegion
+        reg@(Region False _ _ _) = return reg
+-- Here we know enough about the region that we have to do something
+stabiliseRegion
+        (Region _ rti@(Just (RegionInstance rtid ps)) (Just se) gd) = do
+                        -- resolve region type
+                        rt <- lookupRType rtid
+                        transitions <- checkTransitions rt ps gd
+                        -- compute the closure relation
+                        tcrel <- computeClosureRelation (rtStateSpace rt) transitions
+                        -- create a new state variable
+                        newStateVar <- newAvar "state"
+                        -- assume it is related to the old state
+                        assumeTrue $ tcrel se (var newStateVar)
+                        -- return the clean region with the new state
+                        return $ Region
+                                False
+                                rti
+                                (Just (var newStateVar))
+                                gd
+-- In this case, we don't know the region type, or don't know the
+-- region state, in which case we don't know the stabilised region
+-- state.
+stabiliseRegion r = return $ r {regDirty = False, regState = Nothing}
+
+
+checkTransitions :: (ProverM s r m) => RegionType -> [Expr VariableID] -> Guard VariableID -> m [GuardedTransition VariableID]
+checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem rt)
+        where
+                boundVars tr = Set.difference (trVariables tr) (rtParamVars rt)
+                params = Map.fromList $ zip (map fst $ rtParameters rt) ps
+                checkTrans tr@(TransitionRule trgd pred pre post) = do
+                        -- Compute a binding for fresh variables
+                        bvmap <- freshInternals rtdvStr (boundVars tr)
+                        let bvars = elems bvmap
+                        let subst = Map.union params $ fmap var bvmap
+                        let s v = Map.findWithDefault (error "checkTransitions: variable not found") v subst
+                        -- Now have to check if guard is applicable!
+                        return $ GuardedTransition bvars
+
+
+                        
+                        boundVars tr
+                        Set.difference 
+                        undefined
+
+subVars' :: (Traversable t, ExpressionSub t e, Expression e) =>
+        (String -> VariableID) -> RegionType -> [e VariableID] -> t RTDVar -> t VariableID
+subVars' frsh rt ps o = exprSub s o
+        where
+                s v@(RTDVar vn) = Map.findWithDefault (var $ frsh vn) v params
+                params = Map.fromList $ zip (map fst $ rtParameters rt) ps
+
+subVars :: (ProverM s r m, Traversable t, ExpressionSub t e, Expression e) =>
+        RegionType -> [e VariableID] -> t RTDVar -> m (t VariableID)
+subVars rt ps o = do
+                -- determine the substitution
+                subs <- foldrM makeSubs params o
+                let s v = Map.findWithDefault (error "subVars: variable not found") v subs
+                -- apply the substitution
+                return $ exprSub s o
+        where
+                makeSubs vr@(RTDVar vn) mp =
+                        -- determine substitution
+                        case Map.lookup vr params of
+                                (Just e) -> return mp
+                                Nothing -> do
+                                        mt <- liftM var $ freshInternal vn
+                                        return $ Map.insert vr mt mp
+                --params :: Map.Map RTDVar (e VariableID)
+                params = Map.fromList $ zip (map fst $ rtParameters rt) ps
+
 
 -- Check if a guard is compatible 

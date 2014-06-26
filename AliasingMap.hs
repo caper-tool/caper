@@ -1,4 +1,4 @@
-
+{-# LANGUAGE DeriveFunctor #-}
 {- Provide maps with aliasing.
  - The purpose is to support handling of shared regions.
  - Some region variables may be aliases for each other.
@@ -8,10 +8,14 @@
  -}
 
 module AliasingMap where
+import Prelude hiding (foldr)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.List (intercalate)
 import Data.Maybe
+import Data.Foldable
+import Data.Traversable
+import Control.Applicative
 import Control.Monad
 import Control.Monad.Trans.Maybe
 
@@ -23,7 +27,19 @@ import Control.Monad.Trans.Maybe
  - certainly no cycles.  Neither shall there be 'dangling'
  - aliases.
  -}
-newtype AliasMap a b = AliasMap (Map a (Either a b))
+newtype AliasMap a b = AliasMap (Map a (Either a b)) deriving (Functor)
+
+instance Foldable (AliasMap a) where
+        foldr f x0 (AliasMap m) = foldr f' x0 m
+                where
+                        f' (Left _) x = x
+                        f' (Right y) x = f y x
+
+instance Traversable (AliasMap a) where
+        sequenceA (AliasMap m) = pure AliasMap <*> sequenceA (fmap el m)
+                where
+                        el (Left x) = pure (Left x)
+                        el (Right y) = pure Right <*> y
 
 instance (Show a, Show b, Eq a) => Show (AliasMap a b) where
         show (AliasMap m) = intercalate "," $ Map.foldWithKey ofold [] m
