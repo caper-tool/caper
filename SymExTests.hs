@@ -3,9 +3,9 @@ import Provers
 import SymbolicState
 import Choice
 import Control.Monad.RWS
-import AST
+import Parser.AST
 import Text.Parsec.Pos
-import Parser
+import Parser.Parser
 
 posCons = newPos "[console]" 0 0
 
