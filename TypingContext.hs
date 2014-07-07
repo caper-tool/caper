@@ -8,6 +8,7 @@ import Control.Monad.State hiding (mapM_)
 import Exceptions
 import Data.List hiding (foldl, foldr)
 import Data.Monoid
+import Data.Typeable
 
 newtype TContext v t = TContext (Map v (Either Int t), Int)
 
