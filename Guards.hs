@@ -15,6 +15,7 @@ import Control.Monad.Trans.Maybe
 import ProverDatatypes
 import Prover
 import PermissionsInterface
+import Data.Typeable
 import Data.Foldable
 import Data.Traversable
 import Data.Maybe
