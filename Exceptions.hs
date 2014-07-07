@@ -4,6 +4,7 @@ module Exceptions(
         module Exceptions,
         module Control.Monad.Exception)
         where
+import Data.Typeable
 import Control.Monad.Exception
 
 data TypeUnificationException v t = TypeUnificationException v t t
