@@ -4,13 +4,13 @@
 -- lazy side-effects.  For practical purposes, the side-effects
 -- must be tolerant when it comes to ordering.
 
-module Choice where
+module Utils.Choice where
 
 import Control.Monad hiding (sequence)
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 import Debug.Trace
-import NondetClasses
+import Utils.NondetClasses
 
 -- ChoiceM datatype represents a non-determinstic choice of
 -- values of type a, having (lazy) side-effects in monad m.

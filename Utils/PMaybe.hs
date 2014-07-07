@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-module PMaybe where
+module Utils.PMaybe where
 import Control.Exception
 import Control.Concurrent
 import Control.Concurrent.MVar

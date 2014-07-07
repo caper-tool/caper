@@ -4,7 +4,7 @@ import Text.Parsec.Char
 import qualified Text.Parsec.Token as P
 import DPLL2
 import Data.Bits
-import PMaybe
+import Utils.PMaybe
 
 decimal = P.decimal (P.makeTokenParser emptyDef)
 

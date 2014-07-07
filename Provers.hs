@@ -15,7 +15,7 @@ import FirstOrder
 import Data.ConfigFile
 import Control.Monad.Error
 import Control.Monad.Reader
-import MemoIO
+import Utils.MemoIO
 
 configDefaults :: MonadError CPError m => m ConfigParser
 configDefaults = readstring emptyCP "[Provers]\npermissions = internal\nvalues = z3\n[EProver]\ntimeout=1000\n[InternalProver]\nmode=tree\n[Z3Prover]\ntimeout=1000"

@@ -10,8 +10,8 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 
 import RegionTypes
-import AliasingMap (AliasMap)
-import qualified AliasingMap as AM
+import Utils.AliasingMap (AliasMap)
+import qualified Utils.AliasingMap as AM
 import ProverDatatypes
 import Prover -- TODO: move some stuff from Prover to ProverDatatypes?
 import Guards
@@ -132,7 +132,7 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
                 checkTrans tr@(TransitionRule trgd pred pre post) = do
                         -- Compute a binding for fresh variables
                         bvmap <- freshInternals rtdvStr (boundVars tr)
-                        let bvars = elems bvmap
+                        let bvars = Map.elems bvmap
                         let subst = Map.union params $ fmap var bvmap
                         let s v = Map.findWithDefault (error "checkTransitions: variable not found") v subst
                         -- Now have to check if guard is applicable!

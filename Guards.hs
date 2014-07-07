@@ -19,7 +19,7 @@ import Data.Typeable
 import Data.Foldable
 import Data.Traversable
 import Data.Maybe
-import Choice
+import Utils.Choice
 import Control.Monad.State hiding (mapM_,mapM,sequence)
 --import System.IO.Unsafe -- TODO: Don't depend on this.
 import Debug.Trace

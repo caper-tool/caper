@@ -1,7 +1,7 @@
 import ProverDatatypes
 import Provers
 import SymbolicState
-import Choice
+import Utils.Choice
 import Control.Monad.RWS
 import Parser.AST
 import Text.Parsec.Pos

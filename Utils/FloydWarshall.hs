@@ -1,5 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
-module FloydWarshall where
+module Utils.FloydWarshall where
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as VM

@@ -5,7 +5,7 @@ import Control.Monad.Reader.Class
 import Control.Monad.IO.Class
 import ProverDatatypes
 import Prover
-import FloydWarshall
+import Utils.FloydWarshall
 import Prelude hiding (foldl', elem, foldr)
 import Data.Foldable
 import RegionTypes

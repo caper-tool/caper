@@ -1,4 +1,4 @@
-module NondetClasses where
+module Utils.NondetClasses where
 
 import Control.Monad
 

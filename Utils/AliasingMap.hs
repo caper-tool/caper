@@ -7,7 +7,7 @@
  - Some may definitely not be aliases.
  -}
 
-module AliasingMap where
+module Utils.AliasingMap where
 import Prelude hiding (foldr)
 import Data.Map (Map)
 import qualified Data.Map as Map

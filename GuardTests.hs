@@ -13,7 +13,7 @@ import Permissions
 import Prover
 import Provers
 import Control.Monad.List hiding (mapM)
-import Choice
+import Utils.Choice
 
 gt1 = ProductGT (NamedPermissionGT "A") (SumGT (NamedPermissionGT "B") (ProductGT (NamedGT "C") (NamedGT "D")))
 
