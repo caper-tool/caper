@@ -4,11 +4,11 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
 
-module Interpreter where
+module Interpreter.Interpreter where
 
-import AST
-import Parser
-import Environment
+import Parser.AST
+import Parser.Parser
+import Interpreter.Environment
 import Data.IORef
 import Data.Maybe
 import Data.List
@@ -132,8 +132,14 @@ instance Eval Stmt (Maybe Integer) where
 evalAndPrint :: Env -> String -> IO ()
 evalAndPrint env expr = evalString env expr >>= putStrLn
 
+parseStatementAux :: String -> ThrowsError Stmt
+parseStatementAux str =
+  case parse statementParser "" str of
+    Left e  -> throwError $ Parser e
+    Right r -> return r
+
 evalString :: Env -> String -> IO String
-evalString env expr = runIOThrows $ liftM show $ (liftThrows $ parseStatement expr) >>= (eval :: Env -> Stmt -> IOThrowsError (Maybe Integer)) env
+evalString env expr = runIOThrows $ liftM show $ (liftThrows $ parseStatementAux expr) >>= (eval :: Env -> Stmt -> IOThrowsError (Maybe Integer)) env
 
 until_ :: Monad m => (a -> Bool) -> m a -> (a -> m ()) -> m ()
 until_ pred prompt action = do 

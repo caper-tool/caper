@@ -1,4 +1,4 @@
-module Parser(parseFile, parseString, parseAExpression, parseBExpression, aExpressionParser, statementParser, parseStatement) where
+module Parser.Parser(parseFile, parseString, parseAExpression, parseBExpression, aExpressionParser, statementParser, parseStatement) where
 
 import Debug.Trace
 import System.IO
@@ -9,8 +9,8 @@ import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as Token
-import AST
-import Environment
+import Parser.AST
+--import Environment
 
 languageDef =
   emptyDef { Token.commentStart    = "/*"
@@ -45,7 +45,7 @@ languageDef =
                                      ]
            , Token.reservedOpNames = ["+", "-", "*", "/", ":="
                                      , "=", "!=", "<", ">", ">=", "<="
-                                     , "and", "or", "not", "?", ":",
+                                     , "and", "or", "not", "?", ":"
                                      , "&*&", "=p=", "=v=", "$", "!"
                                      , "==", "|->"
                                      ]
@@ -277,8 +277,8 @@ parseBExpression str =
 statementParser :: Parser Stmt
 statementParser = whiteSpace >> sequenceOfStmt
 
-parseStatement :: String -> ThrowsError Stmt
+parseStatement :: String -> Stmt
 parseStatement str =
   case parse statementParser "" str of
-    Left e  -> throwError $ Parser e
-    Right r -> return r
+    Left e  -> error $ show e
+    Right r -> r

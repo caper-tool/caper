@@ -15,7 +15,7 @@ import Control.Monad.RWS hiding (mapM_,mapM,msum)
 import Data.Foldable
 import Data.List (intersperse)
 
-import AST
+import Parser.AST
 
 
 -- default (ValueExpression VariableID, Integer, Double)

@@ -1,6 +1,6 @@
-module Environment where
+module Interpreter.Environment where
 
-import AST
+import Parser.AST
 import Data.IORef
 import Data.List
 import Data.Maybe

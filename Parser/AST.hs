@@ -1,4 +1,4 @@
-module AST where
+module Parser.AST where
 
 import Data.List
 import Text.ParserCombinators.Parsec
