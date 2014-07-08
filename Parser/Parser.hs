@@ -18,6 +18,7 @@ languageDef =
            , Token.commentLine     = "//"
            , Token.identStart      = letter
            , Token.identLetter     = alphaNum
+           , Token.caseSensitive   = True
            , Token.reservedNames   = [ "if"
                                      , "else"
                                      , "while"
@@ -47,7 +48,7 @@ languageDef =
                                      , "=", "!=", "<", ">", ">=", "<="
                                      , "and", "or", "not", "?", ":"
                                      , "&*&", "=p=", "=v=", "$", "!"
-                                     , "==", "|->"
+                                     , "==", "|->", "@"
                                      ]
            }
 

@@ -36,8 +36,8 @@ data ABinOp = Add
 -- Statements
 data Stmt = SeqStmt SourcePos [Stmt]
           | IfElseStmt SourcePos BExpr Stmt Stmt
-          | WhileStmt SourcePos (Maybe LStmt) BExpr Stmt
-          | DoWhileStmt SourcePos (Maybe LStmt) Stmt BExpr
+          | WhileStmt SourcePos (Maybe Assrt) BExpr Stmt
+          | DoWhileStmt SourcePos (Maybe Assrt) Stmt BExpr
           | LocalAssignStmt SourcePos String AExpr
           | DerefStmt SourcePos String AExpr
           | AssignStmt SourcePos AExpr AExpr
@@ -45,12 +45,50 @@ data Stmt = SeqStmt SourcePos [Stmt]
           | ReturnStmt SourcePos (Maybe AExpr)
           | SkipStmt SourcePos
           | ForkStmt SourcePos String [AExpr]
-          | AssertStmt SourcePos LStmt
+          | AssertStmt SourcePos Assrt
 
-data LStmt = MapsTo SourcePos AExpr AExpr
+-- Assertions
+data Assrt = MapsTo SourcePos AExpr AExpr
+
+data VarExpr = Variable SourcePos String
+             | WildCard SourcePos
+
+-- Value Expressions
+data ValExpr = VarValExpr SourcePos VarExpr
+             | ConstValExpr SourcePos Integer
+             | NegValExpr SourcePos ValUnOp ValExpr
+             | BinaryValExpr SourcePos ValBinOp ValExpr ValExpr
+             | SetValExpr SourcePos [ValExpr]
+
+data ValBinOp = ValAdd
+              | ValSubtract
+              | ValMultiply
+              | ValDivide
+
+-- Permission expressions
+data PermExpr = VarPermExpr SourcePos VarExpr
+              | ConstPermExpr SourcePos PermConst
+              | UnaryPermExpr SourcePos PermUnOp PermExpr
+              | BinaryPermExpr SourcePos PermBinOp PermExpr PermExpr
+
+data PermConst = FullPerm
+               | EmptyPerm
+
+data PermUnOp = Complement
+
+data PermBinOp = DisjUnion
+
+-- Pure Assertions
+data PureAssrt = ConstBAssrt SourcePos Bool
+               | NotBAssrt SourcePos PureAssrt
+
+--data CellAssrt = Cell SourcePos ? ?
+--               | CellBlock SourcePos ? ?
+
+--data RegionAssrt = Region SourcePos String 
 
 -- Declarations
-data Declr = FunctionDeclr SourcePos String (Maybe LStmt) (Maybe LStmt) [String] Stmt
+data Declr = FunctionDeclr SourcePos String (Maybe Assrt) (Maybe Assrt) [String] Stmt
 
 instance Show BExpr where
   show (ConstBExpr _ b)          = show b
@@ -100,8 +138,8 @@ instance Show Stmt where
   show (ForkStmt _ n es)             = "fork " ++ n ++ "(" ++ intercalate ", " (map show es) ++ ");"
   show (AssertStmt _ ls)             = "assert " ++ show ls ++ ";"
 
-instance Show LStmt where
-  show (MapsTo _ e1 e2) = show e1 ++ " |-> " ++ show e2;
+--instance Show Assrt where
+--  show (MapsTo _ e1 e2) = show e1 ++ " |-> " ++ show e2;
 
 instance Show Declr where
   show (FunctionDeclr _ n Nothing Nothing args s)       =
