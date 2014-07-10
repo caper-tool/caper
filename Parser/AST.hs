@@ -56,7 +56,7 @@ data VarExpr = Variable SourcePos String
 -- Value Expressions
 data ValExpr = VarValExpr SourcePos VarExpr
              | ConstValExpr SourcePos Integer
-             | NegValExpr SourcePos ValUnOp ValExpr
+--             | NegValExpr SourcePos ValUnOp ValExpr
              | BinaryValExpr SourcePos ValBinOp ValExpr ValExpr
              | SetValExpr SourcePos [ValExpr]
 
@@ -138,8 +138,8 @@ instance Show Stmt where
   show (ForkStmt _ n es)             = "fork " ++ n ++ "(" ++ intercalate ", " (map show es) ++ ");"
   show (AssertStmt _ ls)             = "assert " ++ show ls ++ ";"
 
---instance Show Assrt where
---  show (MapsTo _ e1 e2) = show e1 ++ " |-> " ++ show e2;
+instance Show Assrt where
+  show (MapsTo _ e1 e2) = show e1 ++ " |-> " ++ show e2;
 
 instance Show Declr where
   show (FunctionDeclr _ n Nothing Nothing args s)       =
