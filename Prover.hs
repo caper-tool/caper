@@ -238,6 +238,8 @@ emptyAssumptions :: Assumptions
 emptyAssumptions = Assumptions TC.empty []
 
 
+class (MonadIO m, MonadState s m, AssumptionLenses s, MonadReader r m, Provers r) => ProverM s r m
+instance (MonadIO m, MonadState s m, AssumptionLenses s, MonadReader r m, Provers r) => ProverM s r m
 
 type ProverT = StateT Assumptions
 -- Invariant: All variables occuring free in assumptions MUST be bound in bindings
@@ -357,13 +359,13 @@ checkConsistency p vars asss = do
                         rp <- p $ FOFNot $ fmap varToString $ foldr FOFExists (foldr FOFAnd FOFTrue asss) vars
                         return $ fmap not rp
 
--- TODO: Use MonadReader to get the provers
-isConsistent :: (MonadIO m, MonadState s m, AssumptionLenses s, Provers p) => p -> m (Maybe Bool)
+isConsistent :: ProverM s r m => m (Maybe Bool)
 -- Check whether the current set of assumptions is consistent
 -- (i.e. False does not follow)
-isConsistent ps = get >>= ic
-        where
-                ic ass = liftIO $ do
+isConsistent = do
+                ps <- ask
+                ass <- get
+                liftIO $ do
                         rp <- checkConsistency (permissionsProver ps) (permissionVariables ass) (permissionAssumptions ass)
                         if rp == Just False then return $ Just False
                         else do
@@ -650,8 +652,14 @@ justCheck ps = do
                 liftIO $ print rv
                 if rv /= Just True then mzero else return ()
 
-class (MonadIO m, MonadState s m, AssumptionLenses s, MonadReader r m, Provers r) => ProverM s r m
-instance (MonadIO m, MonadState s m, AssumptionLenses s, MonadReader r m, Provers r) => ProverM s r m
+
+hypothetical :: ProverM s r m => RWST r () Assertions IO a -> m a
+-- Evaluate hypothetically, given the current assumptions
+hypothetical mn = do
+                rr <- ask
+                assms <- use theAssumptions
+                (ans, _, _) <- liftIO $ runRWST mn rr (emptyAssertions assms)
+                return ans
 
 hypotheticalCheck :: ProverM s r m => --(MonadIO m, MonadState s m, AssumptionLenses s, MonadReader r m, Provers r) => 
                 RWST r () Assertions (MaybeT IO) () -> m Bool

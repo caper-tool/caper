@@ -66,7 +66,7 @@ ssSize _ = mzero
 data TransitionRule = TransitionRule
         {
                 -- The guard that is required to perform the transition
-                trGuard :: GuardAST RTDVar,
+                trGuard :: Guard RTDVar,
                 -- Some (pure) predicate that conditions the transition
                 -- (Not Implemented Yet)
                 trPredicate :: (),

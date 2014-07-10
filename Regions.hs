@@ -136,7 +136,17 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
                         let subst = Map.union params $ fmap var bvmap
                         let s v = Map.findWithDefault (error "checkTransitions: variable not found") v subst
                         -- Now have to check if guard is applicable!
-                        return [GuardedTransition bvars undefined (exprSub s pre) (exprSub s post)]
+                        guardCompat <- hypothetical $ do
+                                -- combine guards
+                                gd' <- mergeGuards gd (exprSub s trgd)
+                                -- check the matches the guard type
+                                if checkGuardAtType gd' (topLevelToWeakGuardType $ rtGuardType rt) then
+                                        -- and is consistent
+                                        isConsistent
+                                else
+                                        return $ Just False
+                        return $ if guardCompat == Just False then [] else
+                                [GuardedTransition bvars undefined (exprSub s pre) (exprSub s post)]
 
 
 subVars' :: (Traversable t, ExpressionSub t e, Expression e) =>
