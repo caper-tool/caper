@@ -136,13 +136,8 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
                         let subst = Map.union params $ fmap var bvmap
                         let s v = Map.findWithDefault (error "checkTransitions: variable not found") v subst
                         -- Now have to check if guard is applicable!
-                        return $ GuardedTransition bvars
+                        return [GuardedTransition bvars undefined (exprSub s pre) (exprSub s post)]
 
-
-                        
-                        boundVars tr
-                        Set.difference 
-                        undefined
 
 subVars' :: (Traversable t, ExpressionSub t e, Expression e) =>
         (String -> VariableID) -> RegionType -> [e VariableID] -> t RTDVar -> t VariableID
