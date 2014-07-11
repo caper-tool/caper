@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFunctor, FlexibleContexts #-}
 module SymbolicState where
 
 import Prelude hiding (sequence,foldl,foldr,mapM_,mapM,elem,notElem,concat)
@@ -14,8 +14,12 @@ import Control.Monad.State hiding (mapM_,mapM,msum)
 import Control.Monad.RWS hiding (mapM_,mapM,msum)
 import Data.Foldable
 import Data.List (intersperse)
+import Data.Traversable
 
+import qualified Utils.AliasingMap as AliasMap
 import Parser.AST
+import Regions
+import RegionTypes
 
 
 -- default (ValueExpression VariableID, Integer, Double)
@@ -66,18 +70,19 @@ showPredicate (PName s, l) = show s ++ show l
 data SymbState p = SymbState {
         _proverState :: p,
         _ssProgVars :: PVarBindings,
-        _ssPreds :: Predicates
+        _ssPreds :: Predicates,
+        _ssRegions :: AliasMap.AliasMap VariableID Region
         } deriving (Functor)
 makeLenses ''SymbState
 
 emptySymbState :: SymbState Assumptions
-emptySymbState = SymbState emptyAssumptions Map.empty Map.empty
+emptySymbState = SymbState emptyAssumptions Map.empty Map.empty AliasMap.empty
 
 showPVarBindings :: PVarBindings -> String
 showPVarBindings vs = Map.foldWithKey (\pv var s-> (pv ++ " := " ++ show var ++ "\n" ++ s)) "" vs
 
 instance (Show p) => Show (SymbState p) where
-        show (SymbState p vs preds) = "Pure facts:" ++ show p ++ "\nProgram variables:\n" ++ showPVarBindings vs ++ "Heap:\n" ++ (concat . intersperse "\n" . map showPredicate . toPredicateList) preds
+        show (SymbState p vs preds regs) = "Pure facts:" ++ show p ++ "\nProgram variables:\n" ++ showPVarBindings vs ++ "Heap:\n" ++ (concat . intersperse "\n" . map showPredicate . toPredicateList) preds
 
 
 instance AssumptionLenses p => AssumptionLenses (SymbState p) where
@@ -94,10 +99,34 @@ instance AssumptionLenses p => SymbStateLenses (SymbState p) where
         progVars = ssProgVars
         preds = ssPreds
 
+instance RegionLenses (SymbState p) where
+        regions = ssRegions
+
 emptySymbStateWithVars :: [String] -> SymbState Assumptions
 emptySymbStateWithVars vs = execState (do
                 bindVarsAs (map VIDNamed vs) VTValue
                 ssProgVars .= Map.fromList [(x, var (VIDNamed x)) | x <- vs]) emptySymbState
+
+newtype InformedRegion = InformedRegion (Region, Maybe RegionType)
+
+instance Show InformedRegion where
+        show (InformedRegion (Region _ (Just (RegionInstance _ params)) s gd, Just rt)) = rtRegionTypeName rt ++ "(" ++ (concat (map ((++ ",") . show) params)) ++ maybe "_" show s ++ "): " ++ show gd ++ "\n"
+        show (InformedRegion (Region _ _ s gd, _)) = "?(" ++ maybe "_" show s ++ "): " ++ show gd ++ "\n"
+
+showSymbState :: (MonadState (SymbState p) m, Show p, MonadReader r m, RTCGetter r) => m String
+showSymbState = do
+                state <- get
+                iregs <- mapM inform (_ssRegions state)
+                return $ show state ++ "\nRegions:\n" ++ show iregs
+        where
+                inform reg = case regTypeInstance reg of
+                        (Just (RegionInstance rtid _)) -> do
+                                        rt <- lookupRType rtid
+                                        return $ InformedRegion (reg, Just rt)
+                        _ -> return $ InformedRegion (reg, Nothing)
+
+printSymbState :: (MonadState (SymbState p) m, Show p, MonadReader r m, RTCGetter r, MonadIO m) => m ()
+printSymbState = showSymbState >>= liftIO . putStrLn
 
 
 -- Symbolic state monad transformer

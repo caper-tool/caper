@@ -30,8 +30,13 @@ data Region = Region {
         regGuards :: Guard VariableID
 }
 
+newtype Regions = Regions {_regions :: AliasMap VariableID Region}
+
 class RegionLenses a where
         regions :: Simple Lens a (AliasMap VariableID Region)
+
+instance RegionLenses Regions where
+        regions = lens _regions (\x y -> Regions y)
 
 -- TODO: possibly move somewhere more relevant
 mergeMaybe :: (Monad m) => (a -> a -> m a) -> Maybe a -> Maybe a -> m (Maybe a)
@@ -146,7 +151,7 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
                                 else
                                         return $ Just False
                         return $ if guardCompat == Just False then [] else
-                                [GuardedTransition bvars undefined (exprSub s pre) (exprSub s post)]
+                                [GuardedTransition bvars FOFTrue (exprSub s pre) (exprSub s post)]
 
 
 subVars' :: (Traversable t, ExpressionSub t e, Expression e) =>

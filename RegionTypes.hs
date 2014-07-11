@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 module RegionTypes where
 import Control.Monad
 import Control.Monad.Reader.Class
@@ -9,6 +10,7 @@ import Data.Monoid
 import Data.Foldable
 import Control.Lens
 import Data.Maybe
+import Data.List (intercalate)
 
 import Guards
 import ProverDatatypes
@@ -38,6 +40,14 @@ data RegionType = RegionType
                 rtTransitionSystem :: [TransitionRule],
                 rtInterpretation :: () -- TODO: replace with appropriate repr. of assertion
         }
+
+instance Show RegionType where
+        show (RegionType nm params gt ss ts interp) =
+                "region " ++ nm ++ "(" ++ intercalate "," (map (show . fst) params) ++ ") {\n" ++
+                "  guards : " ++ show gt ++ "\n" ++
+                "  transitions {\n    " ++ intercalate "\n    " (map show ts) ++ "\n  }\n" ++
+                "}"
+
 
 rtWeakGT = topLevelToWeakGuardType . rtGuardType
 
@@ -81,7 +91,7 @@ trVariables (TransitionRule g prd pre post) = Set.fromList $ toList g ++ toList 
 
 instance Show TransitionRule where
         show (TransitionRule gd pred pre post) =
-                show gd ++ " : " ++ show pred ++ " ~> " ++ show post
+                show gd ++ " : " ++ show pre ++ " ~> " ++ show post
 
 data RegionTypeContext = RegionTypeContext
         {
@@ -101,6 +111,12 @@ class RTCGetter a where
                         resError s = (error $ "The region identifier " ++ show s ++ " could not be resolved.")
 lookupRType :: (MonadReader r m, RTCGetter r) => RTId -> m RegionType
 lookupRType rtid = view resolveRType `ap` return rtid 
+
+lookupRTName :: (RTCGetter a) => String -> Getter a (Maybe RTId)
+lookupRTName s = to $ \c -> Map.lookup s (rtcIds (c ^. theRTContext))
+
+instance RTCGetter RegionTypeContext where
+        theRTContext = to id
 
 createRegionTypeContext :: [RegionType] -> RegionTypeContext
 createRegionTypeContext = crtcs 0 (RegionTypeContext Map.empty Map.empty)

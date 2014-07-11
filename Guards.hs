@@ -19,6 +19,7 @@ import Data.Typeable
 import Data.Foldable
 import Data.Traversable
 import Data.Maybe
+import Data.List (intercalate)
 import Utils.Choice
 import Control.Monad.State hiding (mapM_,mapM,sequence)
 --import System.IO.Unsafe -- TODO: Don't depend on this.
@@ -38,7 +39,17 @@ data GuardTypeAST =
 --                | ParametrisedGT String
                 | ProductGT GuardTypeAST GuardTypeAST
                 | SumGT GuardTypeAST GuardTypeAST
-                deriving (Show)
+
+instance Show GuardTypeAST where
+        show (NamedGT nm) = nm
+        show (NamedPermissionGT nm) = "%" ++ nm
+        show (ProductGT gt1 gt2) = "(" ++ show gt1 ++ " * " ++ show gt2 ++ ")"
+        show (SumGT gt1 gt2) = "(" ++ show gt1 ++ " + " ++ show gt2 ++ ")"
+
+instance Show TopLevelGuardTypeAST where
+        show ZeroGT = "0"
+        show (SomeGT gt) = show gt
+
 
 data GuardTypeException =
                 GTEMultipleOccurrence String (Maybe GuardTypeAST)
@@ -131,7 +142,15 @@ data GuardParameters v = NoGP | PermissionGP (PermissionExpression v)
  -- | Parameters [ValueExpression] | CoParameters [ValueExpression] [ValueExpression]
         deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
-newtype Guard v = GD (Map.Map String (GuardParameters v)) deriving (Eq,Ord,Show,Functor,Foldable,Traversable)
+newtype Guard v = GD (Map.Map String (GuardParameters v)) deriving (Eq,Ord,Functor,Foldable,Traversable)
+
+instance Show v => Show (Guard v) where
+        show (GD mp) = doshow (Map.toList mp)
+                where
+                        doshow [] = "0"
+                        doshow ll = intercalate " $ " (map showone ll)
+                        showone (s, NoGP) = s
+                        showone (s, PermissionGP perm) = s ++ "[" ++ show perm ++ "]"
 
 guardLift f (GD x) = GD (f x)
 
@@ -210,6 +229,10 @@ mergeGuards (GD g1) (GD g2) = (sequence $ Map.unionWith unionop (fmap return g1)
                                 v2 <- p2
                                 case (v1, v2) of
                                         (PermissionGP perm1, PermissionGP perm2) -> do
+                                                -- Assume both contributions are non-zero
+                                                -- WARNING: this assumption is subtle
+                                                assumeFalse $ PAEq perm1 PEZero
+                                                assumeFalse $ PAEq perm2 PEZero
                                                 assumeTrue $ PADis perm1 perm2
                                                 return $ PermissionGP $ PESum perm1 perm2
                                         _ -> do

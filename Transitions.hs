@@ -103,7 +103,7 @@ computeConditions gts i j = if i == j then return FOFTrue else
                                 return (fmin a b')
 
 translateIn :: Int -> (Int -> Int -> a) -> (Int -> Int -> a)
-translateIn offset f x y = f (x - offset) (y - offset)
+translateIn offset f x y = f (x + offset) (y + offset)
 
 computeInitialMatrix :: (MonadIO m, MonadReader r m, Provers r, Eq v, StringVariable v) =>
         Int -> Int -> [GuardedTransition v] -> m (Matrix (FOF ValueAtomic v))
@@ -125,6 +125,7 @@ computeClosureRelation _ [] = return (\x y -> FOFAtom $ VAEq x y)
 -- Finite state scenario
 computeClosureRelation (StateSpace (Just lower) (Just upper)) gts = do
                         mx <- computeInitialMatrix lower upper gts
+                        -- liftIO $ putStrLn $ show $ fmap (fmap (fmap varToString)) mx
                         let mx' = runFloyd mx
                         return $ matrixToReflRelation mx' (toInteger lower)
 -- Fallback: universal relation
