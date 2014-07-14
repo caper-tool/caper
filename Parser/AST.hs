@@ -95,7 +95,7 @@ data PermRBinOp = PermEquality EqRBinOp
 -- Pure Assertions
 data PureAssrt = ConstBAssrt SourcePos Bool
                | NotBAssrt SourcePos PureAssrt
-               | BinaryVarAssrt SourcePos EqRBinOp String String
+               | BinaryVarAssrt SourcePos EqRBinOp VarExpr VarExpr
                | BinaryValAssrt SourcePos ValRBinOp ValExpr ValExpr
                | BinaryPermAssrt SourcePos PermRBinOp PermExpr PermExpr
 
