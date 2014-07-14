@@ -56,14 +56,25 @@ data VarExpr = Variable SourcePos String
 -- Value Expressions
 data ValExpr = VarValExpr SourcePos VarExpr
              | ConstValExpr SourcePos Integer
---             | NegValExpr SourcePos ValUnOp ValExpr
+             | UnaryValExpr SourcePos ValUnOp ValExpr
              | BinaryValExpr SourcePos ValBinOp ValExpr ValExpr
              | SetValExpr SourcePos [ValExpr]
+
+data ValUnOp = ValNegation
 
 data ValBinOp = ValAdd
               | ValSubtract
               | ValMultiply
               | ValDivide
+
+data EqRBinOp = ValEqual
+              | ValNotEqual
+
+data ValRBinOp = ValEquality EqRBinOp 
+               | ValGreater
+               | ValGreaterOrEqual
+               | ValLess
+               | ValLessOrEqual
 
 -- Permission expressions
 data PermExpr = VarPermExpr SourcePos VarExpr
@@ -76,11 +87,17 @@ data PermConst = FullPerm
 
 data PermUnOp = Complement
 
-data PermBinOp = DisjUnion
+data PermBinOp = Composition
+
+data PermRBinOp = PermEquality EqRBinOp
+                | Compatible
 
 -- Pure Assertions
 data PureAssrt = ConstBAssrt SourcePos Bool
                | NotBAssrt SourcePos PureAssrt
+               | BinaryVarAssrt SourcePos EqRBinOp String String
+               | BinaryValAssrt SourcePos ValRBinOp ValExpr ValExpr
+               | BinaryPermAssrt SourcePos PermRBinOp PermExpr PermExpr
 
 --data CellAssrt = Cell SourcePos ? ?
 --               | CellBlock SourcePos ? ?
