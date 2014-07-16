@@ -11,6 +11,7 @@ import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
 import Debug.Trace
 import Utils.NondetClasses
+import Utils.MonadHoist
 
 -- ChoiceM datatype represents a non-determinstic choice of
 -- values of type a, having (lazy) side-effects in monad m.
@@ -58,6 +59,13 @@ instance MonadTrans ChoiceM where
 
 instance (MonadIO m) => MonadIO (ChoiceM m) where
         liftIO = lift . liftIO
+
+instance MonadHoist ChoiceM where
+        hoist f (Choice c1 c2) = Choice (hoist f c1) (hoist f c2)
+        hoist f (Result a) = Result a
+        hoist f NoChoice = NoChoice
+        hoist f (Lazy x) = Lazy (liftM (hoist f) (f x))
+        hoist f (OrElse c1 c2 cont) = OrElse (hoist f c1) (hoist f c2) (hoist f . cont)
 
 
 firstChoiceT :: Monad m => ChoiceM m a -> MaybeT m a

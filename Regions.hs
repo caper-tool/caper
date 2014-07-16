@@ -52,7 +52,7 @@ mergeRegionInstances :: (MonadState s m, AssumptionLenses s) => RegionInstance -
 mergeRegionInstances i1@(RegionInstance t1 ps1) i2@(RegionInstance t2 ps2)
         = (if t1 /= t2 then
                 -- These regions cannot be the same, so assume false!
-                assume condFalse
+                assumeContradiction
           else forM_ (zip ps1 ps2) $ \(p1, p2) ->
                         -- The precondition should guarantee against an error
                         -- in exprEquality.
@@ -78,7 +78,7 @@ mergeRegions r1 r2 = do
                                 if checkGuardAtType g gt then
                                         return ()
                                 else
-                                        assume condFalse
+                                        assumeContradiction
                         _ -> return ()
                 return $ Region dirty ti s g
 

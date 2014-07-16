@@ -236,7 +236,7 @@ mergeGuards (GD g1) (GD g2) = (sequence $ Map.unionWith unionop (fmap return g1)
                                                 assumeTrue $ PADis perm1 perm2
                                                 return $ PermissionGP $ PESum perm1 perm2
                                         _ -> do
-                                                assume condFalse
+                                                assumeContradiction
                                                 -- Since we've assumed false, it shouldn't
                                                 -- matter what we return here...
                                                 return v1

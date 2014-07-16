@@ -192,6 +192,31 @@ instance Show VariableType where
         show VTPermission = "Permission"
         show VTValue = "Value"
 
+-- Variable identifiers
+-- Strings should be alpha-numeric
+data VariableID = VIDNamed String               -- To represent user-named vars
+                | VIDInternal String            -- To represent internally generated vars
+                | VIDExistential String         -- To represent assertion vars
+                deriving (Eq,Ord,Typeable)
+
+instance Show VariableID where
+        show (VIDNamed s) = s
+        show (VIDInternal s) = "__" ++ s
+        show (VIDExistential s) = "_e" ++ s
+
+instance StringVariable VariableID where
+        -- Generates a String from a VariableID
+        -- Unlike show, this should be injective, and is used to communicate variables to provers
+        varToString (VIDNamed n) = "n_" ++ n
+        varToString (VIDInternal n) = "i_" ++ n
+        varToString (VIDExistential n) = "e_" ++ n
+
+
+-- Refreshable instance allows us to generate a 'fresh' version of a variable
+instance Refreshable VariableID where
+        freshen (VIDNamed s) = [VIDNamed s' | s' <- freshen s]
+        freshen (VIDInternal s) = [VIDInternal s' | s' <- freshen s]
+        freshen (VIDExistential s) = [VIDExistential s' | s' <- freshen s]
 
 
 

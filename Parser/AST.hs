@@ -12,6 +12,7 @@ data BExpr = ConstBExpr SourcePos Bool
 -- Binary Boolean Operators
 data BBinOp = Or
             | And
+            deriving (Eq)
 
 -- Relational Operators
 data RBinOp = Equal
@@ -20,6 +21,7 @@ data RBinOp = Equal
             | GreaterOrEqual
             | Less
             | LessOrEqual
+            deriving (Eq)
 
 -- Arithmetic Expressions
 data AExpr = VarAExpr SourcePos String
@@ -32,6 +34,7 @@ data ABinOp = Add
             | Subtract
             | Multiply
             | Divide
+            deriving (Eq)
 
 -- Statements
 data Stmt = SeqStmt SourcePos [Stmt]
@@ -61,20 +64,24 @@ data ValExpr = VarValExpr SourcePos VarExpr
              | SetValExpr SourcePos [ValExpr]
 
 data ValUnOp = ValNegation
+                deriving (Eq)
 
 data ValBinOp = ValAdd
               | ValSubtract
               | ValMultiply
               | ValDivide
+              deriving (Eq)
 
 data EqRBinOp = ValEqual
               | ValNotEqual
+              deriving (Eq)
 
 data ValRBinOp = ValEquality EqRBinOp 
                | ValGreater
                | ValGreaterOrEqual
                | ValLess
                | ValLessOrEqual
+               deriving (Eq)
 
 -- Permission expressions
 data PermExpr = VarPermExpr SourcePos VarExpr
@@ -84,13 +91,17 @@ data PermExpr = VarPermExpr SourcePos VarExpr
 
 data PermConst = FullPerm
                | EmptyPerm
+               deriving (Eq)
 
 data PermUnOp = Complement
+                deriving (Eq)
 
 data PermBinOp = Composition
+                deriving (Eq)
 
 data PermRBinOp = PermEquality EqRBinOp
                 | Compatible
+                deriving (Eq)
 
 -- Pure Assertions
 data PureAssrt = ConstBAssrt SourcePos Bool

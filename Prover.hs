@@ -4,6 +4,7 @@
 {-# LANGUAGE RankNTypes, ScopedTypeVariables #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE BangPatterns #-}
 module Prover where
 
 import Prelude hiding (sequence,foldl,foldr,mapM_,mapM,elem,notElem,any)
@@ -14,6 +15,7 @@ import Control.Monad.State hiding (mapM_,mapM)
 import Control.Monad.Reader
 import Control.Monad.RWS
 import Control.Monad.Trans.Maybe
+import Control.Monad.Exception
 import PermissionsInterface
 import Permissions
 import Data.Maybe
@@ -32,37 +34,13 @@ import Debug.Trace
 
 
 
--- Variable identifiers
--- Strings should be alpha-numeric
-data VariableID = VIDNamed String               -- To represent user-named vars
-                | VIDInternal String            -- To represent internally generated vars
-                | VIDExistential String         -- To represent assertion vars
-                deriving (Eq,Ord,Typeable)
-
-instance Show VariableID where
-        show (VIDNamed s) = s
-        show (VIDInternal s) = "__" ++ s
-        show (VIDExistential s) = "_e" ++ s
-
-instance StringVariable VariableID where
-        -- Generates a String from a VariableID
-        -- Unlike show, this should be injective, and is used to communicate variables to provers
-        varToString (VIDNamed n) = "n_" ++ n
-        varToString (VIDInternal n) = "i_" ++ n
-        varToString (VIDExistential n) = "e_" ++ n
-
-
--- Refreshable instance allows us to generate a 'fresh' version of a variable
-instance Refreshable VariableID where
-        freshen (VIDNamed s) = [VIDNamed s' | s' <- freshen s]
-        freshen (VIDInternal s) = [VIDInternal s' | s' <- freshen s]
-        freshen (VIDExistential s) = [VIDExistential s' | s' <- freshen s]
 
 
 -- Conditions are the basic assertions and assumptions that are handled by the provers
 data Condition v = PermissionCondition (FOF PermissionAtomic v)
                 | ValueCondition (FOF ValueAtomic v)
                 | EqualityCondition v v
+                | DisequalityCondition v v
                 deriving (Eq, Ord, Foldable)
 
 
@@ -80,6 +58,13 @@ instance ConditionProp (FOF PermissionAtomic) where
 instance ConditionProp (FOF ValueAtomic) where
         toCondition = ValueCondition
         negativeCondition = ValueCondition . FOFNot
+
+instance ConditionProp Condition where
+        toCondition = id
+        negativeCondition (PermissionCondition f) = PermissionCondition (FOFNot f)
+        negativeCondition (ValueCondition f) = ValueCondition (FOFNot f)
+        negativeCondition (EqualityCondition e1 e2) = DisequalityCondition e1 e2
+        negativeCondition (DisequalityCondition e1 e2) = EqualityCondition e1 e2
 
 condFalse = ValueCondition FOFFalse
 
@@ -185,17 +170,20 @@ instance FreeVariables Condition where
         foldrFree f x (PermissionCondition fof) = foldrFree f x fof
         foldrFree f x (ValueCondition fof) = foldrFree f x fof
         foldrFree f x (EqualityCondition a b) = foldr f x [a,b]
+        foldrFree f x (DisequalityCondition a b) = foldr f x [a,b]
         
 
 instance Show v => Show (Condition v) where
         show (PermissionCondition pa) = show pa
         show (ValueCondition va) = show va
         show (EqualityCondition v1 v2) = show v1 ++ " = " ++ show v2
+        show (DisequalityCondition v1 v2) = show v1 ++ " != " ++ show v2
 
 instance ExpressionCASub Condition Expr where
         exprCASub s (PermissionCondition pc) = PermissionCondition $ exprCASub s pc
         exprCASub s (ValueCondition vc) = ValueCondition $ exprCASub s vc
         exprCASub s (EqualityCondition v1 v2) = exprEquality (s v1) (s v2)
+        exprCASub s (DisequalityCondition v1 v2) = negativeCondition $ exprEquality (s v1) (s v2)
 
 
 
@@ -254,19 +242,39 @@ runProverT p = evalStateT p emptyAssumptions
 boundVars :: (AssumptionLenses a) => Getter a (Set VariableID)
 boundVars = to $ Set.fromDistinctAscList . map fst . Map.toAscList . TC.toMap . (^.bindings)
 
+
+
 bindVarsAs :: (MonadState s m, AssumptionLenses s, Foldable f) => f VariableID -> VariableType -> m ()
 bindVarsAs s vt = do
                         b0 <- use bindings
-                        bs <- runEMT $ TC.bindAll s vt b0 `catch` (\(e :: TypeUnificationException VariableID VariableType) -> error (show e))
+                        let !bs = case TC.bindAll s vt b0 of
+                                (Left e) -> error (show (e :: TUException))
+                                (Right r) -> r
                         bindings .= bs
 
+bindVarsAsE :: (MonadState s m, AssumptionLenses s, Foldable f,
+                MonadRaise m) =>
+                f VariableID -> VariableType -> m ()
+bindVarsAsE s vt = do
+                        b0 <- use bindings
+                        bs <- liftTUFailure $ TC.bindAll s vt b0
+                        bindings .= bs
 
 unifyEqVars :: (MonadState s m, AssumptionLenses s) => VariableID -> VariableID -> m ()
 unifyEqVars v1 v2 = do
                         b0 <- use bindings
-                        bs <- runEMT $ TC.unify v1 v2 b0 `catch` (\(e :: TypeUnificationException VariableID VariableType) -> error (show e))
+                        bs <- runEMT $ TC.unify v1 v2 b0 `catch` (\(e :: TUException) -> error (show e))
                         bindings .= bs
 
+unifyEqVarsE :: (MonadState s m, AssumptionLenses s, MonadRaise m) =>
+                VariableID -> VariableID -> m ()
+unifyEqVarsE v1 v2 = do
+                        b0 <- use bindings
+                        bs <- liftTUFailure $ TC.unify v1 v2 b0
+                        bindings .= bs
+
+declareVar :: (MonadState s m, AssumptionLenses s) => VariableID -> m ()
+declareVar v = bindings %= TC.declare v
 
 declareVars :: (MonadState s m, AssumptionLenses s, Foldable f) => f VariableID -> m ()
 declareVars s = bindings %= TC.declareAll s
@@ -308,6 +316,13 @@ assume c@(ValueCondition cass) = do
 assume c@(EqualityCondition v1 v2) = do
                         unifyEqVars v1 v2
                         addAssumption c
+assume c@(DisequalityCondition v1 v2) = do
+                        unifyEqVars v1 v2
+                        addAssumption c
+
+-- TODO: make this succeed faster
+assumeContradiction :: (MonadState s m, AssumptionLenses s) => m ()
+assumeContradiction = assume condFalse
 
 assumeTrue :: (ConditionProp c, MonadState s m, AssumptionLenses s) => c VariableID -> m ()
 assumeTrue = assume . toCondition
@@ -315,11 +330,36 @@ assumeTrue = assume . toCondition
 assumeFalse :: (ConditionProp c, MonadState s m, AssumptionLenses s) => c VariableID -> m ()
 assumeFalse = assume . negativeCondition
 
+assumeE :: (MonadState s m, AssumptionLenses s, MonadRaise m) =>
+                Condition VariableID -> m ()
+-- Add a condition to the list of assumptions, binding its
+-- variables at the appropriate type.  This can raise an
+-- exception if a variable is not used with a consistent type.
+assumeE c@(PermissionCondition pass) = do
+                        bindVarsAsE (freeVariables c) VTPermission
+                        addAssumption c
+assumeE c@(ValueCondition cass) = do
+                        bindVarsAsE (freeVariables c) VTValue
+                        addAssumption c
+assumeE c@(EqualityCondition v1 v2) = do
+                        unifyEqVarsE v1 v2
+                        addAssumption c
+assumeE c@(DisequalityCondition v1 v2) = do
+                        unifyEqVarsE v1 v2
+                        addAssumption c
+
+assumeTrueE :: (ConditionProp c, MonadState s m, AssumptionLenses s, MonadRaise m) =>
+                c VariableID -> m ()
+assumeTrueE = assumeE . toCondition
+assumeFalseE :: (ConditionProp c, MonadState s m, AssumptionLenses s, MonadRaise m) =>
+                c VariableID -> m ()
+assumeFalseE = assumeE . negativeCondition
 
 permissionConditions :: (Ord v) => TC.TContext v VariableType -> [Condition v] -> [FOF PermissionAtomic v]
 permissionConditions tc [] = []
 permissionConditions tc (PermissionCondition pa : xs) = pa : permissionConditions tc xs
 permissionConditions tc (EqualityCondition v1 v2 : xs) = if TC.lookup v1 tc == TC.JustType VTPermission then (FOFAtom $ PAEq (PEVar v1) (PEVar v2)) : permissionConditions tc xs else permissionConditions tc xs
+permissionConditions tc (DisequalityCondition v1 v2 : xs) = if TC.lookup v1 tc == TC.JustType VTPermission then (FOFNot $ FOFAtom $ PAEq (PEVar v1) (PEVar v2)) : permissionConditions tc xs else permissionConditions tc xs
 permissionConditions tc (_ : xs) = permissionConditions tc xs
 
 
@@ -333,11 +373,27 @@ permissionVariables :: (AssumptionLenses a) => a -> [VariableID]
 -- Return a list of the permission variables
 permissionVariables = Map.keys . Map.filter (== Just VTPermission) . TC.toMap . (^. bindings)
 
+-- For passing to the prover, we will treat values and region identifiers, as well as
+-- variables of indeterminate type, as values.
+treatAsValueJ (Just VTValue) = True
+treatAsValueJ (Just VTRegionID) = True
+treatAsValueJ (Just VTPermission) = False
+treatAsValueJ Nothing = True
+
+treatAsValueJT (TC.JustType t) = treatAsValueJ (Just t)
+treatAsValueJT TC.Undetermined = treatAsValueJ Nothing
+treatAsValueJT _ = False
+
 valueConditions :: (Ord v) => TC.TContext v VariableType -> [Condition v] -> [FOF ValueAtomic v]
 valueConditions tc [] = []
 valueConditions tc (EqualityCondition v1 v2 : xs) =
-                if let t = TC.lookup v1 tc in t == TC.JustType VTValue || t == TC.Undetermined then
+                if treatAsValueJT (TC.lookup v1 tc) then
                         (FOFAtom $ VAEq (var v1) (var v2)) : valueConditions tc xs
+                else
+                        valueConditions tc xs
+valueConditions tc (DisequalityCondition v1 v2 : xs) =
+                if treatAsValueJT (TC.lookup v1 tc) then
+                        (FOFNot $ FOFAtom $ VAEq (var v1) (var v2)) : valueConditions tc xs
                 else
                         valueConditions tc xs
 valueConditions tc (ValueCondition cass : xs) = cass : valueConditions tc xs
@@ -350,7 +406,7 @@ valueAssumptions ass = valueConditions (ass ^. bindings) (ass ^. assumptions)
 
 valueVariables :: (AssumptionLenses a) => a -> [VariableID]
 -- Return a list of value variables; variables with no other type are treated as value variables
-valueVariables = Map.keys . Map.filter (\x -> (x == Just VTValue) || (x == Nothing)) . TC.toMap . (^. bindings)
+valueVariables = Map.keys . Map.filter treatAsValueJ . TC.toMap . (^. bindings)
 
 checkConsistency :: (Functor a, Foldable a) => (FOF a String -> IO (Maybe Bool)) -> [VariableID] -> [FOF a VariableID] -> IO (Maybe Bool)
 -- Given a first-order prover, check whether a list of assertions (with free variables from a given list) is consistent.
@@ -472,9 +528,9 @@ printAssertions :: (MonadIO m, MonadState s m, AssertionLenses s) => m ()
 printAssertions = get >>= liftIO . putStrLn . showAssertions
 
 bindAtExprType :: VariableID -> Expr VariableID -> BindingContext -> BindingContext
-bindAtExprType v (PermissionExpr _) c = runEM $ TC.bind v VTPermission c `catch` (\(e :: TypeUnificationException VariableID VariableType) -> error (show e))
-bindAtExprType v (ValueExpr _) c = runEM $ TC.bind v VTValue c `catch` (\(e :: TypeUnificationException VariableID VariableType) -> error (show e))
-bindAtExprType v (VariableExpr v') c = runEM $ TC.unify v v' c `catch` (\(e :: TypeUnificationException VariableID VariableType) -> error (show e))
+bindAtExprType v (PermissionExpr _) c = runEM $ TC.bind v VTPermission c `catch` (\(e :: TUException) -> error (show e))
+bindAtExprType v (ValueExpr _) c = runEM $ TC.bind v VTValue c `catch` (\(e :: TUException) -> error (show e))
+bindAtExprType v (VariableExpr v') c = runEM $ TC.unify v v' c `catch` (\(e :: TUException) -> error (show e))
 
 
 freshInternal :: (MonadState s m, AssumptionLenses s) => String -> m VariableID
@@ -565,7 +621,9 @@ assert c@(ValueCondition _) = do
 assert c@(EqualityCondition v1 v2) = do
                         eUnifyEqVars v1 v2
                         assertions %= (c :)
-
+assert c@(DisequalityCondition v1 v2) = do
+                        eUnifyEqVars v1 v2
+                        assertions %= (c :)
 
 assertEqual :: (ProverExpression e, MonadState s m, AssertionLenses s) => e VariableID -> e VariableID -> m ()
 assertEqual e1 e2 = assert $ exprEquality (toExpr e1) (toExpr e2)
