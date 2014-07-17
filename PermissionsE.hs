@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveFunctor #-}
-module PermissionsE(EPProver(..), tptpBAPrelude, makeEPProver) where
+module PermissionsE(makeEPProver) where
 import Control.Concurrent
 import Data.List
 import System.IO
@@ -9,7 +9,6 @@ import Control.Concurrent.MSem (MSem)
 import Control.Concurrent.MVar
 import System.Exit
 import ProverDatatypes
-import PermissionsInterface
 import Debug.Trace
 import System.Directory
 import Control.Exception
@@ -182,14 +181,12 @@ checkBothWays epp formula = trace ("Calling E on:\n" ++ show formula) $ bracket
                         else if rfalse == ExitSuccess then trace "Disproved." $ Just False else trace "Unknown." $ Nothing)
 
 
-makeEPProver :: String -> Int -> IO EPProver
+makeEPProver :: String -> Int -> IO PermissionsProver
 makeEPProver execpath timeout = do
         prel <- tptpBAPrelude
-        return $ EPProver prel execpath (timeout * 1000) 
+        return $ checkBothWays (EPProver prel execpath (timeout * 1000)) . toBAFormula
         -- "c:\\cygwin64\\home\\Thomas\\E\\PROVER\\eprover.exe"
 
-instance PermissionsProver EPProver where
-        permCheck epp = (checkBothWays epp) . toBAFormula
 
 
 {--

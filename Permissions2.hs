@@ -1,10 +1,9 @@
 
-module Permissions2 (IPProver(..)) where
+module Permissions2 (permCheckBigInt) where
 import Data.List
 import Data.Maybe
 import Control.Parallel.Strategies
 import qualified ProverDatatypes as PD
-import PermissionsInterface
 import Data.Bits
 
 class PermModel p where
@@ -214,10 +213,8 @@ npc_empty et = (foldl (&&) True) . (map (isEmptyIntersection et))
 pc_empty :: (PermModel p) => Int -> p -> PermComb -> Bool
 pc_empty d et = (npc_empty et) . (correct_indexes d) . npc_simplify . pc_normalise
 
-newtype IPProver = IPProver ()
-
-
-instance PermissionsProver IPProver where
-        permCheck _ = return . Just . pf_eval . toPermSentence
+-- |Check a permission assertion using an Integer representation of binary trees.
+permCheckBigInt :: PD.PermissionsProver
+permCheckBigInt = return . Just . pf_eval . toPermSentence
 
 

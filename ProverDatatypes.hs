@@ -13,7 +13,7 @@ import Data.Traversable
 import Data.Typeable
 import Control.Monad hiding (mapM_,mapM)
 import Control.Monad.Reader.Class
-
+import Data.Functor.Identity
 
 
 class Refreshable v where
@@ -162,9 +162,12 @@ class StringVariable v where
 data VariableType = VTPermission | VTValue | VTRegionID
         deriving (Eq, Ord, Typeable)
 
+type PermissionsProver = FOF PermissionAtomic String -> IO (Maybe Bool)
+type ValueProver = FOF ValueAtomic String -> IO (Maybe Bool)
+
 class Provers a where
-        permissionsProver :: a -> FOF PermissionAtomic String -> IO (Maybe Bool)
-        valueProver :: a -> FOF ValueAtomic String -> IO (Maybe Bool)
+        permissionsProver :: a -> PermissionsProver
+        valueProver :: a -> ValueProver
 
 data ProverRecord = Provers {
                 _permissionsProver :: FOF PermissionAtomic String -> IO (Maybe Bool),
@@ -300,3 +303,170 @@ instance (ExpressionSub a e, Functor a, Foldable a, Functor e, Monad e) => Expre
 ($<=$) x y = FOFNot $ FOFAtom $ toValueExpr y `VALt` toValueExpr x
 
 infix 4 $=$, $/=$, $<$, $<=$
+
+-- |'Condition's are the basic assertions and assumptions that are handled by the provers.
+data Condition v = PermissionCondition (FOF PermissionAtomic v)
+                | ValueCondition (FOF ValueAtomic v)
+                | EqualityCondition v v
+                | DisequalityCondition v v
+                deriving (Eq, Ord, Foldable)
+
+
+-- |The 'ConditionProp' class allows us to convert other types to 'Condition's
+class ConditionProp c where
+        toCondition :: c v -> Condition v
+        negativeCondition :: c v -> Condition v
+
+-- First-order permission formulae are instances of ConditionProp
+instance ConditionProp (FOF PermissionAtomic) where
+        toCondition = PermissionCondition
+        negativeCondition = PermissionCondition . FOFNot
+
+-- First-order value formulae are instances of ConditionProp
+instance ConditionProp (FOF ValueAtomic) where
+        toCondition = ValueCondition
+        negativeCondition = ValueCondition . FOFNot
+
+instance ConditionProp Condition where
+        toCondition = id
+        negativeCondition (PermissionCondition f) = PermissionCondition (FOFNot f)
+        negativeCondition (ValueCondition f) = ValueCondition (FOFNot f)
+        negativeCondition (EqualityCondition e1 e2) = DisequalityCondition e1 e2
+        negativeCondition (DisequalityCondition e1 e2) = EqualityCondition e1 e2
+
+-- |The inconsistent condition.
+condFalse = ValueCondition FOFFalse
+
+
+{-- This would probably be a bad idea
+instance (ConditionProp (FOF a)) => ConditionProp a where        
+        toCondition = toCondition . FOFAtom
+        negativeCondition = negativeCondition . FOFAtom
+--}
+
+-- Atomic permission assertions are instances of ConditionProp
+instance ConditionProp PermissionAtomic where
+        toCondition = toCondition . FOFAtom
+        negativeCondition = negativeCondition . FOFAtom
+
+-- Atomic value assertions are instances of ConditionProp
+instance ConditionProp ValueAtomic where
+        toCondition = toCondition . FOFAtom
+        negativeCondition = negativeCondition . FOFAtom
+
+instance ConditionProp c => ConditionProp (Literal c) where
+        toCondition (LPos c) = toCondition c
+        toCondition (LNeg c) = negativeCondition c
+        negativeCondition (LPos c) = negativeCondition c
+        negativeCondition (LNeg c) = toCondition c
+
+-- |Generalised expressions, which can refer to permissions or to values.
+data Expr v = PermissionExpr (PermissionExpression v)
+        | ValueExpr (ValueExpression v)
+        | VariableExpr v
+        deriving (Eq, Ord, Functor, Foldable)
+
+instance Show v => Show (Expr v) where
+        show (PermissionExpr pe) = show pe
+        show (ValueExpr ve) = show ve
+        show (VariableExpr v) = show v
+
+
+-- |Generate an equality condition for two expressions.
+-- An error occurs if the expressions are clearly incomparable (Permission-Variable comparison)
+exprEquality :: Expr v -> Expr v -> Condition v
+exprEquality (PermissionExpr pe1) (PermissionExpr pe2) = PermissionCondition $ FOFAtom $ PAEq pe1 pe2
+exprEquality (PermissionExpr pe1) (VariableExpr v2) = PermissionCondition $ FOFAtom $ PAEq pe1 (return v2)
+exprEquality (ValueExpr ve1) (ValueExpr ve2) = ValueCondition $ FOFAtom $ VAEq ve1 ve2
+exprEquality (ValueExpr ve1) (VariableExpr v2) = ValueCondition $ FOFAtom $ VAEq ve1 (return v2)
+exprEquality (VariableExpr v1) (PermissionExpr pe2) = PermissionCondition $ FOFAtom $ PAEq (return v1) pe2
+exprEquality (VariableExpr v1) (ValueExpr ve2) = ValueCondition $ FOFAtom $ VAEq (return v1) ve2
+exprEquality (VariableExpr v1) (VariableExpr v2) = EqualityCondition v1 v2
+exprEquality _ _ = error "Equality declared between incomparable expressions."
+
+instance (Show v) => ValueExpressionCastable Expr v where
+        toValueExpr (ValueExpr e) = e
+        toValueExpr (VariableExpr v) = var v
+        toValueExpr e = error $ "The expression '" ++ show e ++ "' cannot be coerced to a value expression."
+
+-- We can substitute Exprs for variables in PermissionExpressions
+instance ExpressionSub PermissionExpression Expr where
+        exprSub s (PEVar v) = case s v of
+                        (PermissionExpr pe) -> pe
+                        (VariableExpr ve) -> return ve
+                        _ -> error "A permission variable was substituted by an expression that is not a permission expression."
+        exprSub s (PESum x y) = PESum (exprSub s x) (exprSub s y)
+        exprSub s (PECompl e) = PECompl (exprSub s e)
+        exprSub _ PEFull = PEFull
+        exprSub _ PEZero = PEZero
+
+-- We can substitute Exprs for variables in ValueExpressions
+instance ExpressionSub ValueExpression Expr where
+        exprSub s (VEVar v) = case s v of
+                        (ValueExpr ve) -> ve
+                        (VariableExpr ve) -> return ve
+                        _ -> error "A value variable was substituted by an expression that is not a value expression."
+        exprSub s (VEConst k) = VEConst k
+        exprSub s (VEPlus e1 e2) = VEPlus (exprSub s e1) (exprSub s e2)
+        exprSub s (VEMinus e1 e2) = VEMinus (exprSub s e1) (exprSub s e2)
+        exprSub s (VETimes e1 e2) = VETimes (exprSub s e1) (exprSub s e2)
+
+instance Expression Expr where
+        var = VariableExpr
+
+-- Note, I'm slightly concerned that this might not satisfy
+-- all the monad laws in some undefined cases.
+instance Monad Expr where
+        return = VariableExpr
+        (PermissionExpr pe) >>= s = PermissionExpr $ exprSub s pe
+        (ValueExpr ve) >>= s = ValueExpr $ exprSub s ve
+        (VariableExpr v) >>= s = s v
+
+instance FreeVariables Expr where
+        foldrFree f x e = foldr f x e
+
+-- |Class for things that can be converted to general expressions.
+class ProverExpression c where
+        toExpr :: c v -> Expr v
+
+instance ProverExpression PermissionExpression where
+        toExpr = PermissionExpr
+
+instance ProverExpression ValueExpression where
+        toExpr = ValueExpr
+
+instance ProverExpression Identity where
+        toExpr = VariableExpr . runIdentity
+
+instance ProverExpression Expr where
+        toExpr = id
+
+-- |Cast an 'Integer' as an 'Expr'.
+integerExpr = ValueExpr . VEConst
+
+instance FreeVariables Condition where
+        foldrFree f x (PermissionCondition fof) = foldrFree f x fof
+        foldrFree f x (ValueCondition fof) = foldrFree f x fof
+        foldrFree f x (EqualityCondition a b) = foldr f x [a,b]
+        foldrFree f x (DisequalityCondition a b) = foldr f x [a,b]
+        
+
+instance Show v => Show (Condition v) where
+        show (PermissionCondition pa) = show pa
+        show (ValueCondition va) = show va
+        show (EqualityCondition v1 v2) = show v1 ++ " = " ++ show v2
+        show (DisequalityCondition v1 v2) = show v1 ++ " != " ++ show v2
+
+instance ExpressionCASub Condition Expr where
+        exprCASub s (PermissionCondition pc) = PermissionCondition $ exprCASub s pc
+        exprCASub s (ValueCondition vc) = ValueCondition $ exprCASub s vc
+        exprCASub s (EqualityCondition v1 v2) = exprEquality (s v1) (s v2)
+        exprCASub s (DisequalityCondition v1 v2) = negativeCondition $ exprEquality (s v1) (s v2)
+
+makeEquality :: v -> Expr v -> Condition v
+-- ^Given a variable and an expression, generate a condition that
+-- equates the variable with the expression
+makeEquality v (PermissionExpr pe) = PermissionCondition $ FOFAtom $ PAEq (var v) pe
+makeEquality v (ValueExpr ve) = ValueCondition $ FOFAtom $ VAEq (var v) ve
+makeEquality v (VariableExpr ve) = EqualityCondition v ve
+

@@ -3,7 +3,6 @@
 -- #define z3ffi
 module Provers where
 import ProverDatatypes
-import PermissionsInterface
 import Permissions
 import Permissions2
 import PermissionsE
@@ -34,10 +33,10 @@ proversFromConfig = do
                                 exec <- get conf "EProver" "executable"
                                 timeout <- get conf "EProver" "timeout"
                                 epp <- liftIO $ makeEPProver exec timeout
-                                return (permCheck epp . simplify)
+                                return (epp . simplify)
                         _ -> do
                                 mode <- get conf "InternalProver" "mode"
-                                let ipp = if mode == "bigint" then permCheck (IPProver ()) else permCheck (TPProver ())
+                                let ipp = if mode == "bigint" then permCheckBigInt else permCheckTree
                                 return (ipp . simplify . (rewriteFOF simplR))
                 pp <- liftIO $ memoIO pp0 -- cache results from the permissions prover
                 valProver <- get conf "Provers" "values"

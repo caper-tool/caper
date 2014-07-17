@@ -28,6 +28,17 @@ valueBinOp ValSubtract = return VEMinus
 valueBinOp ValMultiply = return VETimes
 valueBinOp ValDivide = raise $ SyntaxNotImplemented $ "/ (division in assertions)"
 
+-- |Interpret a syntactic permission relation.
+permissionRel :: PermRBinOp -> PermissionExpression v -> PermissionExpression v -> FOF PermissionAtomic v
+permissionRel (PermEquality ValEqual) e1 e2 = FOFAtom $ PAEq e1 e2
+permissionRel (PermEquality ValNotEqual) e1 e2 = FOFNot $ FOFAtom $ PAEq e1 e2
+permissionRel Compatible e1 e2 = FOFAtom $ PADis e1 e2
+
+-- |Interpret a syntactic binary permission operator.
+permissionBinOp :: PermBinOp -> PermissionExpression v -> PermissionExpression v -> PermissionExpression v
+permissionBinOp Composition e1 e2 = PESum e1 e2
+
+
 
 -- |Given a syntactic pure assertion, produce it by adding it as an assumption.
 producePure :: (MonadState s m, AssumptionLenses s, MonadRaise m) =>
@@ -50,6 +61,12 @@ producePure = producePure' False
                                 vver <- produceValueExpr ver
                                 addSPContext sp $ (if b then assumeFalseE else assumeTrueE) $
                                         valueRel bo vvel vver
+                producePure' b (BinaryPermAssrt sp brel pel per) = do
+                                let rel = permissionRel brel
+                                ppel <- producePermissionExpr pel
+                                pper <- producePermissionExpr per
+                                (if b then assumeFalseE else assumeTrueE)
+                                        $ rel ppel pper
 
 -- |Produce a variable.  Named variables are converted to 'VIDNamed'
 -- instances, and declared in the assumptions.  Anonymous (wildcard)
@@ -63,15 +80,50 @@ produceVariable (Variable _ vname) = do
 produceVariable (WildCard _) =
                         newAvar "wildcard"
 
-produceValueExpr :: (MonadState s m, AssumptionLenses s, MonadRaise m) =>
-                ValExpr -> m (ValueExpression VariableID)
-produceValueExpr (VarValExpr _ ve) = liftM var $ produceVariable ve
-produceValueExpr (ConstValExpr _ n) = return $ VEConst n
-produceValueExpr (UnaryValExpr _ ValNegation ve) =
-                liftM (VEMinus (VEConst 0)) $ produceValueExpr ve
-produceValueExpr (BinaryValExpr sp bo ve1 ve2) = do
+consumeVariable :: (MonadState s m, AssertionLenses s) =>
+                VarExpr -> m VariableID
+consumeVariable (Variable _ vname) = do
+                        let v = VIDNamed vname
+                        b <- isBound v
+                        if b then return v else declareEvar v >> return v
+consumeVariable (WildCard _) =
+                        newEvar "wildcard"
+
+generateValueExpr :: (Monad m, MonadRaise m) =>
+        (VarExpr -> m VariableID)       -- ^Variable handler
+        -> ValExpr                      -- ^Syntactic value expression
+        -> m (ValueExpression VariableID)
+-- Note: it might give a better error report if we try to bind the variable
+-- type here (although this would be redundant).  Likewise in producePermissionExpr.
+generateValueExpr genvar (VarValExpr _ ve) = liftM var $ genvar ve
+generateValueExpr genvar (ConstValExpr _ n) = return $ VEConst n
+generateValueExpr genvar (UnaryValExpr _ ValNegation ve) =
+                liftM (VEMinus (VEConst 0)) $ generateValueExpr genvar ve
+generateValueExpr genvar (BinaryValExpr sp bo ve1 ve2) = do
                         op <- addSPContext sp $ valueBinOp bo
-                        vve1 <- produceValueExpr ve1
-                        vve2 <- produceValueExpr ve2
+                        vve1 <- generateValueExpr genvar ve1
+                        vve2 <- generateValueExpr genvar ve2
                         return $ op vve1 vve2
-produceValueExpr (SetValExpr sp _) = addSPContext sp $ raise $ SyntaxNotImplemented "{ ... } (set of values notation in assertions)"
+generateValueExpr genvar (SetValExpr sp _) = addSPContext sp $ raise $ SyntaxNotImplemented "{ ... } (set of values notation in assertions)"
+
+produceValueExpr :: (MonadState s m, AssumptionLenses s, MonadRaise m) =>
+        ValExpr -> m (ValueExpression VariableID)
+produceValueExpr = generateValueExpr produceVariable
+
+generatePermissionExpr :: (Monad m) =>
+        (VarExpr -> m VariableID)       -- ^Variable handler
+        -> PermExpr                     -- ^Syntactic permission expression
+        -> m (PermissionExpression VariableID)
+generatePermissionExpr genvar (VarPermExpr _ ve) = liftM var $ genvar ve
+generatePermissionExpr genvar (ConstPermExpr _ FullPerm) = return $ PEFull
+generatePermissionExpr genvar (ConstPermExpr _ EmptyPerm) = return $ PEZero
+generatePermissionExpr genvar (UnaryPermExpr _ Complement pe) = liftM PECompl $ generatePermissionExpr genvar pe
+generatePermissionExpr genvar (BinaryPermExpr _ bo pe1 pe2) = do
+                        let op = permissionBinOp bo
+                        ppe1 <- generatePermissionExpr genvar pe1
+                        ppe2 <- generatePermissionExpr genvar pe2
+                        return $ op ppe1 ppe2
+
+producePermissionExpr :: (MonadState s m, AssumptionLenses s) =>
+        PermExpr -> m (PermissionExpression VariableID)
+producePermissionExpr = generatePermissionExpr produceVariable

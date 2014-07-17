@@ -1,10 +1,9 @@
 
-module Permissions (TPProver(..)) where
+module Permissions (permCheckTree) where
 import Data.List
 import Data.Maybe
 import Control.Parallel.Strategies
 import qualified ProverDatatypes as PD
-import PermissionsInterface
 
 
 data DPF = DFalse | DAnd DPF DPF | DOr DPF DPF | DNot DPF | DEq Int Int | DC Int Int Int
@@ -243,11 +242,9 @@ npc_empty et = (foldl (&&) True) . (map (eval_empty_inters et))
 pc_empty :: Int -> EvalTree -> PermComb -> Bool
 pc_empty d et = (npc_empty et) . (correct_indexes d) . npc_simplify . pc_normalise
 
-newtype TPProver = TPProver ()
-
-
-instance PermissionsProver TPProver where
-        permCheck _ = return . Just . pf_eval . toPermSentence
+permCheckTree :: PD.PermissionsProver
+-- ^Check a permission assertion using a tree-based representation.
+permCheckTree = return . Just . pf_eval . toPermSentence
 
 
 
