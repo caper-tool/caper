@@ -1,6 +1,6 @@
-import PermissionsInterface
+--import PermissionsInterface
 import ProverDatatypes
-import Permissions
+import PermissionsI
 --import PermissionsE
 
 fpf1 = FOFExists "v" $ FOFForAll "w" $ FOFAtom $ PADis (PEVar "v") (PEVar "w")
@@ -25,7 +25,7 @@ main = mapM_ doit [1000..1010]
     where
       doit n = do
         let f = softEq n
-        r <- permCheck (TPProver ()) f
+        r <- permCheckTree f
         --print f
         print r
 

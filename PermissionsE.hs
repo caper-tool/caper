@@ -181,7 +181,10 @@ checkBothWays epp formula = trace ("Calling E on:\n" ++ show formula) $ bracket
                         else if rfalse == ExitSuccess then trace "Disproved." $ Just False else trace "Unknown." $ Nothing)
 
 
-makeEPProver :: String -> Int -> IO PermissionsProver
+makeEPProver ::
+        String -- ^Path to the eprover executable
+        -> Int -- ^Timeout in milliseconds (0 or negative for no timeout)
+        -> IO PermissionsProver
 makeEPProver execpath timeout = do
         prel <- tptpBAPrelude
         return $ checkBothWays (EPProver prel execpath (timeout * 1000)) . toBAFormula

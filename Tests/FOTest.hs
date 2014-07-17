@@ -2,8 +2,8 @@
 
 import Test.QuickCheck
 import ProverDatatypes
-import PermissionsInterface
-import Permissions
+--import PermissionsInterface
+import PermissionsI
 import PermissionsE
 import FirstOrder
 import Control.Monad
@@ -14,6 +14,7 @@ import Test.QuickCheck.Monadic
 import Text.Printf
 --import Control.Exception
 import System.CPUTime
+import Data.Time.Clock
 
 
 newtype StringVar = StringVar String deriving (Eq, Ord)
@@ -49,10 +50,10 @@ instance (Arbitrary v, Arbitrary (a v), Eq v, Foldable a) => Arbitrary (FOF a v)
                 where
                         arb 0 = frequency [(1,return FOFTrue),(1,return FOFFalse),(8,liftM FOFAtom arbitrary)]
                         arb n = frequency [(1,return FOFTrue),(1,return FOFFalse),(8,liftM FOFAtom arbitrary),
-                                (8,liftM FOFNot (arb $ n - 1)),
+                                (8,liftM FOFNot (arb $ n `div` 2)),
                                 (24,do
-                                        l <- arb $ n - 1
-                                        r <- arb $ n - 1
+                                        l <- arb $ n `div` 2
+                                        r <- arb $ n `div` 2
                                         oneof [return $ FOFAnd l r, return $ FOFOr l r, return $ FOFImpl l r]),
                                 (12,do
                                         (v, f') <- suchThat (bvc n) (\(vv, ff) -> not $ boundIn vv ff)
@@ -73,17 +74,17 @@ prop_SimplEquiv x = quantifierDepth (close x) == 4 ==> monadicIO $ do
                                 putStrLn (show x')
                                 putStrLn (show (simplify x'))
                                 putStrLn "================"
-                        r2 <- run $ time $ permCheck (TPProver ()) (fmap show (simplify x'))
-                        r1 <- run $ time $ permCheck (TPProver ()) (fmap show x')
+                        r2 <- run $ time $ permCheckTree (fmap show (simplify x'))
+                        r1 <- run $ time $ permCheckTree (fmap show x')
                         assert $ r1 == r2
 
 prop_ProverEquiv :: FOF PermissionAtomic StringVar -> Property
-prop_ProverEquiv x = let x' = simplify (close x) in
+prop_ProverEquiv x = quantifierDepth x <= 6 ==> let x' = simplify (close x) in
                         quantifierDepth x' <= 4 ==> monadicIO $ do
-                                r1 <- run $ time $ permCheck (TPProver ()) (fmap show x')
+                                r1 <- run $ time $ permCheckTree (fmap show x')
                                 r2 <- run $ do
-                                        epp <- makeEPProver
-                                        time $ permCheck epp (fmap show x')
+                                        epp <- makeEPProver "C:\\Users\\tyoung\\Local Documents\\eprover\\E\\PROVER\\eprover.exe" 1000
+                                        time $ epp (fmap show x')
                                 assert $ r1 == r2
 
 args' = stdArgs {maxSize = 6}
@@ -91,11 +92,12 @@ args' = stdArgs {maxSize = 6}
 
 time :: Show t => IO t -> IO t
 time a = do
-    start <- getCPUTime
+    start <- getCurrentTime -- getCPUTime
     v <- a
     seq v $ print v
-    end <- seq v getCPUTime
-    let diff = (fromIntegral (end - start)) / (10^12)
-    printf "Computation time: %0.6f sec\n" (diff :: Double)
+    end <- getCurrentTime -- seq v getCPUTime
+    putStrLn $ "Computation time: " ++ show (diffUTCTime end start)
+    --let diff = (fromIntegral (end - start)) / (10^12)
+    --printf "Computation time: %0.6f sec\n" (diff :: Double)
     return v
 
