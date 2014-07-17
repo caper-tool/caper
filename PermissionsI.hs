@@ -1,5 +1,5 @@
 
-module Permissions2 (permCheckBigInt) where
+module PermissionsI (permCheckBigInt, permCheckTree) where
 import Data.List
 import Data.Maybe
 import Control.Parallel.Strategies
@@ -142,6 +142,10 @@ toPermSentence f = toPermFormula (\x -> error $ "toPermSentence: Variable " ++ x
 pf_eval :: PermFormula -> Bool
 pf_eval = pf_eval_env 0 (emptyModel :: IntegerTree)
 
+pf_eval_tree :: PermFormula -> Bool
+pf_eval_tree = pf_eval_env 0 (emptyModel :: EvalTree)
+
+
 pf_eval_env :: (PermModel p) => Int -> p -> PermFormula -> Bool
 pf_eval_env _ _ PFFalse = False
 pf_eval_env _ _ PFTrue = True
@@ -217,4 +221,6 @@ pc_empty d et = (npc_empty et) . (correct_indexes d) . npc_simplify . pc_normali
 permCheckBigInt :: PD.PermissionsProver
 permCheckBigInt = return . Just . pf_eval . toPermSentence
 
-
+-- |Check a permission assertion using a binary-tree representation.
+permCheckTree :: PD.PermissionsProver
+permCheckTree = return . Just . pf_eval_tree . toPermSentence

@@ -3,8 +3,8 @@
 -- #define z3ffi
 module Provers where
 import ProverDatatypes
-import Permissions
-import Permissions2
+-- import Permissions
+import PermissionsI
 import PermissionsE
 import qualified ValueProver as VP
 #ifdef z3ffi
