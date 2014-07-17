@@ -13,8 +13,11 @@ class PermModel p where
 
 
 combine :: (a -> b -> c) -> [a] -> [b] -> [c]
+combine f xs l2 = foldr (\ x -> (++) (map (f x) l2)) [] xs
+{-
 combine f [] l2 = []
 combine f (x : xs) l2 = map (f x) l2 ++ combine f xs l2
+-}
 
 data EvalTree = ETSome | ETNone | ETBranch EvalTree EvalTree
 
@@ -23,37 +26,36 @@ instance Show EvalTree where
         show ETNone = "."
         show (ETBranch t1 t2) = "(" ++ show t1 ++ " " ++ show t2 ++ ")"
         
-eval_empty_inters :: EvalTree -> [(Int,Bool)] -> Bool
-eval_empty_inters t l = case squish_sorted_intersection_list (sort l) of
+evalEmptyInters :: EvalTree -> [(Int,Bool)] -> Bool
+evalEmptyInters t l = case squishSortedIntersectionList (sort l) of
                 Nothing -> True
-                Just l' -> eval_empty_intersections t l' 0
+                Just l' -> evalEmptyIntersections t l' 0
 
-squish_sorted_intersection_list :: [(Int,Bool)] -> Maybe [(Int,Bool)]
-squish_sorted_intersection_list [] = Just []
-squish_sorted_intersection_list [x] = Just [x]
-squish_sorted_intersection_list ((d1, t1) : (d2, t2) : xs) = if d1 == d2 then
-        if t1 == t2 then squish_sorted_intersection_list ((d2, t2) : xs) else Nothing
-        else fmap ((d1, t1) :) (squish_sorted_intersection_list ((d2, t2) : xs))
+squishSortedIntersectionList :: [(Int,Bool)] -> Maybe [(Int,Bool)]
+squishSortedIntersectionList [] = Just []
+squishSortedIntersectionList [x] = Just [x]
+squishSortedIntersectionList ((d1, t1) : (d2, t2) : xs) = if d1 == d2 then
+        if t1 == t2 then squishSortedIntersectionList ((d2, t2) : xs) else Nothing
+        else fmap ((d1, t1) :) (squishSortedIntersectionList ((d2, t2) : xs))
 
-eval_empty_intersections :: EvalTree -> [(Int,Bool)] -> Int -> Bool
-eval_empty_intersections ETNone _ _ = True
-eval_empty_intersections _ [] _ = False
-eval_empty_intersections ETSome _ _ = error "eval_empty_intersections: Tree does not evaluate all variables"
-eval_empty_intersections (ETBranch t1 t2) l@((dx,tx):xs) d = if dx > d
-        then eval_empty_intersections t1 l (d+1) && eval_empty_intersections t2 l (d+1)
-        else if tx then -- True indicates use the complement
-                eval_empty_intersections t2 xs (d+1)
-                else eval_empty_intersections t1 xs (d+1)
+evalEmptyIntersections :: EvalTree -> [(Int,Bool)] -> Int -> Bool
+evalEmptyIntersections ETNone _ _ = True
+evalEmptyIntersections _ [] _ = False
+evalEmptyIntersections ETSome _ _ = error "evalEmptyIntersections: Tree does not evaluate all variables"
+evalEmptyIntersections (ETBranch t1 t2) l@((dx,tx):xs) d
+        | dx > d        = evalEmptyIntersections t1 l (d+1) && evalEmptyIntersections t2 l (d+1)
+        | tx            = evalEmptyIntersections t2 xs (d+1)
+        | otherwise     = evalEmptyIntersections t1 xs (d+1)
 
-et_splits :: EvalTree -> [EvalTree]
-et_splits ETSome = [ETBranch ETSome ETSome, ETBranch ETSome ETNone, ETBranch ETNone ETSome]
-et_splits ETNone = [ETNone]
-et_splits (ETBranch et1 et2) = combine ETBranch (et_splits et1) (et_splits et2)
+etSplits :: EvalTree -> [EvalTree]
+etSplits ETSome = [ETBranch ETSome ETSome, ETBranch ETSome ETNone, ETBranch ETNone ETSome]
+etSplits ETNone = [ETNone]
+etSplits (ETBranch et1 et2) = combine ETBranch (etSplits et1) (etSplits et2)
 
 instance PermModel EvalTree where
         emptyModel = ETSome
-        isEmptyIntersection = eval_empty_inters
-        splitModel = et_splits
+        isEmptyIntersection = evalEmptyInters
+        splitModel = etSplits
 
 
 data IntegerTree = ITree !Integer !Int deriving (Eq, Ord, Show)
@@ -139,63 +141,63 @@ toPermSentence f = toPermFormula (\x -> error $ "toPermSentence: Variable " ++ x
 
 -- testpf1 = PFAll $ PFImpl (PFEx $ PFEx $ PFAnd (PFAtom $ PAEqual (PESum (PEVar 0) (PEVar 1)) (PEVar 2)) (PFAtom $ PAEqual (PEVar 0) (PEVar 1))) (PFAtom $ PADisjoint (PEVar 0) PEFull)
 
-pf_eval :: PermFormula -> Bool
-pf_eval = pf_eval_env 0 (emptyModel :: IntegerTree)
+formulaEvalBigInt :: PermFormula -> Bool
+formulaEvalBigInt = formulaEvalEnv 0 (emptyModel :: IntegerTree)
 
-pf_eval_tree :: PermFormula -> Bool
-pf_eval_tree = pf_eval_env 0 (emptyModel :: EvalTree)
+formulaEvalTree :: PermFormula -> Bool
+formulaEvalTree = formulaEvalEnv 0 (emptyModel :: EvalTree)
 
 
-pf_eval_env :: (PermModel p) => Int -> p -> PermFormula -> Bool
-pf_eval_env _ _ PFFalse = False
-pf_eval_env _ _ PFTrue = True
-pf_eval_env d et (PFNot f) = not $ pf_eval_env d et f
-pf_eval_env d et (PFAnd f1 f2) = pf_eval_env d et f1 && pf_eval_env d et f2
-pf_eval_env d et (PFOr f1 f2) = pf_eval_env d et f1 || pf_eval_env d et f2
-pf_eval_env d et (PFImpl f1 f2) = if pf_eval_env d et f1 then pf_eval_env d et f2 else True
-pf_eval_env d et (PFAll f) = foldl (&&) True (parMap rseq (\e -> pf_eval_env (d+1) e f) (splitModel et))
-pf_eval_env d et (PFEx f) = foldl (||) False (parMap rseq (\e -> pf_eval_env (d+1) e f) (splitModel et))
-pf_eval_env d et (PFAtom a) = pa_eval_env d et a
+formulaEvalEnv :: (PermModel p) => Int -> p -> PermFormula -> Bool
+formulaEvalEnv _ _ PFFalse = False
+formulaEvalEnv _ _ PFTrue = True
+formulaEvalEnv d et (PFNot f) = not $ formulaEvalEnv d et f
+formulaEvalEnv d et (PFAnd f1 f2) = formulaEvalEnv d et f1 && formulaEvalEnv d et f2
+formulaEvalEnv d et (PFOr f1 f2) = formulaEvalEnv d et f1 || formulaEvalEnv d et f2
+formulaEvalEnv d et (PFImpl f1 f2) = not (formulaEvalEnv d et f1) || formulaEvalEnv d et f2
+formulaEvalEnv d et (PFAll f) = and (parMap rseq (\e -> formulaEvalEnv (d+1) e f) (splitModel et))
+formulaEvalEnv d et (PFEx f) = or (parMap rseq (\e -> formulaEvalEnv (d+1) e f) (splitModel et))
+formulaEvalEnv d et (PFAtom a) = atomEvalEnv d et a
 
-pa_eval_env :: (PermModel p) => Int -> p -> PermAtom -> Bool
-pa_eval_env d et (PAEqual pe1 pe2) = let pc1 = pe_to_pc pe1 in
-                                let pc2 = pe_to_pc pe2 in
-                                        pc_empty d et (pe_disj_combs pe1) &&
-                                        pc_empty d et (pe_disj_combs pe2) &&
-                                        pc_empty d et (PCInter pc1 (PCCompl pc2)) &&
-                                        pc_empty d et (PCInter (PCCompl pc1) pc2)
-pa_eval_env d et (PADisjoint pe1 pe2) = pc_empty d et (pe_disj_combs pe1) && pc_empty d et (pe_disj_combs pe2) &&
-                                        pc_empty d et (PCInter (pe_to_pc pe1) (pe_to_pc pe2))
+atomEvalEnv :: (PermModel p) => Int -> p -> PermAtom -> Bool
+atomEvalEnv d et (PAEqual pe1 pe2) = let pc1 = exprToComb pe1 in
+                                let pc2 = exprToComb pe2 in
+                                        isPCEmpty d et (exprDisjCombs pe1) &&
+                                        isPCEmpty d et (exprDisjCombs pe2) &&
+                                        isPCEmpty d et (PCInter pc1 (PCCompl pc2)) &&
+                                        isPCEmpty d et (PCInter (PCCompl pc1) pc2)
+atomEvalEnv d et (PADisjoint pe1 pe2) = isPCEmpty d et (exprDisjCombs pe1) && isPCEmpty d et (exprDisjCombs pe2) &&
+                                        isPCEmpty d et (PCInter (exprToComb pe1) (exprToComb pe2))
 
-pe_to_pc :: PermExpr -> PermComb
-pe_to_pc PEFull = PCPrim PPFull
-pe_to_pc PEZero = PCPrim PPZero
-pe_to_pc (PEVar n) = PCPrim (PPVar n)
-pe_to_pc (PESum pe1 pe2) = PCUnion (pe_to_pc pe1) (pe_to_pc pe2)
-pe_to_pc (PECompl pe) = PCCompl (pe_to_pc pe)
+exprToComb :: PermExpr -> PermComb
+exprToComb PEFull = PCPrim PPFull
+exprToComb PEZero = PCPrim PPZero
+exprToComb (PEVar n) = PCPrim (PPVar n)
+exprToComb (PESum pe1 pe2) = PCUnion (exprToComb pe1) (exprToComb pe2)
+exprToComb (PECompl pe) = PCCompl (exprToComb pe)
 
-pe_disj_combs :: PermExpr -> PermComb
+exprDisjCombs :: PermExpr -> PermComb
 -- Find a permission combination that is zero exactly when all sums are disjoint
-pe_disj_combs (PESum pe1 pe2) = PCUnion (PCInter (pe_to_pc pe1) (pe_to_pc pe2)) $
-                                PCUnion (pe_disj_combs pe1) (pe_disj_combs pe2)
-pe_disj_combs (PECompl pe) = pe_disj_combs pe
-pe_disj_combs _ = PCPrim PPZero
+exprDisjCombs (PESum pe1 pe2) = PCUnion (PCInter (exprToComb pe1) (exprToComb pe2)) $
+                                PCUnion (exprDisjCombs pe1) (exprDisjCombs pe2)
+exprDisjCombs (PECompl pe) = exprDisjCombs pe
+exprDisjCombs _ = PCPrim PPZero
 
 data PermPrim = PPFull | PPZero | PPVar Int 
 data PermComb = PCPrim PermPrim | PCCompl PermComb | PCUnion PermComb PermComb | PCInter PermComb PermComb
 
-pc_normalise :: PermComb -> [[(PermPrim,Bool)]]
-pc_normalise (PCPrim pp) = [[(pp, False)]]
-pc_normalise (PCUnion pc1 pc2) = (pc_normalise pc1) ++ (pc_normalise pc2)
-pc_normalise (PCInter pc1 pc2) = combine (++) (pc_normalise pc1) (pc_normalise pc2)
-pc_normalise (PCCompl pc) = case pc of
+normalise :: PermComb -> [[(PermPrim,Bool)]]
+normalise (PCPrim pp) = [[(pp, False)]]
+normalise (PCUnion pc1 pc2) = normalise pc1 ++ normalise pc2
+normalise (PCInter pc1 pc2) = combine (++) (normalise pc1) (normalise pc2)
+normalise (PCCompl pc) = case pc of
                         (PCPrim pp) -> [[(pp, True)]]
-                        (PCUnion pc1 pc2) -> pc_normalise $ PCInter (PCCompl pc1) (PCCompl pc2)
-                        (PCInter pc1 pc2) -> pc_normalise $ PCUnion (PCCompl pc1) (PCCompl pc2)
-                        (PCCompl pc') ->  pc_normalise pc'
+                        (PCUnion pc1 pc2) -> normalise $ PCInter (PCCompl pc1) (PCCompl pc2)
+                        (PCInter pc1 pc2) -> normalise $ PCUnion (PCCompl pc1) (PCCompl pc2)
+                        (PCCompl pc') ->  normalise pc'
 
-npc_simplify :: [[(PermPrim,Bool)]] -> [[(Int,Bool)]]
-npc_simplify = mapMaybe inter_simplify
+simplify :: [[(PermPrim,Bool)]] -> [[(Int,Bool)]]
+simplify = mapMaybe inter_simplify
         where
                 inter_simplify :: [(PermPrim,Bool)] -> Maybe [(Int,Bool)]
                 inter_simplify [] = return []
@@ -206,21 +208,21 @@ npc_simplify = mapMaybe inter_simplify
                                 xs' <- inter_simplify xs
                                 return $ (n,b) : xs'
 
-correct_indexes :: Int -> [[(Int,Bool)]] -> [[(Int,Bool)]]
-correct_indexes d = map (map ci)
+correctIndexes :: Int -> [[(Int,Bool)]] -> [[(Int,Bool)]]
+correctIndexes d = map (map ci)
         where
                 ci (i,b) = (d - i - 1, b)
 
-npc_empty :: (PermModel p) => p -> [[(Int,Bool)]] -> Bool
-npc_empty et = (foldl (&&) True) . (map (isEmptyIntersection et))
+isNPCEmpty :: (PermModel p) => p -> [[(Int,Bool)]] -> Bool
+isNPCEmpty et = all (isEmptyIntersection et)
 
-pc_empty :: (PermModel p) => Int -> p -> PermComb -> Bool
-pc_empty d et = (npc_empty et) . (correct_indexes d) . npc_simplify . pc_normalise
+isPCEmpty :: (PermModel p) => Int -> p -> PermComb -> Bool
+isPCEmpty d et = isNPCEmpty et . correctIndexes d . simplify . normalise
 
 -- |Check a permission assertion using an Integer representation of binary trees.
 permCheckBigInt :: PD.PermissionsProver
-permCheckBigInt = return . Just . pf_eval . toPermSentence
+permCheckBigInt = return . Just . formulaEvalBigInt . toPermSentence
 
 -- |Check a permission assertion using a binary-tree representation.
 permCheckTree :: PD.PermissionsProver
-permCheckTree = return . Just . pf_eval_tree . toPermSentence
+permCheckTree = return . Just . formulaEvalTree . toPermSentence
