@@ -12,9 +12,9 @@ import Parser.AST
 
 -- TODO: Check for sure that I've got these right(!)
 -- |Interpret a syntactic value relation.
-valueRel :: ValRBinOp -> ValueExpression v -> ValueExpression v -> FOF ValueAtomic v
-valueRel (ValEquality ValEqual) e1 e2 = FOFAtom $ VAEq e1 e2
-valueRel (ValEquality ValNotEqual) e1 e2 = FOFNot $ FOFAtom $ VAEq e1 e2
+valueRel :: ValBinRel -> ValueExpression v -> ValueExpression v -> FOF ValueAtomic v
+valueRel (ValEquality EqualRel) e1 e2 = FOFAtom $ VAEq e1 e2
+valueRel (ValEquality NotEqualRel) e1 e2 = FOFNot $ FOFAtom $ VAEq e1 e2
 valueRel ValGreater e1 e2 = FOFAtom $ VALt e2 e1
 valueRel ValGreaterOrEqual e1 e2 = FOFNot $ FOFAtom $ VALt e1 e2
 valueRel ValLess e1 e2 = FOFAtom $ VALt e1 e2
@@ -29,9 +29,9 @@ valueBinOp ValMultiply = return VETimes
 valueBinOp ValDivide = raise $ SyntaxNotImplemented $ "/ (division in assertions)"
 
 -- |Interpret a syntactic permission relation.
-permissionRel :: PermRBinOp -> PermissionExpression v -> PermissionExpression v -> FOF PermissionAtomic v
-permissionRel (PermEquality ValEqual) e1 e2 = FOFAtom $ PAEq e1 e2
-permissionRel (PermEquality ValNotEqual) e1 e2 = FOFNot $ FOFAtom $ PAEq e1 e2
+permissionRel :: PermBinRel -> PermissionExpression v -> PermissionExpression v -> FOF PermissionAtomic v
+permissionRel (PermEquality EqualRel) e1 e2 = FOFAtom $ PAEq e1 e2
+permissionRel (PermEquality NotEqualRel) e1 e2 = FOFNot $ FOFAtom $ PAEq e1 e2
 permissionRel Compatible e1 e2 = FOFAtom $ PADis e1 e2
 
 -- |Interpret a syntactic binary permission operator.
@@ -53,7 +53,7 @@ producePure = producePure' False
                 producePure' b (BinaryVarAssrt sp ebo vl vr) = do
                                 vvl <- produceVariable vl
                                 vvr <- produceVariable vr
-                                addSPContext sp $ (if b /= (ebo == ValEqual) then
+                                addSPContext sp $ (if b /= (ebo == EqualRel) then
                                         assumeTrueE else assumeFalseE)
                                         (EqualityCondition vvl vvr)
                 producePure' b (BinaryValAssrt sp bo vel ver) = do

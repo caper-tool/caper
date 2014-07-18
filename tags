@@ -1,97 +1,128 @@
-Assertion	SaneProver.hs	65;"	t
-Context	SaneProver.hs	70;"	d
-Context	SaneProver.hs	70;"	t
-DAll	.\Permissions.hs	6;"	d
-DAnd	.\Permissions.hs	5;"	d
-DC	.\Permissions.hs	5;"	d
-DDis	.\Permissions.hs	6;"	d
-DEq	.\Permissions.hs	5;"	d
-DEx	.\Permissions.hs	6;"	d
-DFalse	.\Permissions.hs	5;"	d
-DFull	.\Permissions.hs	6;"	d
-DNot	.\Permissions.hs	5;"	d
-DOr	.\Permissions.hs	5;"	d
-DPF	.\Permissions.hs	5;"	t
-DTotalFull	.\Permissions.hs	7;"	d
-DZero	.\Permissions.hs	6;"	d
-ETBranch	.\Permissions.hs	12;"	d	file:
-ETNone	.\Permissions.hs	12;"	d	file:
-ETSome	.\Permissions.hs	12;"	d	file:
-EVExistential	SaneProver.hs	32;"	d
-EVNormal	SaneProver.hs	32;"	d
-EVariable	SaneProver.hs	32;"	t
-EvalTree	.\Permissions.hs	12;"	t	file:
-LNeg	SaneProver.hs	39;"	d
-LPos	SaneProver.hs	39;"	d
-Literal	SaneProver.hs	39;"	t
-PAComp	SaneProver.hs	47;"	d
-PADis	SaneProver.hs	49;"	d
-PAEq	SaneProver.hs	48;"	d
-PAFull	SaneProver.hs	46;"	d
-PATotalFull	SaneProver.hs	50;"	d
-PAZero	SaneProver.hs	45;"	d
-PermissionAssertion	SaneProver.hs	65;"	d
-PermissionAtomic	SaneProver.hs	45;"	t
-PermissionEConsequences	SaneProver.hs	189;"	t
-VIDInternal	SaneProver.hs	13;"	d
-VIDNamed	SaneProver.hs	12;"	d
-VIDPermissionAtomic	SaneProver.hs	63;"	t
-VTPermission	SaneProver.hs	9;"	d
-VariableID	SaneProver.hs	12;"	t
-VariableType	SaneProver.hs	9;"	t
-allPermissionVars	SaneProver.hs	234;"	v
-assert	SaneProver.hs	110;"	v
-assertPermissionFalse	SaneProver.hs	120;"	v
-assertPermissionTrue	SaneProver.hs	116;"	v
-assertions	SaneProver.hs	72;"	v
-bindings	SaneProver.hs	71;"	v
-c0	SaneProver.hs	264;"	v
-checkBindVariable	SaneProver.hs	99;"	v
-combine	.\Permissions.hs	94;"	v	file:
-dEmp	.\Permissions.hs	10;"	v
-dImpl	.\Permissions.hs	9;"	v
-dpf_eval	.\Permissions.hs	21;"	v
-dpf_eval_env	.\Permissions.hs	24;"	v	file:
-emptyContext	SaneProver.hs	80;"	v
-et_splits	.\Permissions.hs	98;"	v	file:
-eval_empty	.\Permissions.hs	73;"	v	file:
-eval_empty_inters	.\Permissions.hs	50;"	v	file:
-eval_empty_intersections	.\Permissions.hs	62;"	v	file:
-eval_eq	.\Permissions.hs	42;"	v	file:
-filterPermissionAssertions	SaneProver.hs	192;"	v
-freshPermission	SaneProver.hs	89;"	v
-freshVariable	SaneProver.hs	84;"	v
-mapSecond	SaneProver.hs	151;"	v
-mapThird	SaneProver.hs	154;"	v
-match_negative	.\Permissions.hs	86;"	v	file:
-match_positive	.\Permissions.hs	79;"	v	file:
-pXvar	SaneProver.hs	127;"	v
-pXvars	SaneProver.hs	141;"	v
-pass	SaneProver.hs	158;"	v
-passt	SaneProver.hs	178;"	v
-passtl	SaneProver.hs	182;"	v
-pavars	SaneProver.hs	144;"	v
-pechk	SaneProver.hs	206;"	v
-pechkt	SaneProver.hs	226;"	v
-pechktl	SaneProver.hs	230;"	v
-permCheckEConsequences	SaneProver.hs	239;"	v
-permissionConsistentDPF	SaneProver.hs	186;"	v
-pevars	SaneProver.hs	147;"	v
-pgetVar	SaneProver.hs	136;"	v
-pllist1	SaneProver.hs	249;"	v
-pllist1b	SaneProver.hs	253;"	v
-pllist2	SaneProver.hs	257;"	v
-squish_sorted_intersection_list	.\Permissions.hs	55;"	v	file:
-test1	.\Permissions.hs	102;"	v	file:
-test2	.\Permissions.hs	103;"	v	file:
-test2a	.\Permissions.hs	104;"	v	file:
-test3	.\Permissions.hs	105;"	v	file:
-test3a	.\Permissions.hs	106;"	v	file:
-test4	.\Permissions.hs	107;"	v	file:
-test5	.\Permissions.hs	108;"	v	file:
-testTrees	.\Permissions.hs	117;"	v	file:
-trees	.\Permissions.hs	111;"	v	file:
-trees2	.\Permissions.hs	114;"	v	file:
-var_foo	SaneProver.hs	245;"	v
-var_x	SaneProver.hs	246;"	v
-var_y	SaneProver.hs	247;"	v
+$*$	.\ProverDatatypes.hs	140;"	v
+$+$	.\ProverDatatypes.hs	136;"	v
+$-$	.\ProverDatatypes.hs	138;"	v
+$/=$	.\ProverDatatypes.hs	299;"	v
+$<$	.\ProverDatatypes.hs	301;"	v
+$<=$	.\ProverDatatypes.hs	303;"	v
+$=$	.\ProverDatatypes.hs	297;"	v
+CaperException	Exceptions.hs	27;"	t
+Condition	.\ProverDatatypes.hs	308;"	t
+ConditionProp	.\ProverDatatypes.hs	316;"	t
+DisequalityCondition	.\ProverDatatypes.hs	311;"	d
+EqualityCondition	.\ProverDatatypes.hs	310;"	d
+ExceptionContext	Exceptions.hs	43;"	t
+Expr	.\ProverDatatypes.hs	364;"	t
+Expression	.\ProverDatatypes.hs	55;"	t
+ExpressionCASub	.\ProverDatatypes.hs	274;"	t
+ExpressionSub	.\ProverDatatypes.hs	66;"	t
+FOF	.\ProverDatatypes.hs	227;"	t
+FOFAnd	.\ProverDatatypes.hs	231;"	d
+FOFAtom	.\ProverDatatypes.hs	230;"	d
+FOFExists	.\ProverDatatypes.hs	229;"	d
+FOFFalse	.\ProverDatatypes.hs	235;"	d
+FOFForAll	.\ProverDatatypes.hs	228;"	d
+FOFImpl	.\ProverDatatypes.hs	233;"	d
+FOFNot	.\ProverDatatypes.hs	234;"	d
+FOFOr	.\ProverDatatypes.hs	232;"	d
+FOFTrue	.\ProverDatatypes.hs	236;"	d
+FreeVariables	.\ProverDatatypes.hs	250;"	t
+JustType	.\TypingContext.hs	44;"	d
+LNeg	.\ProverDatatypes.hs	27;"	d
+LPos	.\ProverDatatypes.hs	27;"	d
+Literal	.\ProverDatatypes.hs	27;"	t
+MonadHoist	.\Utils\MonadHoist.hs	22;"	t
+MonadRaise	Exceptions.hs	53;"	t
+NotBound	.\TypingContext.hs	44;"	d
+PADis	.\ProverDatatypes.hs	63;"	d
+PAEq	.\ProverDatatypes.hs	62;"	d
+PECompl	.\ProverDatatypes.hs	37;"	d
+PEFull	.\ProverDatatypes.hs	33;"	d
+PESum	.\ProverDatatypes.hs	36;"	d
+PEVar	.\ProverDatatypes.hs	35;"	d
+PEZero	.\ProverDatatypes.hs	34;"	d
+PermissionAtomic	.\ProverDatatypes.hs	61;"	t
+PermissionCondition	.\ProverDatatypes.hs	308;"	d
+PermissionExpr	.\ProverDatatypes.hs	364;"	d
+PermissionExpression	.\ProverDatatypes.hs	33;"	t
+PermissionLiteral	.\ProverDatatypes.hs	81;"	t
+PermissionsProver	.\ProverDatatypes.hs	165;"	t
+ProverExpression	.\ProverDatatypes.hs	429;"	t
+ProverRecord	.\ProverDatatypes.hs	172;"	t
+Provers	.\ProverDatatypes.hs	168;"	t
+Provers	.\ProverDatatypes.hs	172;"	d
+RaiseT	Exceptions.hs	62;"	t
+Refreshable	.\ProverDatatypes.hs	19;"	t
+SourcePosContext	Exceptions.hs	45;"	d
+StringContext	Exceptions.hs	44;"	d
+StringVariable	.\ProverDatatypes.hs	153;"	t
+SyntaxNotImplemented	Exceptions.hs	31;"	d
+TContext	.\TypingContext.hs	33;"	d
+TContext	.\TypingContext.hs	33;"	t
+TUException	Exceptions.hs	22;"	t
+TypeResult	.\TypingContext.hs	44;"	t
+TypeUnificationException	.\TypingContext.hs	13;"	d
+TypeUnificationException	.\TypingContext.hs	13;"	t
+TypeUnificationException2	.\TypingContext.hs	14;"	d
+TypesNotUnifiable	Exceptions.hs	34;"	d
+Undetermined	.\TypingContext.hs	44;"	d
+VAEq	.\ProverDatatypes.hs	115;"	d
+VALt	.\ProverDatatypes.hs	116;"	d
+VEConst	.\ProverDatatypes.hs	89;"	d
+VEMinus	.\ProverDatatypes.hs	92;"	d
+VEPlus	.\ProverDatatypes.hs	91;"	d
+VETimes	.\ProverDatatypes.hs	93;"	d
+VEVar	.\ProverDatatypes.hs	90;"	d
+VIDExistential	.\ProverDatatypes.hs	202;"	d
+VIDInternal	.\ProverDatatypes.hs	201;"	d
+VIDNamed	.\ProverDatatypes.hs	200;"	d
+VTPermission	.\ProverDatatypes.hs	162;"	d
+VTRegionID	.\ProverDatatypes.hs	162;"	d
+VTValue	.\ProverDatatypes.hs	162;"	d
+ValueAtomic	.\ProverDatatypes.hs	114;"	t
+ValueCondition	.\ProverDatatypes.hs	309;"	d
+ValueExpr	.\ProverDatatypes.hs	365;"	d
+ValueExpression	.\ProverDatatypes.hs	88;"	t
+ValueExpressionCastable	.\ProverDatatypes.hs	128;"	t
+ValueProver	.\ProverDatatypes.hs	166;"	t
+VariableExpr	.\ProverDatatypes.hs	366;"	d
+VariableID	.\ProverDatatypes.hs	200;"	t
+VariableType	.\ProverDatatypes.hs	162;"	t
+_permissionsProver	.\ProverDatatypes.hs	173;"	v
+_valueProver	.\ProverDatatypes.hs	174;"	v
+addContext	Exceptions.hs	55;"	v
+addSPContext	Exceptions.hs	58;"	v
+bind	.\TypingContext.hs	56;"	v
+bindAll	.\TypingContext.hs	64;"	v
+condFalse	.\ProverDatatypes.hs	338;"	v
+declare	.\TypingContext.hs	69;"	v
+declareAll	.\TypingContext.hs	72;"	v
+difference	.\TypingContext.hs	97;"	v
+empty	.\TypingContext.hs	42;"	v
+exprCASub	.\ProverDatatypes.hs	275;"	v
+exprEquality	.\ProverDatatypes.hs	378;"	v
+exprSub	.\ProverDatatypes.hs	67;"	v
+filter	.\TypingContext.hs	103;"	v
+firstFresh	.\TypingContext.hs	93;"	v
+foldrFree	.\ProverDatatypes.hs	251;"	v
+freeIn	.\ProverDatatypes.hs	252;"	v
+freeVariables	.\ProverDatatypes.hs	254;"	v
+freshen	.\ProverDatatypes.hs	20;"	v
+hoist	.\Utils\MonadHoist.hs	23;"	v
+integerExpr	.\ProverDatatypes.hs	445;"	v
+intersection	.\TypingContext.hs	100;"	v
+liftTUFailure	Exceptions.hs	74;"	v
+literalToFOF	.\ProverDatatypes.hs	271;"	v
+lookup	.\TypingContext.hs	48;"	v
+makeEquality	.\ProverDatatypes.hs	469;"	v
+negativeCondition	.\ProverDatatypes.hs	318;"	v
+permissionsProver	.\ProverDatatypes.hs	169;"	v
+raise	Exceptions.hs	54;"	v
+toCondition	.\ProverDatatypes.hs	317;"	v
+toExpr	.\ProverDatatypes.hs	430;"	v
+toMap	.\TypingContext.hs	86;"	v
+toValueExpr	.\ProverDatatypes.hs	129;"	v
+unify	.\TypingContext.hs	77;"	v
+valueCheck	.\ProverDatatypes.hs	179;"	v
+valueProver	.\ProverDatatypes.hs	170;"	v
+var	.\ProverDatatypes.hs	56;"	v
+varToString	.\ProverDatatypes.hs	160;"	v
