@@ -13,6 +13,7 @@ import Control.Monad.Exception
 import Control.Monad.Trans.Either
 import Control.Monad.Trans
 import Text.ParserCombinators.Parsec
+import Data.List
 
 import Utils.MonadHoist
 import TypingContext
@@ -32,11 +33,20 @@ data CaperException =
         -- |'TypesNotUnifiable' indicates that the inferred type of a
         -- variable does not match the expected type.
         | TypesNotUnifiable TUException
+        -- |'UndeclaredRegionType' indicates that a region type name
+        -- is being used, but has not been declared.  The first field
+        -- records the undeclared name.  The second field records a
+        -- list of (similar) alternatives.
+        | UndeclaredRegionType String [String]
         deriving (Eq, Typeable)
 
 instance Show CaperException where
         show (SyntaxNotImplemented s) = "The following syntax is not yet implemented: " ++ s
         show (TypesNotUnifiable tue) = show tue
+        show (UndeclaredRegionType rt l) = "The region type '" ++ rt ++ "' has not been declared." ++ shw l
+                where
+                        shw [] = ""
+                        shw l = "\n\tPerhaps you meant: " ++ intercalate ", " l ++ "."
 
 -- |The data type 'ExceptionContext' represents contextual information
 -- about the cause of a 'CaperException'.

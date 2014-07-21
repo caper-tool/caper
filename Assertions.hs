@@ -2,13 +2,20 @@
 module Assertions where
 
 import Control.Monad.State
+import Control.Monad.Reader
 --import Control.Monad.Exception
+import Control.Lens
 
+import Utils.SimilarStrings
 import Exceptions
 import ProverDatatypes
 import Prover
 import Parser.AST
-
+import SymbolicState (SymbStateLenses, PredicateName(..))
+import qualified SymbolicState as SS
+import Regions (RegionLenses)
+import qualified Regions as R
+import RegionTypes
 
 -- TODO: Check for sure that I've got these right(!)
 -- |Interpret a syntactic value relation.
@@ -127,3 +134,45 @@ generatePermissionExpr genvar (BinaryPermExpr _ bo pe1 pe2) = do
 producePermissionExpr :: (MonadState s m, AssumptionLenses s) =>
         PermExpr -> m (PermissionExpression VariableID)
 producePermissionExpr = generatePermissionExpr produceVariable
+
+generateAnyExpr :: (Monad m, MonadRaise m) =>
+        (VarExpr -> m VariableID)       -- ^Variable handler
+        -> AnyExpr                      -- ^Syntactic expression
+        -> m (Expr VariableID)
+generateAnyExpr genvar (AnyVar e) = liftM VariableExpr $ genvar e
+generateAnyExpr genvar (AnyVal e) = liftM ValueExpr $ generateValueExpr genvar e
+generateAnyExpr genvar (AnyPerm e) = liftM PermissionExpr $ generatePermissionExpr genvar e
+
+produceAnyExpr :: (MonadState s m, AssumptionLenses s, MonadRaise m) =>
+        AnyExpr -> m (Expr VariableID)
+produceAnyExpr = generateAnyExpr produceVariable
+
+produceCell :: (MonadState s m, AssumptionLenses s, SymbStateLenses s, MonadRaise m) =>
+        CellAssrt -> m ()
+produceCell p = mkPred p >>= SS.producePredicate
+        where
+                mkPred (Cell sp e1 e2) = do
+                                ve1 <- produceValueExpr e1
+                                ve2 <- produceValueExpr e2
+                                return $ (PCell, [ValueExpr ve1, ValueExpr ve2])
+                mkPred (CellBlock sp e1 e2) = do
+                                ve1 <- produceValueExpr e1
+                                ve2 <- produceValueExpr e2
+                                return $ (PCells, [ValueExpr ve1, ValueExpr ve2])
+
+produceRegion :: (MonadState s m, AssumptionLenses s, RegionLenses s,
+                MonadReader r m, RTCGetter r,
+                MonadRaise m) =>
+        Bool -> -- ^Should the region be treated as dirty (unstable)
+        RegionAssrt -> m ()
+produceRegion dirty (Region sp rtn ridv lrps rse) = do
+                rtid0 <- view $ lookupRTName rtn
+                case rtid0 of
+                        Nothing -> do
+                                rtnames <- view regionTypeNames
+                                raise $ UndeclaredRegionType rtn (similarStrings rtn rtnames)
+                        (Just rtid) -> do
+                                let id = VIDNamed ridv
+                                params <- mapM produceAnyExpr lrps
+                                state <- produceValueExpr rse
+                                undefined -- R.Region dirty (Just $ R.RegionInstance rtid params) state 

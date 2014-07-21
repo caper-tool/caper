@@ -115,6 +115,9 @@ lookupRType rtid = view resolveRType `ap` return rtid
 lookupRTName :: (RTCGetter a) => String -> Getter a (Maybe RTId)
 lookupRTName s = to $ \c -> Map.lookup s (rtcIds (c ^. theRTContext))
 
+regionTypeNames :: (RTCGetter a) => Getter a [String]
+regionTypeNames = to $ \c -> map fst (Map.toList (rtcIds (c ^. theRTContext)))
+
 instance RTCGetter RegionTypeContext where
         theRTContext = to id
 

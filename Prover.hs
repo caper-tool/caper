@@ -8,7 +8,7 @@
 module Prover(
         -- * Assumptions
         Assumptions,
-        AssumptionLenses,
+        AssumptionLenses(..),
         emptyAssumptions,
         ProverM,
         -- ** Variable type bindings
@@ -16,6 +16,7 @@ module Prover(
         isBound,
         bindVarsAs,
         bindVarsAsE,
+        checkExpressionAtType,
         --unifyEqVars,
         --unifyEqVarsE
         -- ** Adding assumptions
@@ -31,13 +32,14 @@ module Prover(
         isConsistent,
         -- * Assertions
         Assertions,
-        AssertionLenses,
+        AssertionLenses(..),
         emptyAssertions,
         -- ** Display
         showAssertions,
         printAssertions,
         -- ** Adding assertions
         assert,
+        assertContradiction,
         assertEqual,
         assertTrue,
         assertFalse,
@@ -510,6 +512,10 @@ assertTrue = assert . toCondition
 -- |Assert that a condition is false.
 assertFalse :: (ConditionProp c, MonadState s m, AssertionLenses s) => c VariableID -> m ()
 assertFalse = assert . negativeCondition
+
+-- |Assert a contradiction.
+assertContradiction :: (MonadState s m, AssertionLenses s) => m ()
+assertContradiction = assert condFalse
 
 filterEvars :: (AssertionLenses a) => (Maybe VariableType -> Bool) -> Getter a [VariableID]
 filterEvars f = to $ Map.keys . Map.filter f . TC.toMap . (^.existentialBindings)

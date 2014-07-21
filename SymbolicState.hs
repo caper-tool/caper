@@ -17,7 +17,7 @@ import Data.List (intersperse)
 import Data.Traversable
 
 import qualified Utils.AliasingMap as AliasMap
-import Parser.AST
+import Parser.AST.Code
 import Regions
 import RegionTypes
 
@@ -149,7 +149,7 @@ proverToSState pt = do
 
 
 validatePredicate :: (MonadState s m, SymbStateLenses s) => Predicate -> m ()
--- Check that a predicate has the correct number and type of parameters
+-- ^Check that a predicate has the correct number and type of parameters.
 validatePredicate (n, exprs) = chkTypes exprs
         (Map.findWithDefault (error $ "The predicate name '" ++ show n ++ "' is not defined.") n predicateTypes)
         where
