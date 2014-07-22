@@ -38,6 +38,14 @@ data CaperException =
         -- records the undeclared name.  The second field records a
         -- list of (similar) alternatives.
         | UndeclaredRegionType String [String]
+        -- |'TypeMismatch' indicates that an expression of the
+        -- expected type (first field) was required, but an expression
+        -- of the actual type (second field) was given.
+        | TypeMismatch VariableType VariableType
+        -- |'ArgumentCountMismatch' indicates that the wrong number
+        -- of arguments were supplied (e.g. for a region).  The fields
+        -- records @required@ and @actual@, or @-1@ and @actual - required@.
+        | ArgumentCountMismatch Int Int
         deriving (Eq, Typeable)
 
 instance Show CaperException where
@@ -47,16 +55,24 @@ instance Show CaperException where
                 where
                         shw [] = ""
                         shw l = "\n\tPerhaps you meant: " ++ intercalate ", " l ++ "."
+        show (TypeMismatch expected actual) = "A " ++ show expected ++ " expression was required, but a " ++ show actual ++ " expression was provided."
+        show (ArgumentCountMismatch (-1) diff)
+                | diff < 0 = show (-diff) ++ " too few arguments were supplied."
+                | otherwise = show diff ++ " too many arguments were supplied."
+        show (ArgumentCountMismatch required actual) =
+                show required ++ " arguments were expected, but " ++ show actual ++ " arguments were supplied."
 
 -- |The data type 'ExceptionContext' represents contextual information
 -- about the cause of a 'CaperException'.
 data ExceptionContext =
         StringContext String
         | SourcePosContext SourcePos
+        | DescriptiveContext SourcePos String
 
 instance Show ExceptionContext where
         show (StringContext s) = s
         show (SourcePosContext sp) = show sp
+        show (DescriptiveContext sp s) = show sp ++ ": " ++ show s
 
 -- |The 'MonadRaise' class supports raising 'CaperException's and
 -- adding contextual information

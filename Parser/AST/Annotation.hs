@@ -1,7 +1,9 @@
+{-# LANGUAGE TemplateHaskell #-}
 module Parser.AST.Annotation where
-
 import Data.List
 import Text.ParserCombinators.Parsec
+
+import Parser.AST.SourcePos
 
 -- * Assertion syntax
 
@@ -183,3 +185,16 @@ instance Show Assrt where
         show (AssrtConj _ a1 a2) = show a1 ++ " &*& " ++ show a2
         show (AssrtITE _ ac a1 a2) = "(" ++ show ac ++ " ? " ++ show a1 ++ " : " ++ show a2 ++ ")"
 
+makeSourcePos ''VarExpr
+makeSourcePos ''ValExpr
+makeSourcePos ''PermExpr
+makeSourcePos ''PureAssrt
+makeSourcePos ''CellAssrt
+makeSourcePos ''RegionAssrt
+makeSourcePos ''Predicate
+makeSourcePos ''Guard
+makeSourcePos ''Assrt
+instance HasSourcePos AnyExpr where
+        sourcePos (AnyVar e) = sourcePos e
+        sourcePos (AnyVal e) = sourcePos e
+        sourcePos (AnyPerm e) = sourcePos e

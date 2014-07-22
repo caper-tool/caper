@@ -11,11 +11,13 @@ import Exceptions
 import ProverDatatypes
 import Prover
 import Parser.AST
+import Parser.AST.SourcePos
 import SymbolicState (SymbStateLenses, PredicateName(..))
 import qualified SymbolicState as SS
 import Regions (RegionLenses)
 import qualified Regions as R
 import RegionTypes
+import qualified Guards as G
 
 -- TODO: Check for sure that I've got these right(!)
 -- |Interpret a syntactic value relation.
@@ -160,12 +162,30 @@ produceCell p = mkPred p >>= SS.producePredicate
                                 ve2 <- produceValueExpr e2
                                 return $ (PCells, [ValueExpr ve1, ValueExpr ve2])
 
+checkRegionParams :: (MonadState s m, AssumptionLenses s,
+                MonadReader r m, RTCGetter r,
+                MonadRaise m) =>
+        RTId -> [(Expr VariableID, AnyExpr)] -> m ()
+checkRegionParams rtid params = do
+                        rt <- lookupRType rtid
+                        let types = map snd $ rtParameters rt
+                        if length types == length params then
+                                checkParams 2 params types
+                        else
+                                raise $ ArgumentCountMismatch (2 + length types) (2 + length params)
+        where
+                checkParams n ((e, p) : ps) (t : ts) = addContext (DescriptiveContext (sourcePos p) $ "In argument " ++ show n) $ do
+                        checkExpressionAtTypeE e t
+
+-- |Produce a region assertion.
 produceRegion :: (MonadState s m, AssumptionLenses s, RegionLenses s,
                 MonadReader r m, RTCGetter r,
                 MonadRaise m) =>
-        Bool -> -- ^Should the region be treated as dirty (unstable)
-        RegionAssrt -> m ()
-produceRegion dirty (Region sp rtn ridv lrps rse) = do
+        Bool -- ^Should the region be treated as dirty (unstable)
+        -> RegionAssrt -> m ()
+produceRegion dirty (Region sp rtn ridv lrps rse) = addContext
+        (DescriptiveContext sp $ "In a region assertion of type '" ++ rtn ++ "'") $
+        do
                 rtid0 <- view $ lookupRTName rtn
                 case rtid0 of
                         Nothing -> do
@@ -173,6 +193,9 @@ produceRegion dirty (Region sp rtn ridv lrps rse) = do
                                 raise $ UndeclaredRegionType rtn (similarStrings rtn rtnames)
                         (Just rtid) -> do
                                 let id = VIDNamed ridv
+                                addContext (StringContext $ "The region identifier '" ++ ridv ++ "'") $
+                                        bindVarAs id VTRegionID
                                 params <- mapM produceAnyExpr lrps
+                                checkRegionParams rtid (zip params lrps)
                                 state <- produceValueExpr rse
-                                undefined -- R.Region dirty (Just $ R.RegionInstance rtid params) state 
+                                R.produceMergeRegion id $ R.Region dirty (Just $ R.RegionInstance rtid params) (Just state) G.emptyGuard

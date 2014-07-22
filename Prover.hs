@@ -16,7 +16,10 @@ module Prover(
         isBound,
         bindVarsAs,
         bindVarsAsE,
+        bindVarAs,
+        bindVarAsE,
         checkExpressionAtType,
+        checkExpressionAtTypeE,
         --unifyEqVars,
         --unifyEqVarsE
         -- ** Adding assumptions
@@ -157,6 +160,13 @@ bindVarsAsE s vt = do
                         bs <- liftTUFailure $ TC.bindAll s vt b0
                         bindings .= bs
 
+bindVarAs :: (MonadState s m, AssumptionLenses s) => VariableID -> VariableType -> m ()
+bindVarAs = bindVarsAs . Identity
+
+bindVarAsE :: (MonadState s m, AssumptionLenses s, MonadRaise m) => VariableID -> VariableType -> m ()
+bindVarAsE = bindVarsAsE . Identity
+
+
 unifyEqVars :: (MonadState s m, AssumptionLenses s) => VariableID -> VariableID -> m ()
 unifyEqVars v1 v2 = do
                         b0 <- use bindings
@@ -189,6 +199,23 @@ checkExpressionAtType (ValueExpr c) VTRegionID = error $ "A region identifier wa
 checkExpressionAtType e VTValue = bindVarsAs (freeVariables e) VTValue
 checkExpressionAtType e VTPermission = bindVarsAs (freeVariables e) VTPermission
 checkExpressionAtType e VTRegionID = bindVarsAs (freeVariables e) VTRegionID
+
+exprType :: Expr v -> Maybe VariableType
+exprType (PermissionExpr _) = Just VTPermission
+exprType (ValueExpr _) = Just VTValue
+exprType _ = Nothing
+
+-- |Check that the expression is of the appropriate type,
+-- binding the variables to be sure that they are not inconsistently
+-- used.  Raises an exception if the type cannot be made to match.
+checkExpressionAtTypeE :: (MonadState s m, AssumptionLenses s, MonadRaise m) =>
+        Expr VariableID -> VariableType -> m ()
+checkExpressionAtTypeE e t = case exprType e of
+                (Just t') -> if t == t' then
+                                bindVarsAsE (freeVariables e) t
+                        else
+                                raise $ TypeMismatch t t'
+                _ -> bindVarsAsE e t
 
 isBound :: (MonadState s m, AssumptionLenses s) => VariableID -> m Bool
 -- ^Determine if the given variable is bound.

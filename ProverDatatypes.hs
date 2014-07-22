@@ -162,6 +162,12 @@ class StringVariable v where
 data VariableType = VTPermission | VTValue | VTRegionID
         deriving (Eq, Ord, Typeable)
 
+instance Show VariableType where
+        show VTPermission = "permission"
+        show VTValue = "value"
+        show VTRegionID = "region identifier"
+
+
 type PermissionsProver = FOF PermissionAtomic String -> IO (Maybe Bool)
 type ValueProver = FOF ValueAtomic String -> IO (Maybe Bool)
 
@@ -191,9 +197,6 @@ instance Provers ProverRecord where
         valueProver = _valueProver
 
 
-instance Show VariableType where
-        show VTPermission = "Permission"
-        show VTValue = "Value"
 
 -- Variable identifiers
 -- Strings should be alpha-numeric

@@ -44,7 +44,9 @@ mergeMaybe _ Nothing m2 = return m2
 mergeMaybe _ m1 Nothing = return m1
 mergeMaybe op (Just m1) (Just m2) = op m1 m2 >>= return . Just
 
--- Merge region instances, adding equality assumptions between parameters
+
+-- |Merge region instances, adding equality assumptions between parameters
+--
 -- Pre: region instances should be checked against their types; i.e.
 -- if they have the same region type, then they must have the same number
 -- and type of parameters.
@@ -81,6 +83,19 @@ mergeRegions r1 r2 = do
                                         assumeContradiction
                         _ -> return ()
                 return $ Region dirty ti s g
+
+
+-- | Add a region, or merge it if one already exists with the same identifier.
+produceMergeRegion :: (MonadState s m, AssumptionLenses s, RegionLenses s,
+                MonadReader r m, RTCGetter r) =>
+                VariableID -> Region -> m ()
+produceMergeRegion rvar region = do
+                regs <- use regions
+                case AM.lookup rvar regs of
+                        Nothing -> regions .= AM.insert rvar region regs
+                        (Just r) -> do
+                                r' <- mergeRegions r region
+                                regions .= AM.insert rvar r' regs
 
 -- Stabilise all regions
 stabiliseRegions :: (ProverM s r m, RegionLenses s, RTCGetter r) =>

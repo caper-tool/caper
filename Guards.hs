@@ -143,6 +143,9 @@ data GuardParameters v = NoGP | PermissionGP (PermissionExpression v)
 
 newtype Guard v = GD (Map.Map String (GuardParameters v)) deriving (Eq,Ord,Functor,Foldable,Traversable)
 
+emptyGuard :: Guard v
+emptyGuard = GD Map.empty
+
 instance Show v => Show (Guard v) where
         show (GD mp) = doshow (Map.toList mp)
                 where
