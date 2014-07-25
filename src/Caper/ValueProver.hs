@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 module Caper.ValueProver where
 import Data.SBV
 import Prelude hiding (sequence,foldl,mapM_,mapM)

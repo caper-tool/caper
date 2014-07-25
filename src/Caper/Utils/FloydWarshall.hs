@@ -39,7 +39,7 @@ floydInit d f = V.create $ do
         return mx
 
 floydInitM :: Monad m => Int -> (Int -> Int -> m a) -> m (Matrix a)
-floydInitM d f = V.generateM d (\x -> V.generateM d (f x))
+floydInitM d f = V.generateM d (V.generateM d . f)
 
 floydStep :: (Floydable a) => Int -> Matrix a -> Matrix a
 floydStep k !mx = floydInit (V.length mx) (\i j -> fmin (matrixGet mx i j) (fadd (matrixGet mx i k) (matrixGet mx k j)))

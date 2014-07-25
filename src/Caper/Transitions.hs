@@ -4,22 +4,22 @@ import Prelude hiding (foldl', elem, foldr)
 import Control.Monad
 import Control.Monad.Reader.Class
 import Control.Monad.IO.Class
+import Data.Foldable
 
 import Caper.ProverDatatypes
 import Caper.Prover
 import Caper.Utils.FloydWarshall
-import Caper.Data.Foldable
 import Caper.RegionTypes
 import Caper.Provers -- TODO: remove (used for testing)
 
 data ClosureVariable v = Context v | Local String deriving (Eq, Ord)
 
 instance (Show v) => Show (ClosureVariable v) where
-        show (Context v) = "c_" ++ (show v)
+        show (Context v) = "c_" ++ show v
         show (Local s) = "l_" ++ s
 
 instance (StringVariable v) => StringVariable (ClosureVariable v) where
-        varToString (Context v) = "c_" ++ (varToString v)
+        varToString (Context v) = "c_" ++ varToString v
         varToString (Local s) = "l_" ++ s
 
 
@@ -52,7 +52,7 @@ data GuardedTransition vt = GuardedTransition {
         gtPostState :: ValueExpression vt
         }
 gtFreeVars :: Eq vt => GuardedTransition vt -> [vt]
-gtFreeVars gt = foldrFree (\v -> if elem v (gtBoundVars gt) then id else (v :)) [] (gtGuard gt)
+gtFreeVars gt = foldrFree (\v -> if v `elem` gtBoundVars gt then id else (v :)) [] (gtGuard gt)
 
 instance (Show vt) => Show (GuardedTransition vt) where
         show (GuardedTransition bvs gd pre post) = 
@@ -103,7 +103,7 @@ computeConditions gts i j = if i == j then return FOFTrue else
                                 b' <- computeCondition i j b
                                 return (fmin a b')
 
-translateIn :: Int -> (Int -> Int -> a) -> (Int -> Int -> a)
+translateIn :: Int -> (Int -> Int -> a) -> Int -> Int -> a
 translateIn offset f x y = f (x + offset) (y + offset)
 
 computeInitialMatrix :: (MonadIO m, MonadReader r m, Provers r, Eq v, StringVariable v) =>
@@ -134,4 +134,8 @@ computeClosureRelation _ _ = return (\x y -> FOFTrue)
 
 
 
-testgts = [ GuardedTransition [VIDNamed "x"] (FOFAnd ((VEConst 7) $<$ (VEVar $ VIDNamed "a")) ((VEVar $ VIDNamed "x") $=$ (VEConst 1))) (VEVar $ VIDNamed "x") ((VEConst 1) $-$ (VEVar $ VIDNamed "x")) ]
+testgts = [ GuardedTransition [VIDNamed "x"]
+        (FOFAnd (VEConst 7 $<$ (VEVar $ VIDNamed "a"))
+                (VEVar (VIDNamed "x") $=$ VEConst 1))
+        (VEVar $ VIDNamed "x")
+        (VEConst 1 $-$ VEVar (VIDNamed "x")) ]

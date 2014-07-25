@@ -37,7 +37,7 @@ proversFromConfig = do
                         _ -> do
                                 mode <- get conf "InternalProver" "mode"
                                 let ipp = if mode == "bigint" then permCheckBigInt else permCheckTree
-                                return (ipp . simplify . (rewriteFOF simplR))
+                                return (ipp . simplify . rewriteFOF simplR)
                 pp <- liftIO $ memoIO pp0 -- cache results from the permissions prover
                 valProver <- get conf "Provers" "values"
                 timeout <- get conf "Z3Prover" "timeout"

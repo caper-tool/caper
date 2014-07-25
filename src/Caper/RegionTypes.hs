@@ -108,7 +108,7 @@ class RTCGetter a where
                         (resError s)
                         (Map.lookup s (rtcRegionTypes (c ^. theRTContext)))
                 where
-                        resError s = (error $ "The region identifier " ++ show s ++ " could not be resolved.")
+                        resError s = error $ "The region identifier " ++ show s ++ " could not be resolved."
 lookupRType :: (MonadReader r m, RTCGetter r) => RTId -> m RegionType
 lookupRType rtid = view resolveRType `ap` return rtid 
 

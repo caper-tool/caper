@@ -141,7 +141,7 @@ data RegionAssrt = Region {
         regionAssrtState :: ValExpr             -- ^Region state
         }
 instance Show RegionAssrt where
-        show (Region _ t v args s) = t ++ "(" ++ v ++ concat (map ((',' :) . show) args) ++ "," ++ show s ++ ")"
+        show (Region _ t v args s) = t ++ "(" ++ v ++ concatMap ((',' :) . show) args ++ "," ++ show s ++ ")"
 
 -- |Predicate assertions
 data Predicate = Predicate SourcePos String [AnyExpr]

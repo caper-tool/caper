@@ -2,9 +2,7 @@
 {-# LANGUAGE DeriveFunctor, FlexibleContexts #-}
 module Caper.SymbolicState where
 
-import Prelude hiding (sequence,foldl,foldr,mapM_,mapM,elem,notElem,concat)
-import ProverDatatypes
-import Prover
+import Prelude hiding (sequence,foldl,foldr,mapM_,mapM,elem,notElem,concat,concatMap)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.MultiSet (MultiSet)
@@ -16,6 +14,8 @@ import Data.Foldable
 import Data.List (intersperse)
 import Data.Traversable
 
+import Caper.ProverDatatypes
+import Caper.Prover
 import qualified Caper.Utils.AliasingMap as AliasMap
 import Caper.Parser.AST.Code
 import Caper.Regions
@@ -79,7 +79,9 @@ emptySymbState :: SymbState Assumptions
 emptySymbState = SymbState emptyAssumptions Map.empty Map.empty AliasMap.empty
 
 showPVarBindings :: PVarBindings -> String
-showPVarBindings vs = Map.foldWithKey (\pv var s-> (pv ++ " := " ++ show var ++ "\n" ++ s)) "" vs
+showPVarBindings = Map.foldWithKey showBinding ""
+        where
+                showBinding pv var s = pv ++ " := " ++ show var ++ "\n" ++ s
 
 instance (Show p) => Show (SymbState p) where
         show (SymbState p vs preds regs) = "Pure facts:" ++ show p ++ "\nProgram variables:\n" ++ showPVarBindings vs ++ "Heap:\n" ++ (concat . intersperse "\n" . map showPredicate . toPredicateList) preds
@@ -110,7 +112,11 @@ emptySymbStateWithVars vs = execState (do
 newtype InformedRegion = InformedRegion (Region, Maybe RegionType)
 
 instance Show InformedRegion where
-        show (InformedRegion (Region _ (Just (RegionInstance _ params)) s gd, Just rt)) = rtRegionTypeName rt ++ "(" ++ (concat (map ((++ ",") . show) params)) ++ maybe "_" show s ++ "): " ++ show gd ++ "\n"
+        show (InformedRegion (Region _ (Just (RegionInstance _ params)) s gd, Just rt)) =
+                rtRegionTypeName rt ++ "("
+                        ++ concatMap ((++ ",") . show) params
+                        ++ maybe "_" show s
+                        ++ "): " ++ show gd ++ "\n"
         show (InformedRegion (Region _ _ s gd, _)) = "?(" ++ maybe "_" show s ++ "): " ++ show gd ++ "\n"
 
 showSymbState :: (MonadState (SymbState p) m, Show p, MonadReader r m, RTCGetter r) => m String
@@ -159,12 +165,12 @@ validatePredicate (n, exprs) = chkTypes exprs
                 chkTypes [] (_ : _) = error $ "The predicate '" ++ show n ++ "' is used with too few arguments."
 
 predicateAssumptions :: Predicate -> Predicates -> [Condition VariableID]
-predicateAssumptions (PCell, e1 : _) preds = (toCondition $ VALt (VEConst 0) e0) :
+predicateAssumptions (PCell, e1 : _) preds = toCondition (VALt (VEConst 0) e0) :
                 foldMap genCond (Map.findWithDefault MultiSet.empty PCell preds)
         where
                 genCond (e1' : _) = [negativeCondition $ VAEq (toValueExpr e1') e0]
                 e0 = toValueExpr e1
-predicateAssumptions (PCells, [e1, e2]) _ = [(toCondition $ VALt (VEConst 0) e1'),  (toCondition $ VALt (VEConst 0) e2')]
+predicateAssumptions (PCells, [e1, e2]) _ = [toCondition (VALt (VEConst 0) e1'),  toCondition (VALt (VEConst 0) e2')]
         where
                 e1' = toValueExpr e1
                 e2' = toValueExpr e2
@@ -179,7 +185,7 @@ insertPredicate :: Predicate -> Predicates -> Predicates
 insertPredicate (n, es) = Map.insertWith (flip MultiSet.union) n (MultiSet.singleton es)
 
 addPredicate :: (MonadState s m, SymbStateLenses s) => Predicate -> m ()
-addPredicate p = preds %= (insertPredicate p)
+addPredicate p = preds %= insertPredicate p
                 
 producePredicate :: (MonadState s m, SymbStateLenses s) => Predicate -> m ()
 -- Check that a predicate is appropriately typed,
@@ -240,14 +246,14 @@ consumePred (PCell, [x, y]) = (do
                 assertTrue $ x $<$ e1 $+$ e2
                 yval <- newAvar "unk"
                 assertEqual y (var yval)
-                (assertEqual e1 x `mplus`
+                assertEqual e1 x `mplus`
                     (do
                         addPredicate (PCells, [e1, toExpr (x $-$ e1)])
-                        assertTrue $ (e1 $<$ x)))
-                (assertEqual (e1 $+$ e2) (x $+$ VEConst 1) `mplus`
+                        assertTrue $ e1 $<$ x)
+                assertEqual (e1 $+$ e2) (x $+$ VEConst 1) `mplus`
                     (do
                         addPredicate (PCells, [toExpr (x $+$ VEConst 1), toExpr (e1 $+$ e2 $-$ x $-$ VEConst 1)])
-                        assertTrue $ (x $+$ VEConst 1) $<$ (e1 $+$ e2))))
+                        assertTrue $ (x $+$ VEConst 1) $<$ (e1 $+$ e2)))
                 -- add justCheck to fail faster?
 
 
@@ -272,11 +278,11 @@ aexprToExpr (VarAExpr s x) = do
 aexprToExpr (ConstAExpr s n) = return $! integerExpr n
 aexprToExpr (NegAExpr s e) = do
                         e' <- aexprToExpr e
-                        return $! toExpr $ (VEMinus (VEConst 0) (toValueExpr e'))
+                        return $! toExpr $ VEMinus (VEConst 0) (toValueExpr e')
 aexprToExpr (BinaryAExpr s op e1 e2) = do
                         e1' <- aexprToExpr e1
                         e2' <- aexprToExpr e2
-                        return $! toExpr $ (opi op) (toValueExpr e1') (toValueExpr e2')
+                        return $! toExpr $ opi op (toValueExpr e1') (toValueExpr e2')
                 where
                         opi Add = VEPlus
                         opi Subtract = VEMinus
@@ -297,7 +303,7 @@ symExLocalAssign target expr = do
 symExAllocate :: (MonadIO m, MonadPlus m, Provers p) => String -> AExpr -> MSState p m ()
 symExAllocate target lenExpr = do
                 lenval <- aexprToExpr lenExpr
-                check $ do
+                check $
                         -- Check that the length is positive
                         assertTrue $ VEConst 0 $<$ lenval
                 loc <- newAvar target

@@ -1,11 +1,11 @@
-{-# LANGUAGE RankNTypes, MultiParamTypeClasses, FunctionalDependencies #-}
+{-# LANGUAGE RankNTypes, MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE DeriveDataTypeable, FlexibleContexts #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Caper.Guards where
-import Prelude hiding (catch,mapM,sequence,foldl,mapM_)
+import Prelude hiding (catch,mapM,sequence,foldl,mapM_,concatMap)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Control.Monad.Exception
@@ -56,7 +56,7 @@ data GuardTypeException =
 
 instance Show GuardTypeException where
         show (GTEMultipleOccurrence s Nothing) = "Multiple guards named \"" ++ s ++ "\" are declared in a guard type."
-        show (GTEMultipleOccurrence s (Just gt)) = "Multiple guards named \"" ++ s ++ "\" are declared in the guard type \"" ++ (show gt) ++ "\"."
+        show (GTEMultipleOccurrence s (Just gt)) = "Multiple guards named \"" ++ s ++ "\" are declared in the guard type \"" ++ show gt ++ "\"."
 
 instance Exception GuardTypeException
 
@@ -85,14 +85,17 @@ validateGuardTypeAST (SomeGT gt) = do
                 vgt s (SumGT gt1 gt2) = do
                                                 s1 <- vgt s gt1
                                                 vgt s1 gt2
-                checkFresh s n = do if Set.member n s then throw $ GTEMultipleOccurrence n (Just gt) else return $ Set.insert n s
+                checkFresh s n = if Set.member n s then
+                                        throw $ GTEMultipleOccurrence n (Just gt)
+                                else
+                                        return $ Set.insert n s
 
 -- TODO: refactor these into somewhere more appropriate
 mixWith :: (Ord a, Ord b, Ord c) => (a -> b -> c) -> Set.Set a -> Set.Set b -> Set.Set c
 mixWith op s1 s2 = Set.unions $ Set.toList $ Set.map (\x -> Set.map (op x) s2) s1
 
 listMixWith :: (a -> b -> c) -> [a] -> [b] -> [c]
-listMixWith op l1 l2 = foldl (++) [] $ map (\x -> map (op x) l2) l1
+listMixWith op l1 l2 = concatMap (\ x -> map (op x) l2) l1
 
 
 toWeakGuardType :: GuardTypeAST -> WeakGuardType
@@ -133,7 +136,7 @@ data GuardException v =
                 deriving Typeable
 
 instance Show v => Show (GuardException v) where
-        show (GEInconsistentOccurrences s g) = "The guard named \"" ++ s ++ "\" is used inconsistently in the guard expression \"" ++ (show g) ++ "\"."
+        show (GEInconsistentOccurrences s g) = "The guard named \"" ++ s ++ "\" is used inconsistently in the guard expression \"" ++ show g ++ "\"."
 
 instance (Typeable v, Show v) => Exception (GuardException v)
 
@@ -172,7 +175,7 @@ instance ExpressionSub Guard Expr where
         exprSub s (GD g) = GD $ Map.map (exprSub s) g
 
 toGuard :: (Typeable v, Show v, Throws (GuardException v) l) => GuardAST v -> EM l (Guard v)
-toGuard gast = tg (Map.empty) gast
+toGuard gast = tg Map.empty gast
         where
                 tg g (EmptyG) = return $ GD g
                 tg g (NamedG n) = if n `Map.member` g then throw (GEInconsistentOccurrences n gast) else return . GD $ Map.insert n NoGP g
@@ -194,7 +197,8 @@ toGuard gast = tg (Map.empty) gast
                                                 tg g' ge2
 
 checkGuardAtType :: Guard v -> WeakGuardType -> Bool
-checkGuardAtType (GD g) gt = Set.fold (\m b -> b || Map.foldWithKey (matchin m) True g) False gt
+checkGuardAtType (GD g)
+  = Set.fold (\ m b -> b || Map.foldWithKey (matchin m) True g) False
         where
                 matchin m k p b = b && case Map.lookup k m of
                                 Nothing -> False
@@ -214,7 +218,7 @@ fullGuard :: WeakGuardType -> Guard v
 fullGuard gt = GD $ Map.map gtToG (Set.findMin gt)
 
 fullGuards :: WeakGuardType -> [Guard v]
-fullGuards = Prelude.map (GD . (Map.map gtToG)) . Set.toList 
+fullGuards = Prelude.map (GD . Map.map gtToG) . Set.toList 
 
 
 guardJoin :: Guard v -> Guard v -> Guard v
@@ -224,7 +228,7 @@ guardJoin (GD g1) (GD g2) = GD $ Map.union g1 g2
 -- Merge two guards, generating assumptions in the process
 mergeGuards :: (MonadState s m, AssumptionLenses s) =>
                 Guard VariableID -> Guard VariableID -> m (Guard VariableID)
-mergeGuards (GD g1) (GD g2) = (sequence $ Map.unionWith unionop (fmap return g1) (fmap return g2)) >>= (return . GD)
+mergeGuards (GD g1) (GD g2) = liftM GD $ sequence (Map.unionWith unionop (fmap return g1) (fmap return g2))
         where
                 unionop p1 p2 = do
                                 v1 <- p1
@@ -299,9 +303,9 @@ subtractPE l PEZero = mzero     -- Having a permission guard at all should imply
 subtractPE l s = (do -- TODO: frame some permission
                 assertTrue $ PAEq l s
                 return Nothing) `mplus`
-        (trace "Trying framing" $ do
+        trace "Trying framing" (do
                 ev <- newEvar "perm"
-                let eve = (PEVar ev)
+                let eve = PEVar ev
                 assertFalse $ PAEq s PEZero
                 assertFalse $ PAEq eve PEZero
                 assertTrue $ PAEq l (PESum s eve)

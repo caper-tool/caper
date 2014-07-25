@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveFunctor #-}
 module Caper.PermissionsE(makeEPProver) where
 import Control.Concurrent
+import Control.Monad
 import Data.List
 import System.IO
 import System.Process
@@ -12,6 +13,7 @@ import Debug.Trace
 import System.Directory
 import Control.Exception
 
+import Paths_Caper
 import Caper.ProverDatatypes
 
 
@@ -120,7 +122,7 @@ test1 = BAExists (bindVars ["x"]) $ BAForAll (bindVars ["y"]) (BADisj (var "x") 
 --}
 
 tptpBAPrelude :: IO String
-tptpBAPrelude = readFile "ba_prelude.tptp"
+tptpBAPrelude = getDataFileName "ba_prelude.tptp" >>= readFile
 
 query :: Show v => BAFormula v -> String
 query f = "fof(query,question," ++ show f ++ ")."
@@ -130,7 +132,7 @@ startCheck epp formula outHandle errHandle = do
         let p = (proc (proverPath epp)
                 ["--auto", "--tptp3-format", "--output-level=0"]) { std_in = CreatePipe, std_out = UseHandle outHandle, std_err = UseHandle errHandle }
         (Just inp, _, _, ph) <- createProcess p
-        hPutStrLn inp ((tptpPrelude epp) ++ query formula)
+        hPutStrLn inp (tptpPrelude epp ++ query formula)
         hClose inp
         return ph
 
@@ -142,9 +144,9 @@ waitForCheck ph sem res = do
 
 timeoutSem :: Int -> MSem Int -> IO ()
 -- terminate the handles after timeout
-timeoutSem n sem = if n <= 0 then return () else do
-        threadDelay n
-        MSem.signal sem
+timeoutSem n sem = unless (n <= 0) $
+  do threadDelay n
+     MSem.signal sem
 
 checkBothWays :: Show v => EPProver -> BAFormula v -> IO (Maybe Bool)
 checkBothWays epp formula = trace ("Calling E on:\n" ++ show formula) $ bracket
@@ -180,7 +182,7 @@ checkBothWays epp formula = trace ("Calling E on:\n" ++ show formula) $ bracket
                 rfalse <- takeMVar mvfalse
                 return $ if rtrue == ExitSuccess then
                         trace "Proved." $ Just True 
-                        else if rfalse == ExitSuccess then trace "Disproved." $ Just False else trace "Unknown." $ Nothing)
+                        else if rfalse == ExitSuccess then trace "Disproved." $ Just False else trace "Unknown." Nothing)
 
 
 makeEPProver ::

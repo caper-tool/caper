@@ -9,6 +9,7 @@ module Caper.Exceptions(
         module Caper.Exceptions)
         where
 import Data.Typeable
+import Control.Arrow (first)
 import Control.Monad.Exception
 import Control.Monad.Trans.Either
 import Control.Monad.Trans
@@ -89,7 +90,7 @@ type RaiseT = EitherT ([ExceptionContext], CaperException)
 
 instance (Monad m, Functor m) => MonadRaise (RaiseT m) where
         raise ex = left ([], ex)
-        addContext ctx = bimapEitherT (\(ctxx, ex) -> (ctx : ctxx, ex)) id
+        addContext ctx = bimapEitherT (first ((:) ctx)) id
 
 instance (MonadTrans t, MonadHoist t, Monad m, MonadRaise m) => MonadRaise (t m) where
         raise = lift . raise

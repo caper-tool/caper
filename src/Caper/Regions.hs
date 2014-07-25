@@ -64,7 +64,7 @@ mergeRegionInstances i1@(RegionInstance t1 ps1) i2@(RegionInstance t2 ps2)
 mergeValueExpressions :: (MonadState s m, AssumptionLenses s) =>
         ValueExpression VariableID ->
         ValueExpression VariableID -> m (ValueExpression VariableID)
-mergeValueExpressions ve1 ve2 = (assumeTrue $ ve1 $=$ ve2) >> return ve1
+mergeValueExpressions ve1 ve2 = assumeTrue (ve1 $=$ ve2) >> return ve1
 
 mergeRegions :: (MonadState s m, AssumptionLenses s, MonadReader r m, RTCGetter r) =>
         Region -> Region -> m Region
