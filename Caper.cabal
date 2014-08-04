@@ -14,11 +14,12 @@ flag z3ffi
 
 executable Caper
   main-is:         Caper.hs
-  build-depends:   base ==4.6.*, containers ==0.5.*, control-monad-exception ==0.11.*, mtl ==2.1.*, transformers ==0.3.*, parsec ==3.1.*, lens ==4.3.*, HUnit ==1.2.*, QuickCheck ==2.6.*, time ==1.4.*, syb ==0.4.*, sbv ==3.1.*, multiset ==0.2.*, ConfigFile ==1.1.*, parallel ==3.2.*, process ==1.1.*, SafeSemaphore ==0.10.*, directory ==1.2.*, either ==4.3.*, vector ==0.10.*, template-haskell ==2.8.*
+  build-depends:   base ==4.6.*, containers ==0.5.*, control-monad-exception ==0.11.*, mtl ==2.1.*, transformers ==0.3.*, parsec ==3.1.*, lens >=3.9, HUnit ==1.2.*, QuickCheck ==2.6.*, time ==1.4.*, syb ==0.4.*, sbv >=2.10, multiset ==0.2.*, ConfigFile ==1.1.*, parallel ==3.2.*, process ==1.1.*, SafeSemaphore >=0.9, directory ==1.2.*, either ==4.3.*, vector ==0.10.*, template-haskell ==2.8.*
   hs-source-dirs:  src
 
   if flag(z3ffi)
     build-depends:  z3 ==0.3.*
+    cpp-options:    -Dz3ffi
 
 executable Interpreter
   build-depends:   

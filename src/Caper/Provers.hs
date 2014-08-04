@@ -28,25 +28,26 @@ proversFromConfig :: (MonadError CPError m, MonadIO m) => m ProverRecord
 proversFromConfig = do
                 conf <- configFile
                 permProver <- get conf "Provers" "permissions"
-                pp0 <- case permProver of
+                (pp0,ppi) <- case permProver of
                         "e" -> do
                                 exec <- get conf "EProver" "executable"
                                 timeout <- get conf "EProver" "timeout"
                                 epp <- liftIO $ makeEPProver exec timeout
-                                return (epp . simplify)
+                                return (epp . simplify, eproverVersion exec)
                         _ -> do
                                 mode <- get conf "InternalProver" "mode"
                                 let ipp = if mode == "bigint" then permCheckBigInt else permCheckTree
-                                return (ipp . simplify . rewriteFOF simplR)
+                                let ipi = if mode == "bigint" then (return "Internal permissions prover, bigint configuration") else (return "Internal permissions prover, tree configuration")
+                                return (ipp . simplify . rewriteFOF simplR, ipi)
                 pp <- liftIO $ memoIO pp0 -- cache results from the permissions prover
                 valProver <- get conf "Provers" "values"
                 timeout <- get conf "Z3Prover" "timeout"
-                let vp = case valProver :: String of
+                let (vp, vi) = case valProver :: String of
 #ifdef z3ffi
-                        "z3-ffi" -> VP2.valueCheck (Just timeout)
+                        "z3-ffi" -> (VP2.valueCheck (Just timeout), VP2.valueProverInfo)
 #endif
-                        _ -> VP.valueCheck (if timeout <= 0 then Nothing else Just $ (timeout - 1) `div` 1000 + 1)
-                return $ Provers pp vp
+                        _ -> (VP.valueCheck (if timeout <= 0 then Nothing else Just $ (timeout - 1) `div` 1000 + 1), VP.valueProverInfo)
+                return $ Provers pp vp ppi vi
                         
 initProvers :: IO ProverRecord
 initProvers = do

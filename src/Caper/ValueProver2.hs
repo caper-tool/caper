@@ -1,8 +1,9 @@
 module Caper.ValueProver2 where
 import Caper.ProverDatatypes
 import Z3.Monad
+import Control.Exception
 
-v = evalZ3 getVersion
+--v = evalZ3 getVersion
 
 convValueExpression :: (MonadZ3 z3) => (v -> z3 AST) -> ValueExpression v -> z3 AST
 convValueExpression s (VEConst i) = mkInt i
@@ -79,4 +80,8 @@ valueCheck timeout f = evalZ3With Nothing opts $ do
                         (Just x) -> if x > 0 then opt "SOFT_TIMEOUT" x else stdOpts
                         _ -> stdOpts
 
-
+valueProverInfo :: IO String
+valueProverInfo = (do
+        ver <- evalZ3 getVersion
+        return $ "Z3 library, version " ++ show ver) `catch`
+        (\e -> return $ "Failed to invoke Z3:\n" ++ show (e :: SomeException))

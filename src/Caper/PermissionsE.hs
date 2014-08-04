@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveFunctor #-}
-module Caper.PermissionsE(makeEPProver) where
+module Caper.PermissionsE(makeEPProver,eproverVersion) where
 import Control.Concurrent
 import Control.Monad
 import Data.List
@@ -120,6 +120,13 @@ crossSplit = BAForAll [v "f", v "a", v "b", v "c", v "d"] $
 
 test1 = BAExists (bindVars ["x"]) $ BAForAll (bindVars ["y"]) (BADisj (var "x") (var "y"))
 --}
+
+
+eproverVersion :: String -> IO String
+eproverVersion proverpath = 
+        (liftM ("EProver version: " ++) $ readProcess proverpath ["--version"] "")
+                `catch` (\e -> return $ "Failed to invoke EProver:\n" ++ show (e :: SomeException))
+
 
 tptpBAPrelude :: IO String
 tptpBAPrelude = getDataFileName "ba_prelude.tptp" >>= readFile

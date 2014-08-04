@@ -177,7 +177,9 @@ class Provers a where
 
 data ProverRecord = Provers {
                 _permissionsProver :: FOF PermissionAtomic String -> IO (Maybe Bool),
-                _valueProver :: FOF ValueAtomic String -> IO (Maybe Bool)
+                _valueProver :: FOF ValueAtomic String -> IO (Maybe Bool),
+                _permissionsInfo :: IO String,
+                _valueInfo :: IO String
                 }
 
 valueCheck :: (MonadIO m, MonadReader r m, Provers r, StringVariable v) =>

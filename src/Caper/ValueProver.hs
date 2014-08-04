@@ -42,3 +42,7 @@ toPredicate s (FOFTrue) = return true
 
 valueCheck :: (Eq v, Show v) => Maybe Int -> FOF ValueAtomic v -> IO (Maybe Bool)
 valueCheck timeout f = isTheorem timeout $ toPredicate (\v -> error $ "Unquantified variable " ++ show v ++ " in formula:\n" ++ show f) f
+
+valueProverInfo :: IO String
+valueProverInfo = do
+        return $ "SBV library, configuration: " ++ show sbvCurrentSolver
