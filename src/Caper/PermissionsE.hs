@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFunctor, QuasiQuotes #-}
 module Caper.PermissionsE(makeEPProver,eproverVersion) where
 import Control.Concurrent
 import Control.Monad
@@ -13,8 +13,9 @@ import Debug.Trace
 import System.Directory
 import Control.Exception
 
-import Paths_Caper
+--import Paths_Caper
 import Caper.ProverDatatypes
+import Caper.Utils.LiteralFileQQ
 
 
 -- Note, variables must be alpha-numeric (possibly including _) to work!
@@ -124,12 +125,16 @@ test1 = BAExists (bindVars ["x"]) $ BAForAll (bindVars ["y"]) (BADisj (var "x") 
 
 eproverVersion :: String -> IO String
 eproverVersion proverpath = 
-        (liftM ("EProver version: " ++) $ readProcess proverpath ["--version"] "")
+        liftM ("EProver version: " ++) (readProcess proverpath ["--version"] "")
                 `catch` (\e -> return $ "Failed to invoke EProver:\n" ++ show (e :: SomeException))
 
-
+{-
 tptpBAPrelude :: IO String
 tptpBAPrelude = getDataFileName "ba_prelude.tptp" >>= readFile
+-}
+
+tptpBAPrelude :: String
+tptpBAPrelude = [literalFile|ba_prelude.tptp|]
 
 query :: Show v => BAFormula v -> String
 query f = "fof(query,question," ++ show f ++ ")."
@@ -197,7 +202,7 @@ makeEPProver ::
         -> Int -- ^Timeout in milliseconds (0 or negative for no timeout)
         -> IO PermissionsProver
 makeEPProver execpath timeout = do
-        prel <- tptpBAPrelude
+        let prel = tptpBAPrelude
         return $ checkBothWays (EPProver prel execpath (timeout * 1000)) . toBAFormula
         -- "c:\\cygwin64\\home\\Thomas\\E\\PROVER\\eprover.exe"
 

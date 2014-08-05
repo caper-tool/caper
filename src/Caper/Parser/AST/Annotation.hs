@@ -4,6 +4,7 @@ import Data.List
 import Text.ParserCombinators.Parsec
 
 import Caper.Parser.AST.SourcePos
+import Caper.Exceptions
 
 -- * Assertion syntax
 
@@ -151,7 +152,7 @@ instance Show Predicate where
 -- |Guard assertions
 data Guard = NamedGuard SourcePos String                  -- ^Simple named guard
            | PermGuard SourcePos String PermExpr          -- ^Guard with permission
-           | ParamGuard SourcePos String [PermExpr]       -- ^Parametrised guard
+           | ParamGuard SourcePos String [AnyExpr]       -- ^Parametrised guard
 instance Show Guard where
         show (NamedGuard _ n) = n
         show (PermGuard _ n pe) = n ++ "[" ++ show pe ++ "]"
@@ -160,7 +161,7 @@ instance Show Guard where
 -- |Guards associated with a region
 data Guards = Guards SourcePos String [Guard]
 instance Show Guards where
-        show (Guards _ id gds) = id ++ "@(" ++ intercalate " * " (map show gds) ++ ")"
+        show (Guards _ ident gds) = ident ++ "@(" ++ intercalate " * " (map show gds) ++ ")"
 
 
 -- |Spatial assertion
@@ -198,3 +199,17 @@ instance HasSourcePos AnyExpr where
         sourcePos (AnyVar e) = sourcePos e
         sourcePos (AnyVal e) = sourcePos e
         sourcePos (AnyPerm e) = sourcePos e
+
+instance Contextual Guard where
+        toContext (NamedGuard sp n) = DescriptiveContext sp $
+                "In a unique guard named '" ++ n ++ "'"
+        toContext (PermGuard sp n _) = DescriptiveContext sp $
+                "In a permission guard named '" ++ n ++ "'"
+        toContext (ParamGuard sp n _) = DescriptiveContext sp $
+                "In a parametrised guard named '" ++ n ++ "'"
+instance Contextual Guards where
+        toContext (Guards sp rid _) = DescriptiveContext sp $
+                "In a guard assertion for region '" ++ rid ++ "'"
+instance Contextual Predicate where
+        toContext (Predicate sp pname _) = DescriptiveContext sp $
+                "In a predicate assertions '" ++ pname ++ "(...)'"

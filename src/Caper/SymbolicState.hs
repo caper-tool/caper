@@ -234,8 +234,9 @@ check c = admitChecks $ do
                 justCheck ps
                 return r
 
-
-consumePred :: (Monad m, MonadPlus m) => Predicate -> MSCheck r m ()
+-- |Consumes a predicate.  Does not check that the predicate is well-formed.
+consumePred :: (Monad m, MonadPlus m, MonadState s m,
+        AssertionLenses s, SymbStateLenses s) => Predicate -> m ()
 consumePred (PCell, [x, y]) = (do
                 [e1,e2] <- takingEachPredInstance PCell
                 assertEqual x e1
@@ -255,10 +256,14 @@ consumePred (PCell, [x, y]) = (do
                         addPredicate (PCells, [toExpr (x $+$ VEConst 1), toExpr (e1 $+$ e2 $-$ x $-$ VEConst 1)])
                         assertTrue $ (x $+$ VEConst 1) $<$ (e1 $+$ e2)))
                 -- add justCheck to fail faster?
+-- FIXME: Case handling for PCells and other predicates
 
 
-
-
+-- |Consumes a predicate, after checking that it is well-formed.
+--
+-- TODO: This should not be used as-is; it should be changed so that validation
+-- failures raise exceptions and some kind of context is used for resolving the
+-- number/type information for validation.  
 consumePredicate :: (Monad m, MonadPlus m) => Predicate -> MSCheck r m ()
 consumePredicate p = do
                 validatePredicate p

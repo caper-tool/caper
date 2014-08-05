@@ -5,20 +5,19 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Caper.Guards where
-import Prelude hiding (catch,mapM,sequence,foldl,mapM_,concatMap)
+import Prelude hiding (mapM,sequence,foldl,mapM_,concatMap)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Control.Monad.Exception
 import Control.Monad hiding (mapM,sequence)
-import Control.Monad.Trans.Class
-import Control.Monad.Trans.Maybe
+--import Control.Monad.Trans.Class
+--import Control.Monad.Trans.Maybe
 import Data.Typeable
 import Data.Foldable
 import Data.Traversable
-import Data.Maybe
+--import Data.Maybe
 import Data.List (intercalate)
 import Control.Monad.State hiding (mapM_,mapM,sequence)
---import System.IO.Unsafe -- TODO: Don't depend on this.
 import Debug.Trace
 
 import Caper.ProverDatatypes
@@ -111,7 +110,7 @@ topLevelToWeakGuardType (SomeGT gt) = toWeakGuardType gt
 
 
 -- toWeakGuardTypeWorker :: WeakGuardType -> GuardType
-
+{-
 data GuardAST v =
                 EmptyG
                 | NamedG String
@@ -139,6 +138,7 @@ instance Show v => Show (GuardException v) where
         show (GEInconsistentOccurrences s g) = "The guard named \"" ++ s ++ "\" is used inconsistently in the guard expression \"" ++ show g ++ "\"."
 
 instance (Typeable v, Show v) => Exception (GuardException v)
+-}
 
 data GuardParameters v = NoGP | PermissionGP (PermissionExpression v)
  --- | Parameters [ValueExpression] | CoParameters [ValueExpression] [ValueExpression]
@@ -160,7 +160,7 @@ instance Show v => Show (Guard v) where
 guardLift f (GD x) = GD (f x)
 
 instance ExpressionSub GuardParameters PermissionExpression where
-        exprSub s NoGP = NoGP
+        exprSub _ NoGP = NoGP
         exprSub s (PermissionGP pe) = PermissionGP (exprSub s pe)
 
 instance ExpressionSub Guard PermissionExpression where
@@ -174,6 +174,7 @@ instance ExpressionSub GuardParameters Expr where
 instance ExpressionSub Guard Expr where
         exprSub s (GD g) = GD $ Map.map (exprSub s) g
 
+{-
 toGuard :: (Typeable v, Show v, Throws (GuardException v) l) => GuardAST v -> EM l (Guard v)
 toGuard gast = tg Map.empty gast
         where
@@ -195,6 +196,7 @@ toGuard gast = tg Map.empty gast
                 tg g (StarG ge1 ge2) = do
                                                 (GD g') <- tg g ge1
                                                 tg g' ge2
+-}
 
 checkGuardAtType :: Guard v -> WeakGuardType -> Bool
 checkGuardAtType (GD g)
@@ -288,7 +290,7 @@ subtractPE :: (MonadPlus m, MonadState s m, AssertionLenses s) => PermissionExpr
 subtractPE l PEFull = do
                         assertTrue $ PAEq l PEFull
                         return Nothing
-subtractPE l PEZero = mzero     -- Having a permission guard at all should imply that it's non-zero, therefore this path can simply fail
+subtractPE _ PEZero = mzero     -- Having a permission guard at all should imply that it's non-zero, therefore this path can simply fail
 {--subtractPE l ex@(PEVar (EVExistential _ s)) = trace ("binding: " ++ s ++ " === " ++ show l) (do
                         bindEvar s l -- TODO: frame some permission off?
                         return Nothing) `mplus`

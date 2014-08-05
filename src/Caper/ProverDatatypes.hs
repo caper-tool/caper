@@ -5,13 +5,13 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Caper.ProverDatatypes where
 import Prelude hiding (sequence,foldl,foldr,elem,mapM_,mapM)
-import qualified Data.Map as Map
+-- import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Control.Monad.State hiding (mapM_,mapM)
 import Data.Foldable
 import Data.Traversable
 import Data.Typeable
-import Control.Monad hiding (mapM_,mapM)
+-- import Control.Monad hiding (mapM_,mapM)
 import Control.Monad.Reader.Class
 import Data.Functor.Identity
 
@@ -98,7 +98,7 @@ instance Expression ValueExpression where
 
 instance Monad ValueExpression where
         return = VEVar
-        (VEConst c) >>= b = VEConst c
+        (VEConst c) >>= _ = VEConst c
         (VEVar v) >>= b = b v
         VEPlus e1 e2 >>= b = VEPlus (e1 >>= b) (e2 >>= b)
         VEMinus e1 e2 >>= b = VEMinus (e1 >>= b) (e2 >>= b)
@@ -269,7 +269,7 @@ instance (Foldable a) => FreeVariables (FOF a) where
                         ff bound x (FOFOr f1 f2) = ff bound (ff bound x f2) f1
                         ff bound x (FOFImpl f1 f2) = ff bound (ff bound x f2) f1
                         ff bound x (FOFNot f') = ff bound x f'
-                        ff bound x _ = x
+                        ff _ x _ = x
                         ignoring l u v = if u `elem` l then v else f u v
 
 literalToFOF :: Literal a v -> FOF a v
@@ -411,7 +411,7 @@ instance ExpressionSub ValueExpression Expr where
                         (ValueExpr ve) -> ve
                         (VariableExpr ve) -> return ve
                         _ -> error "A value variable was substituted by an expression that is not a value expression."
-        exprSub s (VEConst k) = VEConst k
+        exprSub _ (VEConst k) = VEConst k
         exprSub s (VEPlus e1 e2) = VEPlus (exprSub s e1) (exprSub s e2)
         exprSub s (VEMinus e1 e2) = VEMinus (exprSub s e1) (exprSub s e2)
         exprSub s (VETimes e1 e2) = VETimes (exprSub s e1) (exprSub s e2)

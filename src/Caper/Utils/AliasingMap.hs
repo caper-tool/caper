@@ -44,10 +44,10 @@ instance Traversable (AliasMap a) where
 instance (Show a, Show b, Eq a) => Show (AliasMap a b) where
         show (AliasMap m) = intercalate "," $ Map.foldWithKey ofold [] m
                 where
-                        ofold k (Left _) = id
+                        ofold _ (Left _) = id
                         ofold k (Right v) = (:) ("{" ++ show k ++ Map.foldWithKey (ifold k) "" m ++ "} => " ++ show v)
                         ifold a k (Left x) = if a == x then (("," ++ show k) ++) else id
-                        ifold a k (Right _) = id
+                        ifold _ _ (Right _) = id
 
 
 empty :: AliasMap a b

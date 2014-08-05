@@ -83,6 +83,8 @@ mergeRegions r1 r2 = do
 
 
 -- | Add a region, or merge it if one already exists with the same identifier.
+--
+-- Pre: the number and type of arguments should have been checked (otherwise an error may arise).
 produceMergeRegion :: (MonadState s m, AssumptionLenses s, RegionLenses s,
                 MonadReader r m, RTCGetter r) =>
                 VariableID -> Region -> m ()

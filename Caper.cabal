@@ -6,7 +6,6 @@ author:         Thomas Dinsdale-Young, Pedro da Rocha Pinto
 maintainer:     td202@d-y.me.uk
 build-type:     Simple
 cabal-version:  >= 1.8
-data-files:     ba_prelude.tptp
 
 flag z3ffi
   description:  Enable z3 invocation via FFI (requires z3 package)
@@ -14,12 +13,44 @@ flag z3ffi
 
 executable Caper
   main-is:         Caper.hs
-  build-depends:   base ==4.6.*, containers ==0.5.*, control-monad-exception ==0.11.*, mtl ==2.1.*, transformers ==0.3.*, parsec ==3.1.*, lens >=3.9, HUnit ==1.2.*, QuickCheck ==2.6.*, time ==1.4.*, syb ==0.4.*, sbv >=2.10, multiset ==0.2.*, ConfigFile ==1.1.*, parallel ==3.2.*, process ==1.1.*, SafeSemaphore >=0.9, directory ==1.2.*, either ==4.3.*, vector ==0.10.*, template-haskell ==2.8.*
+  build-depends:   base ==4.6.*, containers ==0.5.*, control-monad-exception ==0.11.*, mtl ==2.1.*, transformers ==0.3.*, parsec ==3.1.*, lens >=3.9, HUnit ==1.2.*, QuickCheck ==2.6.*, time ==1.4.*, syb ==0.4.*, sbv ==3.1.*, multiset ==0.2.*, ConfigFile ==1.1.*, parallel ==3.2.*, process ==1.1.*, SafeSemaphore >=0.9, directory ==1.2.*, either ==4.3.*, vector ==0.10.*, template-haskell ==2.8.*, transformers >=0.2
   hs-source-dirs:  src
+  ghc-options:     -W -rtsopts
 
   if flag(z3ffi)
     build-depends:  z3 ==0.3.*
     cpp-options:    -Dz3ffi
+    other-modules:  Caper.ValueProver2
+  other-modules:   
+                   Caper.Assertions,
+                   Caper.Exceptions,
+                   Caper.FirstOrder,
+                   Caper.Guards,
+                   Caper.Parser.AST,
+                   Caper.Parser.AST.Annotation,
+                   Caper.Parser.AST.Code,
+                   Caper.Parser.AST.SourcePos,
+                   Caper.Parser.Parser,
+                   Caper.PermissionsE,
+                   Caper.PermissionsI,
+                   Caper.Prover,
+                   Caper.ProverDatatypes,
+                   Caper.Provers,
+                   Caper.RegionTypes,
+                   Caper.Regions,
+                   Caper.SymbolicState,
+                   Caper.Transitions,
+                   Caper.TypingContext,
+                   Caper.Utils.AliasingMap,
+                   Caper.Utils.Choice,
+                   Caper.Utils.FloydWarshall,
+                   Caper.Utils.LiteralFileQQ,
+                   Caper.Utils.MemoIO,
+                   Caper.Utils.MonadHoist,
+                   Caper.Utils.NondetClasses,
+                   Caper.Utils.PMaybe,
+                   Caper.Utils.SimilarStrings,
+                   Caper.ValueProver
 
 executable Interpreter
   build-depends:   
@@ -28,6 +59,14 @@ executable Interpreter
                    mtl >=2.1.2 && <2.2,
                    template-haskell >=2.8 && <2.9
   hs-source-dirs:  src
-  ghc-options:     -Wall -rtsopts
+  ghc-options:     -W -rtsopts
   main-is:         Interpreter.hs
+  other-modules:   
+                   Caper.Interpreter.Environment,
+                   Caper.Interpreter.Interpreter,
+                   Caper.Parser.AST,
+                   Caper.Parser.AST.Annotation,
+                   Caper.Parser.AST.Code,
+                   Caper.Parser.AST.SourcePos,
+                   Caper.Parser.Parser
 

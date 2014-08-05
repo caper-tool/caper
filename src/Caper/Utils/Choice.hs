@@ -26,7 +26,7 @@ data ChoiceM m a =
 instance Functor m => Functor (ChoiceM m) where
         fmap f (Choice x y) = Choice (fmap f x) (fmap f y)
         fmap f (Result r) = Result (f r)
-        fmap f NoChoice = NoChoice
+        fmap _ NoChoice = NoChoice
         fmap f (Lazy k) = Lazy (fmap (fmap f) k)
         fmap f (OrElse x y z) = OrElse x y (fmap f . z)
 
@@ -62,8 +62,8 @@ instance (MonadIO m) => MonadIO (ChoiceM m) where
 
 instance MonadHoist ChoiceM where
         hoist f (Choice c1 c2) = Choice (hoist f c1) (hoist f c2)
-        hoist f (Result a) = Result a
-        hoist f NoChoice = NoChoice
+        hoist _ (Result a) = Result a
+        hoist _ NoChoice = NoChoice
         hoist f (Lazy x) = Lazy (liftM (hoist f) (f x))
         hoist f (OrElse c1 c2 cont) = OrElse (hoist f c1) (hoist f c2) (hoist f . cont)
 
@@ -120,7 +120,7 @@ nextChoice (OrElse x y z) = do
                                 (Just r) -> do
                                         (cz, rz) <- nextChoice (z r)
                                         case cz of
-                                                (Just r) -> return (cz, Choice rz (rx >>= z))
+                                                (Just _) -> return (cz, Choice rz (rx >>= z))
                                                 Nothing -> nextChoice (rx >>= z)
                                 Nothing -> nextChoice (y >>= z)
 
@@ -134,7 +134,7 @@ allChoices c = do
                                 return (x : rs)
                         _ -> return []
 
--- Get the first n choices, peforming side-effects as necessary
+-- Get the first n choices, performing side-effects as necessary
 takeChoices :: Monad m => Int -> ChoiceM m a -> m [a]
 takeChoices 0 _ = return []
 takeChoices n c = do

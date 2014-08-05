@@ -10,7 +10,6 @@ module Caper.Exceptions(
         where
 import Data.Typeable
 import Control.Arrow (first)
-import Control.Monad.Exception
 import Control.Monad.Trans.Either
 import Control.Monad.Trans
 import Text.ParserCombinators.Parsec
@@ -47,6 +46,11 @@ data CaperException =
         -- of arguments were supplied (e.g. for a region).  The fields
         -- records @required@ and @actual@, or @-1@ and @actual - required@.
         | ArgumentCountMismatch Int Int
+        -- |'IncompatibleGuardOccurrences' indicates that multiple guard
+        -- occurences with the same name are incompatible.  This may be
+        -- because they are of different types (named/permission) or
+        -- there is more than one named guard. 
+        | IncompatibleGuardOccurrences String
         deriving (Eq, Typeable)
 
 instance Show CaperException where
@@ -55,13 +59,15 @@ instance Show CaperException where
         show (UndeclaredRegionType rt l) = "The region type '" ++ rt ++ "' has not been declared." ++ shw l
                 where
                         shw [] = ""
-                        shw l = "\n\tPerhaps you meant: " ++ intercalate ", " l ++ "."
+                        shw ll = "\n\tPerhaps you meant: " ++ intercalate ", " ll ++ "."
         show (TypeMismatch expected actual) = "A " ++ show expected ++ " expression was required, but a " ++ show actual ++ " expression was provided."
         show (ArgumentCountMismatch (-1) diff)
                 | diff < 0 = show (-diff) ++ " too few arguments were supplied."
                 | otherwise = show diff ++ " too many arguments were supplied."
         show (ArgumentCountMismatch required actual) =
                 show required ++ " arguments were expected, but " ++ show actual ++ " arguments were supplied."
+        show (IncompatibleGuardOccurrences gname) =
+                "There were incompatible occurrences of guards named '" ++ gname ++ "'."
 
 -- |The data type 'ExceptionContext' represents contextual information
 -- about the cause of a 'CaperException'.
@@ -100,3 +106,8 @@ instance (MonadTrans t, MonadHoist t, Monad m, MonadRaise m) => MonadRaise (t m)
 liftTUFailure :: (Monad m, MonadRaise m) => Either TUException a -> m a
 liftTUFailure (Left e) = raise (TypesNotUnifiable e)
 liftTUFailure (Right r) = return r
+
+class Contextual a where
+        toContext :: a -> ExceptionContext
+        contextualise :: (MonadRaise m) => a -> m b -> m b
+        contextualise = addContext . toContext 

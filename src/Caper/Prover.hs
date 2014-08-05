@@ -386,6 +386,14 @@ data Assertions = Assertions {
 }
 makeLenses ''Assertions
 
+{-
+  TODO: Track in assertions when we have already checked provability.  This
+        should not mess things up too much -- the lenses can be integrated
+        so that they automatically set a dirty flag when it is updated.
+        Something similar would be valuable for the consistency of assumptions,
+        probably.
+-}
+
 -- AssertionLenses
 
 class (AssumptionLenses a) => AssertionLenses a where
