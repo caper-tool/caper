@@ -306,4 +306,72 @@ In addition, we may wish to introduce aliases for existing regions.
 
 At the very least, we should have some mechanism for handling the aliasing of regions.
 
+\section{On Producing and Consuming Assertions}
+
+Producing an assertion means assuming that it is true and adding the appropriate resources to the symbolic state.
+Consuming an assertion means asserting that it is true and removing the appropriate resources from the symbolic state.
+Producing and consuming assertions happen in a variety of contexts; the main difference between the behaviour in these contexts is how variables are handled.
+
+\paragraph{Producing a precondition.}
+At the start of verifying a procedure, the precondition is produced in an initially empty symbolic state.
+All assertion variables are treated as universals; that is, they are bound to fresh logical variables.
+The program variables that correspond to the arguments of the procedure are bound to the logical variables in the same way as assertion variables are.
+
+For example, suppose that $\mathtt{proc(x, w)}$ has the following precondition:
+\[
+  x \mapsto y \mathbin{\verb|&*&|} y \mapsto z \mathbin{\verb|&*&|} z = y
+\]
+This should produce the following initial symbolic state, (up to naming of variables):
+\begin{itemize}
+  \item Logical variables: $\mathit{vx}, \mathit{vy}, \mathit{vz}, \mathit{vw}$.
+  \item Pure facts: $\mathit{vz} = \mathit{vy}$
+  \item Program variables: $\mathtt{x} := \mathit{vx}$, $\mathtt{w} := \mathit{vw}$
+  \item Heap chunks: $\mathit{vx} \mapsto \mathit{vy}$, $\mathit{vy} \mapsto \mathit{vz}$.
+\end{itemize}
+As a side-effect, the following binding context for assertion (and program) variables will be produced:
+\[
+  x \mapsto \mathit{vx}, y \mapsto \mathit{vy}, z \mapsto \mathit{vz}, w \mapsto \mathit{vw}
+\]
+This is relevant, because subsequent assertions in the code (notably the postcondition) should use these bindings, although preferring the present value of program variables in the case of collisions.
+
+In practice, this binding context will be implicit by  binding $x$ to the logical variable $\mathtt{VIDNamed}\ x$.
+Subsequent assertions will only have to look to see which logical variables in the assumptions include those with the $\mathtt{VIDNamed}$ constructor.
+($\mathtt{VIDNamed}$ variables must be guaranteed not to be introduced by other means.)
+
+\paragraph{Consuming a postcondition.}
+At the end of verifying a procedure, the postcondition is consumed on the current symbolic state.
+This may generate (angelic) non-determinism, as there may be some choice as to which resources and regions in the assertion map to which in the symbolic state.
+
+Obviously, we need a variable in the postcondition to correspond to the return value of a procedure.
+There are a few options:
+\begin{itemize}
+  \item Use a reserved variable name (e.g. ``ret'') to always mean the return value.
+    This is simple, and probably easy, but maybe not the most elegant solution.
+  \item Have the user specify in the ensures clause the name of the variable to bind to the return value.
+    Some syntax like \texttt{ensures ret. ret = 12;} might do it.
+  \item As above, but allow the user to not specify a binding if it isn't needed.
+  \item (Risky compromise) allow the user to specify, but have a default.
+\end{itemize}
+
+\textbf{Decision:}
+For now, I will go with ``ret'' and we can tweak later.
+(Note, the binding of the return value will always have precedence.
+If, for example, there is a program variable or argument called \texttt{ret}, then it cannot be referred to as ``ret'' in the postcondition.)
+
+Another question is that of referring to program variables in the postcondition.
+Again, there are a few options:
+\begin{itemize}
+  \item Postcondition variables do not refer to program variables.
+    However, they can refer to variables mentioned in the precondition (and possibly other assertions).
+    These include the original values of the arguments.
+    All other named variables would be treated as existentials.
+  \item Postcondition variables can refer to program variables.
+    In this case, they would refer to these in preference to any other variables (apart from the return).
+\end{itemize}
+
+The first is what Verifast uses.
+I think there's a good justification for it in that the program variables are technically out of scope after the return.
+
+
+
 \end{document}

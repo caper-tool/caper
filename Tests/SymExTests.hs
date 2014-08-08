@@ -1,11 +1,12 @@
-import ProverDatatypes
-import Provers
-import SymbolicState
-import Utils.Choice
 import Control.Monad.RWS
-import Parser.AST
 import Text.Parsec.Pos
-import Parser.Parser
+
+import Caper.ProverDatatypes
+import Caper.Provers
+import Caper.SymbolicState
+import Caper.Utils.Choice
+import Caper.Parser.AST
+import Caper.Parser.Parser
 
 posCons = newPos "[console]" 0 0
 

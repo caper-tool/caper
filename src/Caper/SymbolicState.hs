@@ -14,6 +14,7 @@ import Data.Foldable
 import Data.List (intersperse)
 import Data.Traversable
 
+import Caper.Logger
 import Caper.ProverDatatypes
 import Caper.Prover
 import qualified Caper.Utils.AliasingMap as AliasMap
@@ -25,7 +26,7 @@ import Caper.RegionTypes
 -- default (ValueExpression VariableID, Integer, Double)
 
 
--- Predicate names are either Strings or the special 
+-- |Predicate names are either 'String's or the special 
 -- cases for heap cells: single cell or multiple (uninitialised) cells
 data PredicateName = PName String | PCell | PCells deriving (Eq, Ord)
 instance Show PredicateName where
@@ -33,24 +34,29 @@ instance Show PredicateName where
         show PCell = "#cell"
         show PCells = "#cells"
 
--- A (default) map from predicate names to the list of
+-- |A (default) map from predicate names to the list of
 -- types of the predicate parameters.  Here, we'll just
--- have a mapping for PCell
+-- have a mapping for 'PCell' and 'PCells'
 predicateTypes :: Map PredicateName [VariableType]
 predicateTypes = Map.fromList [(PCell, [VTValue, VTValue]), -- A #cell has two value parameters
                         (PCells, [VTValue, VTValue])    -- A #cells has two value parameters (start and length)
                         ]
 
 
--- PVarBindings map program variables (modelled a Strings) to
+-- |PVarBindings map program variables (modelled a 'String's) to
 -- expressions
 type PVarBindings = Map String (Expr VariableID)
 
--- Predicates are maps from predicate names to multisets of
+-- |LVarBindings map syntactic logical variables ('String's) to their internal
+-- representations ('VariableID's)
+type LVarBindings = Map String VariableID
+
+
+-- |Predicates are maps from predicate names to multisets of
 -- lists of parameters.  That is, for each predicate name
 -- there's a bag of the parameters that we have copies of the
 -- predicate for.  (Possibly want to use a list or something else
--- instead of MultiSet?)
+-- instead of 'MultiSet'?)
 type Predicates = Map PredicateName (MultiSet [Expr VariableID])
 
 predicateLookup :: PredicateName -> Predicates -> MultiSet [Expr VariableID]
@@ -70,13 +76,14 @@ showPredicate (PName s, l) = show s ++ show l
 data SymbState p = SymbState {
         _proverState :: p,
         _ssProgVars :: PVarBindings,
+        _ssLogicalVars :: LVarBindings,
         _ssPreds :: Predicates,
         _ssRegions :: AliasMap.AliasMap VariableID Region
         } deriving (Functor)
 makeLenses ''SymbState
 
 emptySymbState :: SymbState Assumptions
-emptySymbState = SymbState emptyAssumptions Map.empty Map.empty AliasMap.empty
+emptySymbState = SymbState emptyAssumptions Map.empty Map.empty Map.empty AliasMap.empty
 
 showPVarBindings :: PVarBindings -> String
 showPVarBindings = Map.foldWithKey showBinding ""
@@ -84,7 +91,7 @@ showPVarBindings = Map.foldWithKey showBinding ""
                 showBinding pv var s = pv ++ " := " ++ show var ++ "\n" ++ s
 
 instance (Show p) => Show (SymbState p) where
-        show (SymbState p vs preds regs) = "Pure facts:" ++ show p ++ "\nProgram variables:\n" ++ showPVarBindings vs ++ "Heap:\n" ++ (concat . intersperse "\n" . map showPredicate . toPredicateList) preds
+        show (SymbState p vs lvs preds regs) = "Pure facts:" ++ show p ++ "\nProgram variables:\n" ++ showPVarBindings vs ++ "Heap:\n" ++ (concat . intersperse "\n" . map showPredicate . toPredicateList) preds
 
 
 instance AssumptionLenses p => AssumptionLenses (SymbState p) where
@@ -95,10 +102,12 @@ instance AssertionLenses p => AssertionLenses (SymbState p) where
 
 class AssumptionLenses s => SymbStateLenses s where
         progVars :: Simple Lens s PVarBindings
+        logicalVars :: Simple Lens s LVarBindings
         preds :: Simple Lens s Predicates
 
 instance AssumptionLenses p => SymbStateLenses (SymbState p) where
         progVars = ssProgVars
+        logicalVars = ssLogicalVars
         preds = ssPreds
 
 instance RegionLenses (SymbState p) where
@@ -227,7 +236,8 @@ admitChecks = wrapRWST (fmap emptyAssertions) (fmap admitAssertions)
 
 
 
-check :: (MonadIO m, MonadPlus m, Provers p) => MSCheck p m a -> MSState p m a
+check :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m) =>
+        MSCheck p m a -> MSState p m a
 check c = admitChecks $ do
                 ps <- ask
                 r <- c
@@ -235,7 +245,9 @@ check c = admitChecks $ do
                 return r
 
 -- |Consumes a predicate.  Does not check that the predicate is well-formed.
-consumePred :: (Monad m, MonadPlus m, MonadState s m,
+-- 
+-- FIXME: Case handling for PCells and other predicates
+consumePred :: (Monad m, MonadPlus m, MonadState s m, MonadLogger m,
         AssertionLenses s, SymbStateLenses s) => Predicate -> m ()
 consumePred (PCell, [x, y]) = (do
                 [e1,e2] <- takingEachPredInstance PCell
@@ -256,7 +268,6 @@ consumePred (PCell, [x, y]) = (do
                         addPredicate (PCells, [toExpr (x $+$ VEConst 1), toExpr (e1 $+$ e2 $-$ x $-$ VEConst 1)])
                         assertTrue $ (x $+$ VEConst 1) $<$ (e1 $+$ e2)))
                 -- add justCheck to fail faster?
--- FIXME: Case handling for PCells and other predicates
 
 
 -- |Consumes a predicate, after checking that it is well-formed.
@@ -264,7 +275,8 @@ consumePred (PCell, [x, y]) = (do
 -- TODO: This should not be used as-is; it should be changed so that validation
 -- failures raise exceptions and some kind of context is used for resolving the
 -- number/type information for validation.  
-consumePredicate :: (Monad m, MonadPlus m) => Predicate -> MSCheck r m ()
+consumePredicate :: (Monad m, MonadPlus m, MonadLogger m) =>
+        Predicate -> MSCheck r m ()
 consumePredicate p = do
                 validatePredicate p
                 consumePred p
@@ -305,7 +317,8 @@ symExLocalAssign target expr = do
                 newval <- aexprToExpr expr
                 progVars %= Map.insert target newval
 
-symExAllocate :: (MonadIO m, MonadPlus m, Provers p) => String -> AExpr -> MSState p m ()
+symExAllocate :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m) =>
+        String -> AExpr -> MSState p m ()
 symExAllocate target lenExpr = do
                 lenval <- aexprToExpr lenExpr
                 check $
@@ -315,7 +328,8 @@ symExAllocate target lenExpr = do
                 producePredicate (PCells, [var loc, lenval])
                 progVars %= Map.insert target (var loc)
 
-symExWrite :: (MonadIO m, MonadPlus m, Provers p) => AExpr -> AExpr -> MSState p m ()
+symExWrite :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m) =>
+        AExpr -> AExpr -> MSState p m ()
 symExWrite target expr = do
                 loc <- aexprToExpr target
                 check $ do
@@ -324,7 +338,8 @@ symExWrite target expr = do
                 newval <- aexprToExpr expr
                 addPredicate (PCell, [loc, newval])
 
-symExRead :: (MonadIO m, MonadPlus m, Provers p) => String -> AExpr -> MSState p m ()
+symExRead :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m) =>
+        String -> AExpr -> MSState p m ()
 symExRead target eloc = do
                 loc <- aexprToExpr eloc
                 oldval <- check $ do

@@ -23,7 +23,7 @@ import Control.Monad.Trans.Either
 --      lift . f = hoist f . lift
 -- @
 class MonadHoist t where
-        hoist :: (Monad n, Monad m) => (forall a. n a -> m a) -> t n a -> t m a
+        hoist :: (Monad n, Monad m) => (forall b. n b -> m b) -> t n a -> t m a
 
 instance MonadHoist (ReaderT r) where
         hoist f a = ReaderT $ f . runReaderT a

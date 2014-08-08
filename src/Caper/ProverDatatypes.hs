@@ -20,7 +20,7 @@ class Refreshable v where
         freshen :: v -> [v]
 
 instance Refreshable String where
-        freshen s = [ s ++ show x | x <- [0..] ]
+        freshen s = [ s ++ show x | x <- [0 :: Int ..] ]
 
 
 

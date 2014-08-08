@@ -20,6 +20,7 @@ import Data.List (intercalate)
 import Control.Monad.State hiding (mapM_,mapM,sequence)
 import Debug.Trace
 
+import Caper.Logger
 import Caper.ProverDatatypes
 import Caper.Prover
 import Caper.Utils.Choice
@@ -285,7 +286,8 @@ sameGuardParametersType NoGP NoGP = Nothing
 sameGuardParametersType (PermissionGP _) (PermissionGP _) = Nothing
 sameGuardParametersType a _ = Just a
 
-subtractPE :: (MonadPlus m, MonadState s m, AssertionLenses s) => PermissionExpression VariableID -> PermissionExpression VariableID ->
+subtractPE :: (MonadPlus m, MonadState s m, AssertionLenses s, MonadLogger m) =>
+        PermissionExpression VariableID -> PermissionExpression VariableID ->
                 m (Maybe (PermissionExpression VariableID))
 subtractPE l PEFull = do
                         assertTrue $ PAEq l PEFull
@@ -314,7 +316,9 @@ subtractPE l s = (do -- TODO: frame some permission
                 return (Just eve))
 
 
-guardPrimitiveEntailmentM :: (MonadPlus m, MonadState s m, AssertionLenses s) => Guard VariableID -> Guard VariableID -> m (Guard VariableID)
+guardPrimitiveEntailmentM :: (MonadPlus m, MonadState s m, AssertionLenses s,
+        MonadLogger m) =>
+                Guard VariableID -> Guard VariableID -> m (Guard VariableID)
 guardPrimitiveEntailmentM (GD g1) (GD g2) = if Map.null $ Map.differenceWith sameGuardParametersType g2 g1 then liftM GD doGPEM else mzero
         where
                 rest = Map.difference g1 g2
@@ -322,13 +326,18 @@ guardPrimitiveEntailmentM (GD g1) (GD g2) = if Map.null $ Map.differenceWith sam
                         let k = Map.intersectionWith (,) g1 g2
                         r <- mapM subtract k
                         return $ Map.union (Map.mapMaybe id r) rest
-                subtract :: (MonadPlus m, MonadState s m, AssertionLenses s) => (GuardParameters VariableID, GuardParameters VariableID) -> m (Maybe (GuardParameters VariableID))
+                subtract :: (MonadPlus m, MonadState s m, AssertionLenses s,
+                        MonadLogger m) =>
+                        (GuardParameters VariableID, GuardParameters VariableID) -> m (Maybe (GuardParameters VariableID))
                 subtract (NoGP, NoGP) = return Nothing
                 subtract (PermissionGP pe1, PermissionGP pe2) = liftM (fmap PermissionGP) $ subtractPE pe1 pe2
                 subtract _ = mzero -- Should be impossible
 
 
-guardEntailment :: (MonadPlus m, MonadState s m, AssertionLenses s) => GuardTypeAST -> Guard VariableID -> Guard VariableID -> m (Guard VariableID)
+guardEntailment :: (MonadPlus m, MonadState s m, AssertionLenses s,
+        MonadLogger m) =>
+                GuardTypeAST -> Guard VariableID -> Guard VariableID -> 
+                        m (Guard VariableID)
 guardEntailment gt g1 g2 = guardPrimitiveEntailmentM g1 g2 `mplus`
                         do
                                 let (gel, ger) = guardEquivalence gt g1 g2

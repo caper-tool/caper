@@ -4,7 +4,7 @@ import Data.List
 import Text.ParserCombinators.Parsec
 
 import Caper.Parser.AST.SourcePos
-import Caper.Exceptions
+import Caper.ExceptionContext
 
 -- * Assertion syntax
 

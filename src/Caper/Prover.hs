@@ -61,7 +61,8 @@ module Caper.Prover(
         declareVar,
         declareVars,
         declareEvar,
-        newEvar
+        newEvar,
+        freshNamedVar
         ) where
 import Prelude hiding (sequence,foldl,foldr,mapM_,mapM,elem,notElem,any)
 import qualified Data.Map as Map
@@ -75,18 +76,18 @@ import Control.Monad.Exception
 import Control.Applicative
 import Data.Maybe
 import Data.Foldable
-import Data.Traversable
-import Data.Typeable
-import Control.Monad hiding (mapM_,mapM)
+--import Data.Traversable
+--import Data.Typeable
+--import Control.Monad hiding (mapM_,mapM)
 import Control.Lens
 import Debug.Trace
 
 import Caper.ProverDatatypes
-import Caper.ValueProver
+--import Caper.ValueProver
 import qualified Caper.TypingContext as TC
-import Caper.FirstOrder
+--import Caper.FirstOrder
 import Caper.Exceptions
-
+import Caper.Logger
 
 
 -- |A 'BindingContext' associates variables with their types (if determined).
@@ -304,11 +305,13 @@ permissionVariables = Map.keys . Map.filter (== Just VTPermission) . TC.toMap . 
 
 -- For passing to the prover, we will treat values and region identifiers, as well as
 -- variables of indeterminate type, as values.
+treatAsValueJ :: Maybe VariableType -> Bool
 treatAsValueJ (Just VTValue) = True
 treatAsValueJ (Just VTRegionID) = True
 treatAsValueJ (Just VTPermission) = False
 treatAsValueJ Nothing = True
 
+treatAsValueJT :: TC.TypeResult VariableType -> Bool
 treatAsValueJT (TC.JustType t) = treatAsValueJ (Just t)
 treatAsValueJT TC.Undetermined = treatAsValueJ Nothing
 treatAsValueJT _ = False
@@ -452,6 +455,9 @@ bindAtExprType v (ValueExpr _) c = runEM $ TC.bind v VTValue c `catch` (\(e :: T
 bindAtExprType v (VariableExpr v') c = runEM $ TC.unify v v' c `catch` (\(e :: TUException) -> error (show e))
 
 
+suffices :: [String]
+suffices = "" : map show [0::Int ..]
+
 freshInternal :: (MonadState s m, AssumptionLenses s) => String -> m VariableID
 -- ^Generate a variable that is not currently bound.
 -- This DOES NOT create a variable binding, and so should only be used
@@ -459,7 +465,7 @@ freshInternal :: (MonadState s m, AssumptionLenses s) => String -> m VariableID
 -- is quantified within an assertion.
 freshInternal vname = do
                 vt <- use bindings
-                return $ TC.firstFresh [ VIDInternal $ vname ++ suffix | suffix <- "" : map show [0..] ] vt
+                return $ TC.firstFresh [ VIDInternal $ vname ++ suffix | suffix <- suffices ] vt
 
 freshInternals :: (MonadState s m, AssumptionLenses s, Ord a) =>
         (a -> String) -> Set a -> m (Map.Map a VariableID)
@@ -469,7 +475,7 @@ freshInternals sify s = do
         where
                 accum vv (mp, cx)
                         | vv `Map.member` mp = (mp, cx)
-                        | otherwise = let fvv = TC.firstFresh [ VIDInternal $ sify vv ++ suffix | suffix <- "" : map show [0..] ] cx in
+                        | otherwise = let fvv = TC.firstFresh [ VIDInternal $ sify vv ++ suffix | suffix <- suffices ] cx in
                                 (Map.insert vv fvv mp, TC.declare fvv cx)
 
 
@@ -486,7 +492,7 @@ newEvar :: (MonadState s m, AssertionLenses s) => String -> m VariableID
 -- /WARNING/: No other mechanism should generate VIDExistential variables.
 newEvar vname = do
                 vt <- use bindings
-                let evin = TC.firstFresh [ VIDExistential $ vname ++ suffix | suffix <- "" : map show [0..] ] vt
+                let evin = TC.firstFresh [ VIDExistential $ vname ++ suffix | suffix <- suffices ] vt
                 declareEvar evin
                 return evin
 
@@ -494,33 +500,44 @@ newAvar :: (MonadState s m, AssumptionLenses s) => String -> m VariableID
 -- ^Generate a new assumption variable with a name like the one given
 newAvar vname = do
                 vt <- use bindings
-                let avin = TC.firstFresh [ VIDInternal $ vname ++ suffix | suffix <- "" : map show [0..] ] vt
+                let avin = TC.firstFresh [ VIDInternal $ vname ++ suffix | suffix <- suffices ] vt
                 bindings %= TC.declare avin
                 return avin
 
-eBindVarsAs :: (MonadState s m, AssertionLenses s, Foldable f) =>
+freshNamedVar :: (MonadState s m, AssumptionLenses s) => String -> m VariableID
+-- ^Generate a fresh named variable with a name similar to the one given.
+-- The variable is added to the binding context.
+freshNamedVar vname = do
+                vt <- use bindings
+                let v = TC.firstFresh
+                        [ VIDNamed $ vname ++ suffix | suffix <- suffices ] vt
+                bindings %= TC.declare v
+                return v
+
+eBindVarsAs :: (MonadState s m, MonadLogger m, AssertionLenses s, Foldable f) =>
                 f VariableID -> VariableType -> m ()
 eBindVarsAs s vt = do
                         b0 <- use boundVars
                         let newvars = Set.difference ((Set.fromList . toList) s) b0
-                        unless (Set.null newvars) $
-                                trace ("WARNING: the variables " ++ show newvars ++ " are being automatically bound as existentials.") $
+                        unless (Set.null newvars) $ do
+                                logEvent $ WarnAutoBind newvars
                                 existentials %= flip Set.union newvars
                         bindVarsAs s vt
 
-eUnifyEqVars :: (MonadState s m, AssertionLenses s) =>
+eUnifyEqVars :: (MonadState s m, MonadLogger m, AssertionLenses s) =>
                 VariableID -> VariableID -> m ()
 eUnifyEqVars v1 v2 = do
                         b0 <- use boundVars
                         let newvars = Set.difference (Set.fromList [v1, v2]) b0
-                        unless (Set.null newvars) $ 
-                                trace ("WARNING: the variables " ++ show newvars ++ " are being automatically bound as existentials.") $
+                        unless (Set.null newvars) $ do
+                                logEvent $ WarnAutoBind newvars
                                 existentials %= flip Set.union newvars
                         unifyEqVars v1 v2
 
 
 
-assert :: (MonadState s m, AssertionLenses s) => Condition VariableID -> m ()
+assert :: (MonadState s m, MonadLogger m, AssertionLenses s) =>
+        Condition VariableID -> m ()
 -- ^Assert that a given condition holds.
 -- We assume that all of the variables are already bound correctly
 assert c@(PermissionCondition _) = do
@@ -537,20 +554,24 @@ assert c@(DisequalityCondition v1 v2) = do
                         assertions %= (c :)
 
 -- |Assert that two variables are equal.
-assertEqual :: (ProverExpression e, MonadState s m, AssertionLenses s) => e VariableID -> e VariableID -> m ()
+assertEqual :: (ProverExpression e, MonadState s m, AssertionLenses s,
+        MonadLogger m) => e VariableID -> e VariableID -> m ()
 assertEqual e1 e2 = assert $ exprEquality (toExpr e1) (toExpr e2)
 
 
 -- |Assert that a condition is true.
-assertTrue :: (ConditionProp c, MonadState s m, AssertionLenses s) => c VariableID -> m ()
+assertTrue :: (ConditionProp c, MonadState s m, AssertionLenses s,
+        MonadLogger m) => c VariableID -> m ()
 assertTrue = assert . toCondition
 
 -- |Assert that a condition is false.
-assertFalse :: (ConditionProp c, MonadState s m, AssertionLenses s) => c VariableID -> m ()
+assertFalse :: (ConditionProp c, MonadState s m, AssertionLenses s,
+        MonadLogger m) => c VariableID -> m ()
 assertFalse = assert . negativeCondition
 
 -- |Assert a contradiction.
-assertContradiction :: (MonadState s m, AssertionLenses s) => m ()
+assertContradiction :: (MonadState s m, AssertionLenses s, MonadLogger m) =>
+        m ()
 assertContradiction = assert condFalse
 
 filterEvars :: (AssertionLenses a) => (Maybe VariableType -> Bool) -> Getter a [VariableID]
@@ -569,7 +590,8 @@ permissionAvars = filterAvars (== Just VTPermission)
 valueAvars :: (AssertionLenses a) => Getter a [VariableID]
 valueAvars = filterAvars (\x -> (x == Just VTValue) || isNothing x)
 
-justCheck :: (MonadIO m, MonadPlus m, MonadState s m, AssertionLenses s, Provers p) => p -> m ()
+justCheck :: (MonadIO m, MonadPlus m, MonadState s m, AssertionLenses s,
+        MonadLogger m, Provers p) => p -> m ()
 -- ^Check that the assertions follow from the assumptions.
 -- If not, fail this path
 justCheck ps = do
@@ -608,12 +630,12 @@ hypothetical mn = do
                 (ans, _, _) <- liftIO $ runRWST mn rr (emptyAssertions assms)
                 return ans
 
-hypotheticalCheck :: ProverM s r m => --(MonadIO m, MonadState s m, AssumptionLenses s, MonadReader r m, Provers r) => 
-                RWST r () Assertions (MaybeT IO) () -> m Bool
+hypotheticalCheck :: (ProverM s r m, MonadLogger m) => --(MonadIO m, MonadState s m, AssumptionLenses s, MonadReader r m, Provers r) => 
+                RWST r () Assertions (MaybeT (LoggerT IO)) () -> m Bool
 hypotheticalCheck mn = do
                         rr <- ask
                         assms <- use theAssumptions
-                        ans <- liftIO $ runMaybeT $ runRWST (mn >> justCheck rr) rr (emptyAssertions assms)
+                        ans <- liftLoggerT liftIO $ runMaybeT $ runRWST (mn >> justCheck rr) rr (emptyAssertions assms)
                         case ans of
                                 Just _ -> return True
                                 Nothing -> return False

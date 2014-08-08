@@ -3,7 +3,7 @@ module Caper.Regions where
 import Prelude hiding (mapM_,mapM,concat)
 import Control.Monad.State hiding (mapM_,mapM,forM_)
 import Control.Monad.Reader hiding (mapM_,mapM,forM_)
-import Control.Lens
+import Control.Lens hiding (op)
 import Data.Foldable
 import Data.Traversable
 import qualified Data.Map as Map
@@ -36,7 +36,7 @@ class RegionLenses a where
         regions :: Simple Lens a (AliasMap VariableID Region)
 
 instance RegionLenses Regions where
-        regions = lens _regions (\x y -> Regions y)
+        regions = lens _regions (\_ y -> Regions y)
 
 -- TODO: possibly move somewhere more relevant
 mergeMaybe :: (Monad m) => (a -> a -> m a) -> Maybe a -> Maybe a -> m (Maybe a)

@@ -9,6 +9,7 @@ import Control.Lens
 import qualified Data.Map as Map
 
 import Caper.Utils.SimilarStrings
+import Caper.Logger
 import Caper.Exceptions
 import Caper.ProverDatatypes
 import Caper.Prover
@@ -52,7 +53,8 @@ permissionBinOp Composition = PESum
 
 
 -- |Given a syntactic pure assertion, produce it by adding it as an assumption.
-producePure :: (MonadState s m, AssumptionLenses s, MonadRaise m) =>
+producePure :: (MonadState s m, AssumptionLenses s, SymbStateLenses s,
+        MonadRaise m) =>
                 PureAssrt -> m ()
 producePure = producePure' False
         where
@@ -79,12 +81,13 @@ producePure = producePure' False
 -- |Produce a variable.  Named variables are converted to 'VIDNamed'
 -- instances, and declared in the assumptions.  Anonymous (wildcard)
 -- variables are translated to fresh identifiers.
-produceVariable :: (MonadState s m, AssumptionLenses s) =>
+produceVariable :: (MonadState s m, AssumptionLenses s, SymbStateLenses s) =>
                 VarExpr -> m VariableID
 produceVariable (Variable _ vname) = do
-                        let v = VIDNamed vname
-                        declareVar v
-                        return v
+        v <- use (SS.logicalVars . at vname) 
+        case v of
+                Nothing -> freshNamedVar vname
+                (Just x) -> return x
 produceVariable (WildCard _) =
                         newAvar "wildcard"
 
@@ -114,7 +117,8 @@ generateValueExpr genvar (BinaryValExpr sp bo ve1 ve2) = do
                         return $ op vve1 vve2
 generateValueExpr genvar (SetValExpr sp _) = addSPContext sp $ raise $ SyntaxNotImplemented "{ ... } (set of values notation in assertions)"
 
-produceValueExpr :: (MonadState s m, AssumptionLenses s, MonadRaise m) =>
+produceValueExpr :: (MonadState s m, AssumptionLenses s, SymbStateLenses s,
+        MonadRaise m) =>
         ValExpr -> m (ValueExpression VariableID)
 produceValueExpr = generateValueExpr produceVariable
 
@@ -132,7 +136,8 @@ generatePermissionExpr genvar (BinaryPermExpr _ bo pe1 pe2) = do
                         ppe2 <- generatePermissionExpr genvar pe2
                         return $ op ppe1 ppe2
 
-producePermissionExpr :: (MonadState s m, AssumptionLenses s) =>
+producePermissionExpr :: (MonadState s m, AssumptionLenses s,
+        SymbStateLenses s) =>
         PermExpr -> m (PermissionExpression VariableID)
 producePermissionExpr = generatePermissionExpr produceVariable
 
@@ -144,7 +149,8 @@ generateAnyExpr genvar (AnyVar e) = liftM VariableExpr $ genvar e
 generateAnyExpr genvar (AnyVal e) = liftM ValueExpr $ generateValueExpr genvar e
 generateAnyExpr genvar (AnyPerm e) = liftM PermissionExpr $ generatePermissionExpr genvar e
 
-produceAnyExpr :: (MonadState s m, AssumptionLenses s, MonadRaise m) =>
+produceAnyExpr :: (MonadState s m, AssumptionLenses s, SymbStateLenses s,
+        MonadRaise m) =>
         AnyExpr -> m (Expr VariableID)
 produceAnyExpr = generateAnyExpr produceVariable
 
@@ -166,7 +172,7 @@ produceCell :: (MonadState s m, AssumptionLenses s, SymbStateLenses s, MonadRais
 produceCell p = generateCellPred produceVariable p >>= SS.producePredicate
 
 consumeCell :: (MonadPlus m, MonadState s m, AssertionLenses s,
-        SymbStateLenses s, MonadRaise m) =>
+        SymbStateLenses s, MonadRaise m, MonadLogger m) =>
         CellAssrt -> m ()
 -- Note: it shouldn't be necessary to check the number and type of arguments
 -- after the call to generateCellPred.
@@ -195,6 +201,7 @@ checkRegionParams rtid params = do
 
 -- |Produce a region assertion.
 produceRegion :: (MonadState s m, AssumptionLenses s, RegionLenses s,
+                SymbStateLenses s,
                 MonadReader r m, RTCGetter r,
                 MonadRaise m) =>
         Bool -- ^Should the region be treated as dirty (unstable)
@@ -221,6 +228,7 @@ produceRegion dirty (Region sp rtn ridv lrps rse) = addContext
 -- this will result in an assumption of inconsistency.  However, if the
 -- guards are syntactically incompatible, an exception is raised instead.
 produceGuards :: (MonadState s m, AssumptionLenses s, RegionLenses s,
+                SymbStateLenses s,
                 MonadReader r m, RTCGetter r,
                 MonadRaise m) =>
         Guards -> m ()

@@ -1,4 +1,5 @@
-{-# LANGUAGE DeriveDataTypeable, FlexibleInstances, FlexibleContexts, MultiParamTypeClasses #-}
+{-# LANGUAGE DeriveDataTypeable, FlexibleInstances, FlexibleContexts, MultiParamTypeClasses,
+        OverlappingInstances #-}
 {- |The Exceptions module provides for execution-time failure reporting.
    The exceptions defined here are /not/ for programmer errors (e.g. assertion
    failures) or generally recoverable exceptions.  The system provides a
@@ -6,15 +7,18 @@
    identifying the cause of the exception).
  -}
 module Caper.Exceptions(
+        module Caper.ExceptionContext,
         module Caper.Exceptions)
         where
 import Data.Typeable
-import Control.Arrow (first)
+-- import Control.Arrow (first)
 import Control.Monad.Trans.Either
 import Control.Monad.Trans
+import Control.Monad.Reader
 import Text.ParserCombinators.Parsec
 import Data.List
 
+import Caper.ExceptionContext
 import Caper.Utils.MonadHoist
 import Caper.TypingContext
 import Caper.ProverDatatypes
@@ -69,17 +73,6 @@ instance Show CaperException where
         show (IncompatibleGuardOccurrences gname) =
                 "There were incompatible occurrences of guards named '" ++ gname ++ "'."
 
--- |The data type 'ExceptionContext' represents contextual information
--- about the cause of a 'CaperException'.
-data ExceptionContext =
-        StringContext String
-        | SourcePosContext SourcePos
-        | DescriptiveContext SourcePos String
-
-instance Show ExceptionContext where
-        show (StringContext s) = s
-        show (SourcePosContext sp) = show sp
-        show (DescriptiveContext sp s) = show sp ++ ": " ++ show s
 
 -- |The 'MonadRaise' class supports raising 'CaperException's and
 -- adding contextual information
@@ -92,11 +85,24 @@ addSPContext = addContext . SourcePosContext
 
 -- |The 'RaiseT' monad transformer provides an instance for 'MonadRaise'.
 -- It is simply defined in terms of 'EitherT'.
+{-
 type RaiseT = EitherT ([ExceptionContext], CaperException)
 
 instance (Monad m, Functor m) => MonadRaise (RaiseT m) where
         raise ex = left ([], ex)
         addContext ctx = bimapEitherT (first ((:) ctx)) id
+-}
+type RaiseT m = ReaderT [ExceptionContext]
+        (EitherT ([ExceptionContext], CaperException) m)
+
+instance (Monad m) => MonadRaise (RaiseT m) where
+        raise ex = do
+                ctx <- ask
+                lift $ left (ctx, ex)
+        addContext ctx = local (ctx :)
+
+runRaiseT :: Monad m => RaiseT m a -> m (Either ([ExceptionContext], CaperException) a)
+runRaiseT a = runEitherT (runReaderT a [])
 
 instance (MonadTrans t, MonadHoist t, Monad m, MonadRaise m) => MonadRaise (t m) where
         raise = lift . raise
@@ -107,7 +113,5 @@ liftTUFailure :: (Monad m, MonadRaise m) => Either TUException a -> m a
 liftTUFailure (Left e) = raise (TypesNotUnifiable e)
 liftTUFailure (Right r) = return r
 
-class Contextual a where
-        toContext :: a -> ExceptionContext
-        contextualise :: (MonadRaise m) => a -> m b -> m b
-        contextualise = addContext . toContext 
+contextualise :: (Contextual a, MonadRaise m) => a -> m b -> m b
+contextualise = addContext . toContext 
