@@ -1,17 +1,19 @@
 {- Regions -}
 module Caper.Regions where
 import Prelude hiding (mapM_,mapM,concat)
-import Control.Monad.State hiding (mapM_,mapM,forM_)
-import Control.Monad.Reader hiding (mapM_,mapM,forM_)
+import Control.Monad.State hiding (mapM_,mapM,forM_,msum)
+import Control.Monad.Reader hiding (mapM_,mapM,forM_,msum)
 import Control.Lens hiding (op)
 import Data.Foldable
 import Data.Traversable
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 
+import Caper.Utils.Choice
 import Caper.RegionTypes
 import Caper.Utils.AliasingMap (AliasMap)
 import qualified Caper.Utils.AliasingMap as AM
+import Caper.Logger
 import Caper.ProverDatatypes
 import Caper.Prover -- TODO: move some stuff from Prover to ProverDatatypes?
 import Caper.Guards
@@ -95,6 +97,48 @@ produceMergeRegion rvar region = do
                         (Just r) -> do
                                 r' <- mergeRegions r region
                                 regions .= AM.insert rvar r' regs
+
+consumeRegion :: (MonadState s m, AssertionLenses s, RegionLenses s,
+                MonadReader r m, RTCGetter r,
+                MonadPlus m,
+                MonadLogger m) =>
+                RTId                    -- ^Type of the region 
+                -> VariableID           -- ^Identifier variable 
+                -> [Expr VariableID]    -- ^Parameters
+                ->  ValueExpression VariableID     -- ^State
+                -> m ()
+consumeRegion rtid rid params st = do
+        -- Check if rid already identifies a region
+        regs <- use regions
+        case regs ^? ix rid of
+                Just reg -> do -- It does!
+                        (RegionInstance artid aparams) <- liftMaybe
+                                (regTypeInstance reg)
+                        if artid == rtid then do
+                                bindParams aparams
+                                bindState $ regState reg
+                            else
+                                mzero -- Type doesn't match!
+                Nothing -> do
+                        -- No region, so we'll simply try all those of the
+                        -- right type
+                        let crs = filter okRegionType (AM.toRootList regs)
+                        (arid, Region _ (Just (RegionInstance _ aparams))
+                                                         astate _)
+                                <- msum $ map return crs
+                        -- Bind the identifier
+                        assert (EqualityCondition rid arid)
+                        bindParams aparams
+                        bindState astate
+    where
+        okRegionType (_, Region _ (Just (RegionInstance rtid0 _)) _ _) =
+                rtid0 == rtid
+        okRegionType _ = False
+        bindParams aparams = mapM_ assert $ zipWith exprEquality params aparams
+        bindState (Just ast) = assertTrue $ VAEq st ast
+        bindState Nothing = newAvar "state" >>=
+                        assertTrue . VAEq st . var
+                
 
 -- Stabilise all regions
 stabiliseRegions :: (ProverM s r m, RegionLenses s, RTCGetter r) =>

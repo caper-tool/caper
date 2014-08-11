@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveFunctor, TypeFamilies #-}
 {- Provide maps with aliasing.
  - The purpose is to support handling of shared regions.
  - Some region variables may be aliases for each other.
@@ -8,7 +8,7 @@
  -}
 
 module Caper.Utils.AliasingMap where
-import Prelude hiding (foldr)
+import Prelude hiding (foldr, lookup)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.List (intercalate)
@@ -18,6 +18,7 @@ import Data.Traversable
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Trans.Maybe
+import Control.Lens
 
 
 {- AliasMap.
@@ -49,6 +50,12 @@ instance (Show a, Show b, Eq a) => Show (AliasMap a b) where
                         ifold a k (Left x) = if a == x then (("," ++ show k) ++) else id
                         ifold _ _ (Right _) = id
 
+type instance Index (AliasMap a b) = a
+type instance IxValue (AliasMap a b) = b
+instance (Ord a) => Ixed (AliasMap a b) where
+        ix k f m = case lookup k m of
+                Just v -> f v <&> \v' -> overwrite k v' m
+                Nothing -> pure m
 
 empty :: AliasMap a b
 empty = AliasMap Map.empty
@@ -97,6 +104,11 @@ resolve key (AliasMap m) = do
 rootDefault :: (Ord a) => a -> a -> AliasMap a b -> a
 rootDefault def a = fromMaybe def . root a
 
+overwrite :: (Ord a) => a -> b -> AliasMap a b -> AliasMap a b
+overwrite key val am@(AliasMap m) =
+        AliasMap $ Map.insert (rootDefault key key am) (Right val) m
+
+
 -- Given two keys, renders them aliases.  If they are not already
 -- aliases, then the values are merged with the given (monadic) operation.
 -- Pre: the two keys must exist in the 
@@ -111,3 +123,11 @@ mergeAliases mop k1 k2 am@(AliasMap m) = if k1' == k2' then return am else do
 
 mergeAliasesM :: (Monad m, Ord a) => (b -> b -> m (Maybe b)) -> a -> a -> AliasMap a b -> m (Maybe (AliasMap a b))
 mergeAliasesM mop k1 k2 am = runMaybeT $ mergeAliases (\x y -> MaybeT $ mop x y) k1 k2 am
+
+-- |Returns a list of key-value pairs, where the key is a single
+-- representative of each aliasing class
+toRootList :: (Ord a) => AliasMap a b -> [(a,b)]
+toRootList (AliasMap m) = Map.foldWithKey scq [] m
+        where
+                scq _ (Left _) = id
+                scq k (Right v) = ((k, v) :)

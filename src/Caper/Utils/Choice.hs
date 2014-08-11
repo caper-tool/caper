@@ -1,6 +1,6 @@
 {-# LANGUAGE ExistentialQuantification #-}
 
--- A module for implementing non-deterministic computation
+-- | A module for implementing non-deterministic computation
 -- lazy side-effects.  For practical purposes, the side-effects
 -- must be tolerant when it comes to ordering.
 
@@ -12,6 +12,11 @@ import Control.Monad.Trans.Maybe
 import Debug.Trace
 import Caper.Utils.NondetClasses
 import Caper.Utils.MonadHoist
+
+-- |Lift a 'Maybe' into an arbitrary non-deterministic monad.
+liftMaybe :: (MonadPlus m) => Maybe a -> m a
+liftMaybe (Just x) = return x
+liftMaybe Nothing = mzero
 
 -- ChoiceM datatype represents a non-determinstic choice of
 -- values of type a, having (lazy) side-effects in monad m.

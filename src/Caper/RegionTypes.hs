@@ -6,15 +6,15 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Monoid
 import Data.Foldable
 import Control.Lens
 import Data.Maybe
 import Data.List (intercalate)
 
+import Caper.Utils.SimilarStrings
 import Caper.Guards
 import Caper.ProverDatatypes
-
+import Caper.Exceptions
 
 
 -- The internal representation of a region type identifier
@@ -117,6 +117,17 @@ lookupRTName s = to $ \c -> Map.lookup s (rtcIds (c ^. theRTContext))
 
 regionTypeNames :: (RTCGetter a) => Getter a [String]
 regionTypeNames = to $ \c -> map fst (Map.toList (rtcIds (c ^. theRTContext)))
+
+lookupRTNameE :: (MonadReader r m, RTCGetter r, MonadRaise m) =>
+        String -> m RTId
+lookupRTNameE s = do
+        rmp <- view (theRTContext . to rtcIds)
+        case rmp ^. at s of
+                Nothing -> do
+                        let rtnames = map fst (Map.toList rmp)
+                        raise $ UndeclaredRegionType s
+                                (similarStrings s rtnames)
+                (Just rtid) -> return rtid
 
 instance RTCGetter RegionTypeContext where
         theRTContext = to id

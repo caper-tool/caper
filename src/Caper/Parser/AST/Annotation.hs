@@ -213,3 +213,6 @@ instance Contextual Guards where
 instance Contextual Predicate where
         toContext (Predicate sp pname _) = DescriptiveContext sp $
                 "In a predicate assertions '" ++ pname ++ "(...)'"
+instance Contextual RegionAssrt where
+        toContext (Region sp rtn _ _ _) = DescriptiveContext sp $
+                "In a region assertion of type '" ++ rtn ++ "'" 

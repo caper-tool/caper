@@ -86,17 +86,25 @@ produceVariable :: (MonadState s m, AssumptionLenses s, SymbStateLenses s) =>
 produceVariable (Variable _ vname) = do
         v <- use (SS.logicalVars . at vname) 
         case v of
-                Nothing -> freshNamedVar vname
+                Nothing -> do
+                        fv <- freshNamedVar vname
+                        (SS.logicalVars . at vname) ?= fv
+                        return fv
                 (Just x) -> return x
 produceVariable (WildCard _) =
                         newAvar "wildcard"
 
-consumeVariable :: (MonadState s m, AssertionLenses s) =>
+consumeVariable :: (MonadState s m, AssertionLenses s, SymbStateLenses s) =>
                 VarExpr -> m VariableID
 consumeVariable (Variable _ vname) = do
-                        let v = VIDNamed vname
-                        b <- isBound v
-                        if b then return v else declareEvar v >> return v
+        v <- use (SS.logicalVars . at vname)
+        case v of
+                Nothing -> do
+                        fv <- freshNamedVar vname
+                        declareEvar fv
+                        SS.logicalVars . at vname ?= fv
+                        return fv
+                (Just x) -> return x
 consumeVariable (WildCard _) =
                         newEvar "wildcard"
 
@@ -154,6 +162,11 @@ produceAnyExpr :: (MonadState s m, AssumptionLenses s, SymbStateLenses s,
         AnyExpr -> m (Expr VariableID)
 produceAnyExpr = generateAnyExpr produceVariable
 
+consumeAnyExpr :: (MonadState s m, AssertionLenses s, SymbStateLenses s,
+        MonadRaise m) =>
+        AnyExpr -> m (Expr VariableID)
+consumeAnyExpr = generateAnyExpr consumeVariable
+
 generateCellPred :: (Monad m, MonadRaise m) =>
         (VarExpr -> m VariableID)
         -> CellAssrt
@@ -206,22 +219,34 @@ produceRegion :: (MonadState s m, AssumptionLenses s, RegionLenses s,
                 MonadRaise m) =>
         Bool -- ^Should the region be treated as dirty (unstable)
         -> RegionAssrt -> m ()
-produceRegion dirty (Region sp rtn ridv lrps rse) = addContext
-        (DescriptiveContext sp $ "In a region assertion of type '" ++ rtn ++ "'") $
+produceRegion dirty regn@(Region sp rtn ridv lrps rse) = contextualise regn $
         do
-                rtid0 <- view $ lookupRTName rtn
-                case rtid0 of
-                        Nothing -> do
-                                rtnames <- view regionTypeNames
-                                raise $ UndeclaredRegionType rtn (similarStrings rtn rtnames)
-                        (Just rtid) -> do
-                                let rid = VIDNamed ridv
-                                addContext (StringContext $ "The region identifier '" ++ ridv ++ "'") $
-                                        bindVarAs rid VTRegionID
-                                params <- mapM produceAnyExpr lrps
-                                checkRegionParams rtid (zip params lrps)
-                                state <- produceValueExpr rse
-                                R.produceMergeRegion rid $ R.Region dirty (Just $ R.RegionInstance rtid params) (Just state) G.emptyGuard
+                rtid <- lookupRTNameE rtn
+                rid <- produceVariable (Variable sp ridv)
+                addContext (StringContext $ "The region identifier '" ++ ridv ++ "'") $
+                        bindVarAsE rid VTRegionID
+                params <- mapM produceAnyExpr lrps
+                checkRegionParams rtid (zip params lrps)
+                state <- produceValueExpr rse
+                R.produceMergeRegion rid $ R.Region dirty (Just $ R.RegionInstance rtid params) (Just state) G.emptyGuard
+
+-- |Consume a region assertion.
+consumeRegion :: (MonadState s m, AssertionLenses s, RegionLenses s,
+                SymbStateLenses s,
+                MonadReader r m, RTCGetter r,
+                MonadRaise m, MonadLogger m,
+                MonadPlus m) =>
+        RegionAssrt -> m ()
+consumeRegion regn@(Region sp rtn ridv lrps rse) = contextualise regn $
+        do
+                rtid <- lookupRTNameE rtn
+                rid <- consumeVariable (Variable sp ridv)
+                addContext (StringContext $ "The region identifier '" ++ ridv ++ "'") $
+                        bindVarAsE rid VTRegionID
+                params <- mapM consumeAnyExpr lrps
+                checkRegionParams rtid (zip params lrps)
+                st <- produceValueExpr rse
+                R.consumeRegion rtid rid params st 
 
 -- |Produce a guard assertion.
 -- If the guards are not compatible with a guard type for the region,
