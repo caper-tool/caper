@@ -372,6 +372,13 @@ Again, there are a few options:
 The first is what Verifast uses.
 I think there's a good justification for it in that the program variables are technically out of scope after the return.
 
-
+\paragraph{Assertions.}
+How should we handle assertions in the code?
+\begin{enumerate}
+  \item Treat them as ``midconditions'' and use them to break up the program verification into (ideally) linear segments.
+    In such a scenario, they must describe the state fully enough that the subsequent code can be verified.
+    In particular, they must mention all the resources needed for the continuation.
+    An advantage of this is that assertions can be used as loop invariants.
+\end{enumerate}
 
 \end{document}
