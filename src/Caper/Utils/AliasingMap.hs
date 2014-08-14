@@ -131,3 +131,8 @@ toRootList (AliasMap m) = Map.foldWithKey scq [] m
         where
                 scq _ (Left _) = id
                 scq k (Right v) = ((k, v) :)
+
+-- |Returns a list of distinct keys. Any key in the map will be an alias
+-- for one of them.
+distinctKeys :: (Ord a) => AliasMap a b -> [a]
+distinctKeys = map fst . toRootList

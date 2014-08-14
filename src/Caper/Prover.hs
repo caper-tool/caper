@@ -46,6 +46,9 @@ module Caper.Prover(
         assertEqual,
         assertTrue,
         assertFalse,
+        assertEqualE,
+        assertTrueE,
+        assertFalseE,
         -- ** Checking assertions
         justCheck,
         hypothetical,
@@ -514,26 +517,33 @@ freshNamedVar vname = do
                 bindings %= TC.declare v
                 return v
 
+autoExists :: (MonadState s m, MonadLogger m, AssertionLenses s, Foldable f) =>
+                f VariableID -> m ()
+autoExists s = do
+                b0 <- use boundVars
+                let newvars = Set.difference ((Set.fromList . toList) s) b0
+                unless (Set.null newvars) $ do
+                        logEvent $ WarnAutoBind newvars
+                        existentials %= flip Set.union newvars
+                 
+
 eBindVarsAs :: (MonadState s m, MonadLogger m, AssertionLenses s, Foldable f) =>
                 f VariableID -> VariableType -> m ()
-eBindVarsAs s vt = do
-                        b0 <- use boundVars
-                        let newvars = Set.difference ((Set.fromList . toList) s) b0
-                        unless (Set.null newvars) $ do
-                                logEvent $ WarnAutoBind newvars
-                                existentials %= flip Set.union newvars
-                        bindVarsAs s vt
+eBindVarsAs s vt = autoExists s >> bindVarsAs s vt
 
 eUnifyEqVars :: (MonadState s m, MonadLogger m, AssertionLenses s) =>
                 VariableID -> VariableID -> m ()
-eUnifyEqVars v1 v2 = do
-                        b0 <- use boundVars
-                        let newvars = Set.difference (Set.fromList [v1, v2]) b0
-                        unless (Set.null newvars) $ do
-                                logEvent $ WarnAutoBind newvars
-                                existentials %= flip Set.union newvars
-                        unifyEqVars v1 v2
+eUnifyEqVars v1 v2 = autoExists [v1, v2] >> unifyEqVars v1 v2
 
+eBindVarsAsE :: (MonadState s m, MonadLogger m, MonadRaise m,
+                AssertionLenses s, Foldable f) =>
+                f VariableID -> VariableType -> m ()
+eBindVarsAsE s vt = autoExists s >> bindVarsAsE s vt
+
+eUnifyEqVarsE :: (MonadState s m, MonadLogger m, MonadRaise m,
+                AssertionLenses s) =>
+                VariableID -> VariableID -> m ()
+eUnifyEqVarsE v1 v2 = autoExists [v1, v2] >> unifyEqVarsE v1 v2
 
 
 assert :: (MonadState s m, MonadLogger m, AssertionLenses s) =>
@@ -553,11 +563,35 @@ assert c@(DisequalityCondition v1 v2) = do
                         eUnifyEqVars v1 v2
                         assertions %= (c :)
 
--- |Assert that two variables are equal.
+assertE :: (MonadState s m, MonadLogger m, MonadRaise m, AssertionLenses s) =>
+        Condition VariableID -> m ()
+-- ^Assert that a given condition holds.
+-- We assume that all of the variables are already bound correctly.
+-- This version raises an exception if types of variables do not match.
+assertE c@(PermissionCondition _) = do
+                        eBindVarsAsE (freeVariables c) VTPermission
+                        assertions %= (c :)
+assertE c@(ValueCondition _) = do
+                        eBindVarsAsE (freeVariables c) VTValue
+                        assertions %= (c :)
+assertE c@(EqualityCondition v1 v2) = do
+                        eUnifyEqVarsE v1 v2
+                        assertions %= (c :)
+assertE c@(DisequalityCondition v1 v2) = do
+                        eUnifyEqVarsE v1 v2
+                        assertions %= (c :)
+
+
+-- |Assert that two exoressions are equal.
 assertEqual :: (ProverExpression e, MonadState s m, AssertionLenses s,
         MonadLogger m) => e VariableID -> e VariableID -> m ()
 assertEqual e1 e2 = assert $ exprEquality (toExpr e1) (toExpr e2)
 
+-- |Assert that two expressions are equal.  Raises an exception if the variables
+-- do not have appropriate types.
+assertEqualE :: (ProverExpression e, MonadState s m, AssertionLenses s,
+        MonadLogger m, MonadRaise m) => e VariableID -> e VariableID -> m ()
+assertEqualE e1 e2 = assertE $ exprEquality (toExpr e1) (toExpr e2)
 
 -- |Assert that a condition is true.
 assertTrue :: (ConditionProp c, MonadState s m, AssertionLenses s,
@@ -568,6 +602,17 @@ assertTrue = assert . toCondition
 assertFalse :: (ConditionProp c, MonadState s m, AssertionLenses s,
         MonadLogger m) => c VariableID -> m ()
 assertFalse = assert . negativeCondition
+
+-- |Assert that a condition is true.
+assertTrueE :: (ConditionProp c, MonadState s m, AssertionLenses s,
+        MonadLogger m, MonadRaise m) => c VariableID -> m ()
+assertTrueE = assertE . toCondition
+
+-- |Assert that a condition is false.
+assertFalseE :: (ConditionProp c, MonadState s m, AssertionLenses s,
+        MonadLogger m, MonadRaise m) => c VariableID -> m ()
+assertFalseE = assertE . negativeCondition
+
 
 -- |Assert a contradiction.
 assertContradiction :: (MonadState s m, AssertionLenses s, MonadLogger m) =>

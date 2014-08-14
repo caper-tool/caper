@@ -14,6 +14,7 @@ import Data.Foldable
 import Data.List (intersperse)
 import Data.Traversable
 
+import Caper.Utils.Choice
 import Caper.Logger
 import Caper.ProverDatatypes
 import Caper.Prover
@@ -212,7 +213,7 @@ takingEachPredInstance :: (MonadPlus m, MonadState s m, SymbStateLenses s) => Pr
 -- predicates and returning the instantiation.
 takingEachPredInstance pname = do
                 prds <- use preds
-                p <- msum $ map return (MultiSet.distinctElems (predicateLookup pname prds))
+                p <- chooseFrom (MultiSet.distinctElems (predicateLookup pname prds))
                 preds %= Map.adjust (MultiSet.delete p) pname
                 return p
 

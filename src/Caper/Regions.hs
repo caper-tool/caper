@@ -40,6 +40,9 @@ class RegionLenses a where
 instance RegionLenses Regions where
         regions = lens _regions (\_ y -> Regions y)
 
+regionList :: (MonadState s m, RegionLenses s) => m [VariableID]
+regionList = liftM AM.distinctKeys $ use regions
+
 -- TODO: possibly move somewhere more relevant
 mergeMaybe :: (Monad m) => (a -> a -> m a) -> Maybe a -> Maybe a -> m (Maybe a)
 mergeMaybe _ Nothing m2 = return m2
@@ -98,6 +101,9 @@ produceMergeRegion rvar region = do
                                 r' <- mergeRegions r region
                                 regions .= AM.insert rvar r' regs
 
+
+-- XXX: This is overkill.  In all but very few cases the rid should already
+-- point to a region.
 consumeRegion :: (MonadState s m, AssertionLenses s, RegionLenses s,
                 MonadReader r m, RTCGetter r,
                 MonadPlus m,
@@ -125,7 +131,7 @@ consumeRegion rtid rid params st = do
                         let crs = filter okRegionType (AM.toRootList regs)
                         (arid, Region _ (Just (RegionInstance _ aparams))
                                                          astate _)
-                                <- msum $ map return crs
+                                <- chooseFrom crs
                         -- Bind the identifier
                         assert (EqualityCondition rid arid)
                         bindParams aparams

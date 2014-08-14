@@ -18,7 +18,8 @@ import Data.Traversable
 --import Data.Maybe
 import Data.List (intercalate)
 import Control.Monad.State hiding (mapM_,mapM,sequence)
-import Debug.Trace
+import Debug.Trace              -- TODO: get rid of this
+import Control.Lens
 
 import Caper.Logger
 import Caper.ProverDatatypes
@@ -315,6 +316,16 @@ subtractPE l s = (do -- TODO: frame some permission
                 assertTrue $ PAEq l (PESum s eve)
                 return (Just eve))
 
+-- |Given a guard parameter we have, take away a given guard parameter.
+-- If things are of the wrong type, backtrack rather than erroring, because
+-- we might just have picked the wrong region.
+subtractGP :: (MonadPlus m, MonadState s m, AssertionLenses s, MonadLogger m) =>
+        GuardParameters VariableID -> GuardParameters VariableID ->
+                m (Maybe (GuardParameters VariableID))
+subtractGP NoGP NoGP = return Nothing
+subtractGP (PermissionGP p1) (PermissionGP p2) = 
+                liftM (liftM PermissionGP) $ subtractPE p1 p2
+subtractGP _ _ = mzero
 
 guardPrimitiveEntailmentM :: (MonadPlus m, MonadState s m, AssertionLenses s,
         MonadLogger m) =>
@@ -343,6 +354,37 @@ guardEntailment gt g1 g2 = guardPrimitiveEntailmentM g1 g2 `mplus`
                                 let (gel, ger) = guardEquivalence gt g1 g2
                                 frame1 <- guardPrimitiveEntailmentM g1 gel
                                 guardPrimitiveEntailmentM (guardJoin frame1 ger) g2
+
+-- |Try to extract a single guard resource, where we don't know the guard type.
+-- Consequently, no rewriting of guards is possible.
+consumeGuardNoType :: (MonadPlus m, MonadState s m, AssertionLenses s,
+        MonadLogger m) =>
+                String -> GuardParameters VariableID ->
+                Guard VariableID -> m (Guard VariableID)
+consumeGuardNoType gname gpara (GD g) = do
+                        gp <- liftMaybe $ g ^. at gname
+                        gp' <- subtractGP gp gpara
+                        return $ GD $ at gname .~ gp' $ g
+
+consumeGuard' :: (MonadPlus m, MonadState s m, AssertionLenses s,
+        MonadLogger m) =>
+                GuardTypeAST ->
+                String -> GuardParameters VariableID ->
+                Guard VariableID -> m (Guard VariableID)
+consumeGuard' gt gname gpara g = consumeGuardNoType gname gpara g `mplus`
+                do
+                        let (gel, ger) = guardEquivalence gt g
+                                (GD $ Map.insert gname gpara Map.empty)
+                        frame1 <- guardPrimitiveEntailmentM g gel
+                        consumeGuardNoType gname gpara (guardJoin frame1 ger)                
+
+consumeGuard :: (MonadPlus m, MonadState s m, AssertionLenses s,
+        MonadLogger m) =>
+                TopLevelGuardTypeAST ->
+                String -> GuardParameters VariableID ->
+                Guard VariableID -> m (Guard VariableID)
+consumeGuard ZeroGT = \_ _ _ -> mzero -- Something has gone wrong...
+consumeGuard (SomeGT gt) = consumeGuard' gt 
 
 {--
 
