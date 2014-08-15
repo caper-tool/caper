@@ -23,6 +23,17 @@ import qualified Caper.Regions as R
 import Caper.RegionTypes
 import qualified Caper.Guards as G
 
+{-
+        At some point, this whole module should probably be rewritten.
+        In particular, some consideration of where variables are bound to
+        types would be good.
+        
+        At present types are NOT bound by
+                {produce,consume}{Value,Permission}Expr.
+        This means that one should be careful to bind them correctly at point
+        of use.
+-}
+
 -- TODO: Check for sure that I've got these right(!)
 -- |Interpret a syntactic value relation.
 valueRel :: ValBinRel -> ValueExpression v -> ValueExpression v -> FOF ValueAtomic v
@@ -57,13 +68,13 @@ producePure :: (MonadState s m, AssumptionLenses s, SymbStateLenses s,
                 PureAssrt -> m ()
 producePure = producePure' False
         where
-                asm sp b = addSPContext sp . if b then assumeTrueE else assumeFalseE
+                asm sp b = addSPContext sp . if b then assumeFalseE else assumeTrueE
                 producePure' b (NotBAssrt _ pa) = producePure' (not $! b) pa
                 producePure' b (ConstBAssrt _ b') = when (b == b') assumeContradiction
                 producePure' b (BinaryVarAssrt sp ebo vl vr) = do  -- TODO: specialise handling
                                 vvl <- produceVariable vl
                                 vvr <- produceVariable vr
-                                asm sp (b /= (ebo == EqualRel))
+                                asm sp (b == (ebo == EqualRel))
                                         (EqualityCondition vvl vvr)
                 producePure' b (BinaryValAssrt sp bo vel ver) = do
                                 vvel <- produceValueExpr vel
@@ -203,13 +214,13 @@ consumePure :: (MonadState s m, AssertionLenses s, SymbStateLenses s,
                 PureAssrt -> m ()
 consumePure = consumePure' False
         where
-                asrt sp b = addSPContext sp . if b then assertTrueE else assertFalseE
+                asrt sp b = addSPContext sp . if b then assertFalseE else assertTrueE
                 consumePure' b (NotBAssrt _ pa) = consumePure' (not $! b) pa
                 consumePure' b (ConstBAssrt _ b') = when (b == b') assertContradiction
                 consumePure' b (BinaryVarAssrt sp ebo vl vr) = do  -- TODO: specialise handling
                         vvl <- consumeVariable vl
                         vvr <- consumeVariable vr
-                        asrt sp (b /= (ebo == EqualRel)) $
+                        asrt sp (b == (ebo == EqualRel)) $
                                 EqualityCondition vvl vvr
                 consumePure' b (BinaryValAssrt sp bo vel ver) = do
                         let rel = valueRel bo
@@ -283,6 +294,7 @@ produceRegion dirty regn@(Region sp rtn ridv lrps rse) = contextualise regn $
                 params <- mapM produceAnyExpr lrps
                 checkRegionParams rtid (zip params lrps)
                 state <- produceValueExpr rse
+                bindVarsAsE state VTValue
                 R.produceMergeRegion rid $ R.Region dirty (Just $ R.RegionInstance rtid params) (Just state) G.emptyGuard
 
 -- |Consume a region assertion.
@@ -301,6 +313,7 @@ consumeRegion regn@(Region sp rtn ridv lrps rse) = contextualise regn $
                 params <- mapM consumeAnyExpr lrps
                 checkRegionParams rtid (zip params lrps)
                 st <- produceValueExpr rse
+                bindVarsAsE st VTValue
                 R.consumeRegion rtid rid params st 
 
 -- |Produce a guard assertion.

@@ -99,7 +99,7 @@ produceMergeRegion rvar region = do
                         Nothing -> regions .= AM.insert rvar region regs
                         (Just r) -> do
                                 r' <- mergeRegions r region
-                                regions .= AM.insert rvar r' regs
+                                regions .= AM.overwrite rvar r' regs
 
 
 -- XXX: This is overkill.  In all but very few cases the rid should already

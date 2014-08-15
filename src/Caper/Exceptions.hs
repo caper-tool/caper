@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances, FlexibleContexts, MultiParamTypeClasses,
-        OverlappingInstances #-}
+        OverlappingInstances, UndecidableInstances #-}
 {- |The Exceptions module provides for execution-time failure reporting.
    The exceptions defined here are /not/ for programmer errors (e.g. assertion
    failures) or generally recoverable exceptions.  The system provides a
@@ -15,6 +15,7 @@ import Data.Typeable
 import Control.Monad.Trans.Either
 import Control.Monad.Trans
 import Control.Monad.Reader
+import Control.Lens
 import Text.ParserCombinators.Parsec
 import Data.List
 
@@ -92,17 +93,26 @@ instance (Monad m, Functor m) => MonadRaise (RaiseT m) where
         raise ex = left ([], ex)
         addContext ctx = bimapEitherT (first ((:) ctx)) id
 -}
+{-
 type RaiseT m = ReaderT [ExceptionContext]
         (EitherT ([ExceptionContext], CaperException) m)
+--}
 
-instance (Monad m) => MonadRaise (RaiseT m) where
+type RaiseT = EitherT ([ExceptionContext], CaperException)
+runRaiseT :: Monad m => RaiseT m a -> m (Either ([ExceptionContext], CaperException) a)
+runRaiseT = runEitherT
+        
+instance (Monad m, MonadReader r m, ECLenses r) =>
+        MonadRaise (EitherT ([ExceptionContext], CaperException) m) where
         raise ex = do
-                ctx <- ask
-                lift $ left (ctx, ex)
-        addContext ctx = local (ctx :)
+                ctx <- view exceptionContext
+                left (ctx, ex)
+        addContext ctx = local (exceptionContext %~ (ctx :))
 
+{-
 runRaiseT :: Monad m => RaiseT m a -> m (Either ([ExceptionContext], CaperException) a)
 runRaiseT a = runEitherT (runReaderT a [])
+--}
 
 instance (MonadTrans t, MonadHoist t, Monad m, MonadRaise m) => MonadRaise (t m) where
         raise = lift . raise

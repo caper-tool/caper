@@ -1,4 +1,4 @@
-{-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE ExistentialQuantification, FlexibleInstances, MultiParamTypeClasses, UndecidableInstances #-}
 
 -- | A module for implementing non-deterministic computation
 -- lazy side-effects.  For practical purposes, the side-effects
@@ -9,6 +9,8 @@ module Caper.Utils.Choice where
 import Control.Monad hiding (sequence)
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
+import Control.Monad.Writer
+import Control.Monad.Reader
 import Debug.Trace
 import Caper.Utils.NondetClasses
 import Caper.Utils.MonadHoist
@@ -67,6 +69,10 @@ instance MonadTrans ChoiceM where
 
 instance (MonadIO m) => MonadIO (ChoiceM m) where
         liftIO = lift . liftIO
+
+instance MonadReader r m => MonadReader r (ChoiceM m) where
+        ask = lift ask
+        local m = hoist (local m)
 
 instance MonadHoist ChoiceM where
         hoist f (Choice c1 c2) = Choice (hoist f c1) (hoist f c2)

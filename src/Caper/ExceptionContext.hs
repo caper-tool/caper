@@ -1,6 +1,7 @@
 module Caper.ExceptionContext where
 
 import Text.ParserCombinators.Parsec
+import Control.Lens -- XXX: I feel a little bad about this lens being a dependency of the parser
 
 -- |The data type 'ExceptionContext' represents contextual information
 -- about the cause of a 'CaperException'.
@@ -16,3 +17,7 @@ instance Show ExceptionContext where
 
 class Contextual a where
         toContext :: a -> ExceptionContext
+
+class ECLenses c where
+        exceptionContext :: Simple Lens c [ExceptionContext] 
+        

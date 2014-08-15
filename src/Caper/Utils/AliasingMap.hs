@@ -60,13 +60,13 @@ instance (Ord a) => Ixed (AliasMap a b) where
 empty :: AliasMap a b
 empty = AliasMap Map.empty
 
--- Add new entry in the map
+-- |Add new entry in the map
 -- Pre: key should not already be in the map
 insert :: (Ord a) => a -> b -> AliasMap a b -> AliasMap a b
 insert k v (AliasMap m) = AliasMap $ Map.insertWith' (error "AliasMap.insert: attempted to add an entry where one already exists.") k (Right v) m
 
--- Add a new key as an alias for an existing key
--- Pre the new key should not be in the map, but the old key should
+-- |Add a new key as an alias for an existing key
+-- Pre: the new key should not be in the map, but the old key should
 addAlias :: (Ord a) => a -> a -> AliasMap a b -> AliasMap a b
 addAlias newk oldk (AliasMap m) = case Map.lookup oldk m of
                         Just (Left alias) -> upd alias

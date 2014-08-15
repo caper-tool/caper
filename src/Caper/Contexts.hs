@@ -1,0 +1,26 @@
+{-# LANGUAGE TemplateHaskell #-}
+module Caper.Contexts where
+
+import Control.Lens
+
+import Caper.ProverDatatypes
+import Caper.ExceptionContext
+import Caper.RegionTypes
+
+data ProcedureContext = ProcedureContext {
+        _pcRegionTypeContext :: RegionTypeContext,
+        _pcProverContext :: ProverRecord,
+        _pcExceptionContext :: [ExceptionContext]
+        }
+makeLenses ''ProcedureContext
+
+
+instance Provers ProcedureContext where
+        permissionsProver = permissionsProver . _pcProverContext
+        valueProver = valueProver . _pcProverContext  
+
+instance RTCGetter ProcedureContext where
+        theRTContext = pcRegionTypeContext
+        
+instance ECLenses ProcedureContext where
+        exceptionContext = pcExceptionContext

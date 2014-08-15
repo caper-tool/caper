@@ -84,6 +84,7 @@ import Data.Foldable
 --import Control.Monad hiding (mapM_,mapM)
 import Control.Lens
 import Debug.Trace
+import Data.List (intercalate)
 
 import Caper.ProverDatatypes
 --import Caper.ValueProver
@@ -434,12 +435,12 @@ instance AssertionLenses Assertions where
 showAssertions :: (AssertionLenses a) => a -> String
 showAssertions asts = "Assumptions: !["
                 ++ show (asts ^. universalBindings)
-                ++ "] "
-                ++ show (asts ^. assumptions)
+                ++ "] \n"
+                ++ intercalate "\n" (map show (asts ^. assumptions))
                 ++ "\nAssertions: ?["
                 ++ show (asts ^. existentialBindings)
-                ++ "] "
-                ++ show (asts ^. assertions)
+                ++ "] \n"
+                ++ intercalate "\n" (map show (asts ^. assertions))
 
 instance Show Assertions where
         show = showAssertions
