@@ -63,6 +63,10 @@ data StateSpace = StateSpace {
                 ssLowerBound :: Maybe Int,
                 ssUpperBound :: Maybe Int
                 }
+
+instance Show StateSpace where
+        show (StateSpace a b) = "[" ++ maybe "?" show a ++ "-" ++ maybe "?" show b ++ "]"
+                
 isFinite :: StateSpace -> Bool
 isFinite (StateSpace (Just _) (Just _)) = True
 isFinite _ = False

@@ -32,3 +32,4 @@ main = do
                         _ -> putStrLn "*** ERROR: The permissions prover could not prove True."
                 ) `catch` (\e -> putStrLn $ "*** ERROR: Invoking the permissions prover resulted in the following error:\n" ++ show (e :: SomeException))
         ) `catch` (\e -> putStrLn $ "*** ERROR: Falied to initialise provers:\n" ++ show (e :: SomeException))
+        putStrLn "Proved."

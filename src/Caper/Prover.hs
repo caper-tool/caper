@@ -134,7 +134,8 @@ instance AssumptionLenses Assumptions where
         assumptions = assmAssumptions
 
 instance Show Assumptions where
-        show ass = foldl (++) "" $ map (('\n':) . show) $ ass ^. assumptions
+        show ass = "[" ++ show (ass ^. bindings) ++ "]\n" ++
+                intercalate "\n" (map show (ass ^. assumptions)) 
 
 -- |The empty assumption context.
 emptyAssumptions :: Assumptions
@@ -344,7 +345,7 @@ valueVariables :: (AssumptionLenses a) => a -> [VariableID]
 -- ^Return a list of value variables; variables with no other type are treated as value variables.
 valueVariables = Map.keys . Map.filter treatAsValueJ . TC.toMap . (^. bindings)
 
-checkConsistency :: (Functor a, Foldable a) => (FOF a String -> IO (Maybe Bool)) -> [VariableID] -> [FOF a VariableID] -> IO (Maybe Bool)
+checkConsistency :: (Functor a, Foldable a, Show (a String)) => (FOF a String -> IO (Maybe Bool)) -> [VariableID] -> [FOF a VariableID] -> IO (Maybe Bool)
 -- ^Given a first-order prover, check whether a list of assertions (with free variables from a given list) is consistent.
 -- Consistent if the formula ¬(E) x1, ..., xn . P1 /\ ... /\ Pm /\ True is invalid. 
 checkConsistency p vars asss = do

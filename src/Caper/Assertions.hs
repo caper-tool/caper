@@ -312,7 +312,7 @@ consumeRegion regn@(Region sp rtn ridv lrps rse) = contextualise regn $
                         consumeRegionVariable (Variable sp ridv)
                 params <- mapM consumeAnyExpr lrps
                 checkRegionParams rtid (zip params lrps)
-                st <- produceValueExpr rse
+                st <- consumeValueExpr rse
                 bindVarsAsE st VTValue
                 R.consumeRegion rtid rid params st 
 

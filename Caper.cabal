@@ -53,7 +53,8 @@ executable Caper
                    Caper.ValueProver,
                    Caper.Logger,
                    Caper.ExceptionContext,
-                   Caper.Contexts
+                   Caper.Contexts,
+                   Caper.StabilityCheck
 
 executable Interpreter
   build-depends:   
@@ -73,5 +74,6 @@ executable Interpreter
                    Caper.Parser.AST.Code,
                    Caper.Parser.AST.SourcePos,
                    Caper.Parser.Parser,
-                   Caper.ExceptionContext
+                   Caper.ExceptionContext,
+                   Caper.StabilityCheck
 

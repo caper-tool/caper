@@ -1,5 +1,5 @@
 module Caper.FirstOrder where
-import Prelude hiding (foldl, foldr, elem)
+import Prelude hiding (foldl, foldr, elem, notElem)
 import Data.Foldable
 import qualified Data.Set as Set
 
@@ -100,18 +100,6 @@ sentence = sentence' Set.empty
                 sentence' s (FOFNot f) = sentence' s f
                 sentence' s (FOFAtom a) = foldr (\x -> (x `elem` s &&)) True a
 
-{--
-freeIn :: (Eq v, Foldable a) => v -> FOF a v -> Bool
-freeIn v (FOFForAll v' f) = if v == v' then False else freeIn v f
-freeIn v (FOFExists v' f) = if v == v' then False else freeIn v f
-freeIn v (FOFAnd f1 f2) = freeIn v f1 || freeIn v f2
-freeIn v (FOFOr f1 f2) = freeIn v f1 || freeIn v f2
-freeIn v (FOFImpl f1 f2) = freeIn v f1 || freeIn v f2
-freeIn v (FOFNot f) = freeIn v f
-freeIn v (FOFAtom a) = elem v a
-freeIn v _ = False
---}
-
 quantifierDepth :: FOF a v -> Int
 quantifierDepth (FOFForAll v f) = 1 + quantifierDepth f
 quantifierDepth (FOFExists v f) = 1 + quantifierDepth f
@@ -121,14 +109,43 @@ quantifierDepth (FOFImpl f1 f2) = max (quantifierDepth f1) (quantifierDepth f2)
 quantifierDepth (FOFNot f) = quantifierDepth f
 quantifierDepth _ = 0
 
-{--
-freeVariables :: (Ord v, Foldable a) => FOF a v -> Set.Set v
-freeVariables (FOFForAll v f) = Set.delete v (freeVariables f)
-freeVariables (FOFExists v f) = Set.delete v (freeVariables f)
-freeVariables (FOFAnd f1 f2) = Set.union (freeVariables f1) (freeVariables f2)
-freeVariables (FOFOr f1 f2) = Set.union (freeVariables f1) (freeVariables f2)
-freeVariables (FOFImpl f1 f2) = Set.union (freeVariables f1) (freeVariables f2)
-freeVariables (FOFNot f) = freeVariables f
-freeVariables (FOFAtom a) = Set.fromList $ toList a
-freeVariables _ = Set.empty
---}
+-- | Rewrite a first-order formula to prenex-normal form (i.e. all
+-- quantifiers on the outside).  (This assumes that all sorts are inhabited.)
+pNormalise :: (Functor a, Foldable a, Eq v, Eq (a v), Refreshable v) => FOF a v -> FOF a v
+pNormalise (FOFForAll v f) = FOFForAll v (pNormalise f)
+pNormalise (FOFExists v f) = FOFExists v (pNormalise f)
+pNormalise (FOFAnd f1 f2) = normAO FOFAnd (pNormalise f1) (pNormalise f2)
+pNormalise (FOFOr f1 f2) = normAO FOFOr (pNormalise f1) (pNormalise f2)
+pNormalise (FOFImpl f1 f2) = normImpl (pNormalise f1) (pNormalise f2)
+pNormalise (FOFNot f) = normNot (pNormalise f)
+pNormalise f = f
+
+normAO o (FOFForAll v f1) f2 = let (v', f1') = frsh v f1 f2 in
+        FOFForAll v' (normAO o f1' f2)
+normAO o (FOFExists v f1) f2 = let (v', f1') = frsh v f1 f2 in
+        FOFExists v' (normAO o f1' f2)
+normAO o f1 (FOFForAll v f2) = let (v', f2') = frsh v f2 f1 in
+        FOFForAll v' (normAO o f1 f2')
+normAO o f1 (FOFExists v f2) = let (v', f2') = frsh v f2 f1 in
+        FOFExists v' (normAO o f1 f2')
+normAO o f1 f2 = o f1 f2
+        
+normImpl (FOFForAll v f1) f2 = let (v', f1') = frsh v f1 f2 in
+        FOFExists v' (normImpl f1' f2)
+normImpl (FOFExists v f1) f2 = let (v', f1') = frsh v f1 f2 in
+        FOFForAll v' (normImpl f1' f2)
+normImpl f1 (FOFForAll v f2) = let (v', f2') = frsh v f2 f1 in
+        FOFForAll v' (normImpl f1 f2')
+normImpl f1 (FOFExists v f2) = let (v', f2') = frsh v f2 f1 in
+        FOFExists v' (normImpl f1 f2')
+normImpl f1 f2 = FOFImpl f1 f2
+
+normNot (FOFForAll v f) = FOFExists v (normNot f)
+normNot (FOFExists v f) = FOFForAll v (normNot f)
+normNot f = FOFNot f
+
+frsh :: (Functor a, Foldable a, Eq v, Refreshable v) => v -> FOF a v -> FOF a v -> (v, FOF a v)
+frsh v f1 f2
+        | not (v `freeIn` f2) = (v, f1)
+        | otherwise = let v' = head [x | x <- freshen v, x `notElem` f1, not (x `freeIn` f2)] in
+                (v', fmap (\vv -> if vv == v then v' else vv) f1)

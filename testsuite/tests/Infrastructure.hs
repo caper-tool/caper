@@ -28,6 +28,18 @@ instance MonadReader r m => MonadReader r (ReaderT r' m) where
         local m = hoist (local m)
 
 
+runWithRTC' :: RegionTypeContext ->
+        RaiseT (ReaderT ProcedureContext (LoggerT IO)) a ->
+        IO a
+runWithRTC' rtc a = do
+        provers <- initProvers
+        let pc = ProcedureContext rtc provers []
+        (r, log) <- runLoggerT $ runReaderT (runRaiseT a) pc
+        mapM_ print log
+        case r of
+                Left ex -> error (show ex)
+                Right res -> return res
+
 runWithRTC :: RegionTypeContext ->
         ChoiceM (RaiseT (ReaderT ProcedureContext (LoggerT IO))) a ->
         IO (Maybe a)

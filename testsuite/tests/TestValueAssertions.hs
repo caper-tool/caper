@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
@@ -86,4 +87,94 @@ toValExpr (CVTimes x y) = BinaryValExpr p0 ValMultiply (toValExpr x) (toValExpr 
 prop_VExprEqual :: ConstVal -> Property
 prop_VExprEqual cv = monadicIO $ do
         r <- run $ isValid $ assEq (toValExpr cv) (ConstValExpr p0 (evalCV cv))
+        assert r
+
+data ValCMP = VCMPEq | VCMPNeq | VCMPGt | VCMPGte | VCMPLt | VCMPLte deriving (Eq, Ord, Show)
+
+evalCMP :: ValCMP -> Integer -> Integer -> Bool
+evalCMP VCMPEq = (==)
+evalCMP VCMPNeq = (/=)
+evalCMP VCMPGt = (>)
+evalCMP VCMPGte = (>=)
+evalCMP VCMPLt = (<)
+evalCMP VCMPLte = (<=)
+
+instance Arbitrary ValCMP where
+        arbitrary = elements [VCMPEq , VCMPNeq , VCMPGt , VCMPGte , VCMPLt , VCMPLte]
+
+toValBinRel VCMPEq = ValEquality EqualRel
+toValBinRel VCMPNeq = ValEquality NotEqualRel
+toValBinRel VCMPGt = ValGreater
+toValBinRel VCMPGte = ValGreaterOrEqual
+toValBinRel VCMPLt = ValLess
+toValBinRel VCMPLte = ValLessOrEqual
+
+prop_CMPEq :: ValCMP -> Integer -> Property
+prop_CMPEq c n = monadicIO $ do
+        r <- run $ isValid $ AssrtPure p0 (BinaryValAssrt p0 (toValBinRel c) (ConstValExpr p0 n) (ConstValExpr p0 n))
+        assert $ r == evalCMP c n n
+
+prop_CMPNEq :: ValCMP -> Integer -> Integer -> Property
+prop_CMPNEq c n m = n /= m ==> monadicIO $ do
+        r <- run $ isValid $ AssrtPure p0 (BinaryValAssrt p0 (toValBinRel c) (ConstValExpr p0 n) (ConstValExpr p0 m))
+        assert $ r == evalCMP c n m
+
+
+data ValPE a = VPENot (ValPE a) | VPECmp ValCMP a a deriving (Eq, Ord, Show)
+
+evalCVPE :: ValPE ConstVal -> Bool
+evalCVPE (VPENot x) = not (evalCVPE x)
+evalCVPE (VPECmp o a b) = evalCMP o (evalCV a) (evalCV b)
+
+arbCVPE :: Int -> Gen (ValPE ConstVal)
+arbCVPE 0 = do
+                cmp <- arbitrary
+                a1 <- arbCV 0
+                a2 <- arbCV 0
+                return (VPECmp cmp a1 a2)
+arbCVPE n = oneof [
+        (do
+                cmp <- arbitrary
+                a1 <- arbCV (n `div` 2)
+                a2 <- arbCV (n `div` 2)
+                return (VPECmp cmp a1 a2)),
+        liftM VPENot (arbCVPE (n - 1))]
+
+instance Arbitrary (ValPE ConstVal) where
+        arbitrary = sized arbCVPE
+
+toPureAssrt :: ValPE ConstVal -> PureAssrt
+toPureAssrt (VPENot x) = NotBAssrt p0 (toPureAssrt x)
+toPureAssrt (VPECmp o x y) = BinaryValAssrt p0 (toValBinRel o) (toValExpr x) (toValExpr y)
+
+data ValBE a = VBEP (ValPE a) | VBEConj (ValBE a) (ValBE a) deriving (Eq, Ord, Show)
+
+evalCVBE (VBEP x) = evalCVPE x
+evalCVBE (VBEConj a b) = evalCVBE a && evalCVBE b
+
+arbCVBE 0 = liftM VBEP (arbCVPE 0)
+arbCVBE n = oneof [
+        liftM VBEP (arbCVPE n),
+        do
+                a1 <- arbCVBE (n `div` 2)
+                a2 <- arbCVBE (n `div` 2)
+                return (VBEConj a1 a2)
+        ]
+
+instance Arbitrary (ValBE ConstVal) where
+        arbitrary = sized arbCVBE
+
+toAssrt :: ValBE ConstVal -> Assrt
+toAssrt (VBEP x) = AssrtPure p0 (toPureAssrt x)
+toAssrt (VBEConj a b) = AssrtConj p0 (toAssrt a) (toAssrt b)
+
+prop_VConstValBE :: ValBE ConstVal -> Property
+prop_VConstValBE x = monadicIO $ do
+        r <- run $ isValid $ toAssrt x
+        assert $ r == evalCVBE x
+
+prop_VConstValBETrue :: ValBE ConstVal -> Property
+prop_VConstValBETrue x = evalCVBE x ==>
+        monadicIO $ do
+        r <- run $ isValid $ toAssrt x
         assert r

@@ -1,16 +1,16 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Caper.Transitions where
-import Prelude hiding (foldl', elem, foldr)
+import Prelude hiding (elem, foldr)
 import Control.Monad
 import Control.Monad.Reader.Class
 import Control.Monad.IO.Class
 import Data.Foldable
 
 import Caper.ProverDatatypes
-import Caper.Prover
+-- import Caper.Prover
 import Caper.Utils.FloydWarshall
 import Caper.RegionTypes
-import Caper.Provers -- TODO: remove (used for testing)
+-- import Caper.Provers -- TODO: remove (used for testing)
 
 data ClosureVariable v = Context v | Local String deriving (Eq, Ord)
 

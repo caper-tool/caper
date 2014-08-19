@@ -19,6 +19,7 @@ import Caper.Prover -- TODO: move some stuff from Prover to ProverDatatypes?
 import Caper.Guards
 import Caper.Transitions
 
+import Debug.Trace
 
 data RegionInstance = RegionInstance {
         riType :: RTId,
@@ -87,6 +88,7 @@ mergeRegions r1 r2 = do
                 return $ Region dirty ti s g
 
 
+-- FIXME: Add bound information!
 -- | Add a region, or merge it if one already exists with the same identifier.
 --
 -- Pre: the number and type of arguments should have been checked (otherwise an error may arise).
@@ -174,7 +176,7 @@ stabiliseRegion
         (Region _ rti@(Just (RegionInstance rtid ps)) (Just se) gd) = do
                         -- resolve region type
                         rt <- lookupRType rtid
-                        transitions <- checkTransitions rt ps gd
+                        transitions <- (trace $ "Checking transitions: " ++ show rt ++ " " ++ show ps ++ " " ++ show gd) checkTransitions rt ps gd
                         -- compute the closure relation
                         tcrel <- computeClosureRelation (rtStateSpace rt) transitions
                         -- create a new state variable
@@ -196,11 +198,11 @@ stabiliseRegion r = return $ r {regDirty = False, regState = Nothing}
 checkTransitions :: (ProverM s r m) => RegionType -> [Expr VariableID] -> Guard VariableID -> m [GuardedTransition VariableID]
 checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem rt)
         where
-                boundVars tr = Set.difference (trVariables tr) (rtParamVars rt)
+                bndVars tr = Set.difference (trVariables tr) (rtParamVars rt)
                 params = Map.fromList $ zip (map fst $ rtParameters rt) ps
                 checkTrans tr@(TransitionRule trgd pred pre post) = do
                         -- Compute a binding for fresh variables
-                        bvmap <- freshInternals rtdvStr (boundVars tr)
+                        bvmap <- freshInternals rtdvStr (bndVars tr)
                         let bvars = Map.elems bvmap
                         let subst = Map.union params $ fmap var bvmap
                         let s v = Map.findWithDefault (error "checkTransitions: variable not found") v subst
@@ -208,6 +210,7 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
                         guardCompat <- hypothetical $ do
                                 -- combine guards
                                 gd' <- mergeGuards gd (exprSub s trgd)
+                                assms <- use assumptions
                                 -- check the matches the guard type
                                 if checkGuardAtType gd' (topLevelToWeakGuardType $ rtGuardType rt) then
                                         -- and is consistent

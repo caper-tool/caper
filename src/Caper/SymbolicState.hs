@@ -52,6 +52,8 @@ type PVarBindings = Map String (Expr VariableID)
 -- representations ('VariableID's)
 type LVarBindings = Map String VariableID
 
+emptyLVars :: LVarBindings
+emptyLVars = Map.empty
 
 -- |Predicates are maps from predicate names to multisets of
 -- lists of parameters.  That is, for each predicate name
@@ -84,7 +86,7 @@ data SymbState p = SymbState {
 makeLenses ''SymbState
 
 emptySymbState :: SymbState Assumptions
-emptySymbState = SymbState emptyAssumptions Map.empty Map.empty Map.empty AliasMap.empty
+emptySymbState = SymbState emptyAssumptions Map.empty emptyLVars Map.empty AliasMap.empty
 
 showPVarBindings :: PVarBindings -> String
 showPVarBindings = Map.foldWithKey showBinding ""
@@ -92,7 +94,7 @@ showPVarBindings = Map.foldWithKey showBinding ""
                 showBinding pv var s = pv ++ " := " ++ show var ++ "\n" ++ s
 
 instance (Show p) => Show (SymbState p) where
-        show (SymbState p vs lvs preds regs) = "Pure facts:" ++ show p ++ "\nProgram variables:\n" ++ showPVarBindings vs ++ "Heap:\n" ++ (concat . intersperse "\n" . map showPredicate . toPredicateList) preds
+        show (SymbState p vs lvs preds regs) = "Pure facts:\n" ++ show p ++ "\nProgram variables:\n" ++ showPVarBindings vs ++ "Heap:\n" ++ (concat . intersperse "\n" . map showPredicate . toPredicateList) preds
 
 
 instance AssumptionLenses p => AssumptionLenses (SymbState p) where
@@ -122,11 +124,11 @@ emptySymbStateWithVars vs = execState (do
 newtype InformedRegion = InformedRegion (Region, Maybe RegionType)
 
 instance Show InformedRegion where
-        show (InformedRegion (Region _ (Just (RegionInstance _ params)) s gd, Just rt)) =
+        show (InformedRegion (Region drty (Just (RegionInstance _ params)) s gd, Just rt)) =
                 rtRegionTypeName rt ++ "("
                         ++ concatMap ((++ ",") . show) params
                         ++ maybe "_" show s
-                        ++ "): " ++ show gd ++ "\n"
+                        ++ ")" ++ (if drty then "*" else "") ++ ": " ++ show gd ++ "\n"
         show (InformedRegion (Region _ _ s gd, _)) = "?(" ++ maybe "_" show s ++ "): " ++ show gd ++ "\n"
 
 showSymbState :: (MonadState (SymbState p) m, Show p, MonadReader r m, RTCGetter r) => m String
