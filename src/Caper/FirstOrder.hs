@@ -144,7 +144,13 @@ normNot (FOFForAll v f) = FOFExists v (normNot f)
 normNot (FOFExists v f) = FOFForAll v (normNot f)
 normNot f = FOFNot f
 
-frsh :: (Functor a, Foldable a, Eq v, Refreshable v) => v -> FOF a v -> FOF a v -> (v, FOF a v)
+-- | Rename a bound variable to avoid capture.  Returns the new variable and the
+-- bound formula with the variable renamed.
+frsh :: (Functor a, Foldable a, Eq v, Refreshable v) =>
+        v -- ^The variable to rename
+        -> FOF a v -- ^The formula in which it is bound
+        -> FOF a v -- ^The formula in which it is not bound, and should not be captured
+        -> (v, FOF a v)
 frsh v f1 f2
         | not (v `freeIn` f2) = (v, f1)
         | otherwise = let v' = head [x | x <- freshen v, x `notElem` f1, not (x `freeIn` f2)] in
