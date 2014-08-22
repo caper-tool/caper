@@ -3,10 +3,13 @@
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE UndecidableInstances #-}
-module Caper.ProverDatatypes where
+{-# LANGUAGE ScopedTypeVariables #-}
+module Caper.ProverDatatypes (
+        module Caper.FreeVariables,
+        module Caper.ProverDatatypes) where
 import Prelude hiding (sequence,foldl,foldr,elem,mapM_,mapM)
 -- import qualified Data.Map as Map
-import qualified Data.Set as Set
+--import qualified Data.Set as Set
 import Control.Monad.State hiding (mapM_,mapM)
 import Data.Foldable
 import Data.Traversable
@@ -14,6 +17,7 @@ import Data.Typeable
 -- import Control.Monad hiding (mapM_,mapM)
 import Control.Monad.Reader.Class
 import Data.Functor.Identity
+import Caper.FreeVariables
 
 
 class Refreshable v where
@@ -252,14 +256,7 @@ instance (Show (a v), Show v) => Show (FOF a v) where
         show (FOFForAll v f1) = "![" ++ show v ++ "](" ++ show f1 ++ ")"
         show (FOFExists v f1) = "?[" ++ show v ++ "](" ++ show f1 ++ ")"
 
-class FreeVariables f where
-        foldrFree :: (Eq a) => (a -> b -> b) -> b -> f a -> b
-        freeIn :: (Eq v) => v -> f v -> Bool
-        freeIn v = foldrFree ( (||) . (== v) ) False
-        freeVariables :: (Ord v) => f v -> Set.Set v
-        freeVariables = foldrFree Set.insert Set.empty
-
-instance (Foldable a) => FreeVariables (FOF a) where
+instance (Foldable a) => FreeVariables (FOF a b) b where
         foldrFree f = ff []
                 where
                         ff bound x (FOFForAll v s) = ff (v : bound) x s
@@ -279,7 +276,7 @@ literalToFOF (LNeg a) = FOFNot $ FOFAtom a
 class ExpressionCASub c e where
         exprCASub :: (Refreshable v, Eq v) => (v -> e v) -> c v -> c v
 
-instance (ExpressionSub a e, Functor a, Foldable a, Functor e, Monad e) => ExpressionCASub (FOF a) e where
+instance forall a e. (ExpressionSub a e, Functor a, Foldable a, Functor e, Monad e) => ExpressionCASub (FOF a) e where
         exprCASub s0 = unhelpSub . helpSub (fmap Right . s0) 
             where
                 -- helpSub :: (v -> e (Either v v)) -> FOF a v -> FOF a (Either v v)
@@ -292,11 +289,13 @@ instance (ExpressionSub a e, Functor a, Foldable a, Functor e, Monad e) => Expre
                 helpSub s (FOFNot p) = FOFNot (helpSub s p)
                 helpSub _ FOFFalse = FOFFalse
                 helpSub _ FOFTrue = FOFTrue
-                -- unhelpSub :: FOF a (Either v v) -> FOF a v
+                unhelpSub :: forall b. (Eq b, Refreshable b) => FOF a (Either b b) -> FOF a b 
                 unhelpSub f = fmap refresh f
                         where
-                                refresh (Left v) = head $ filter (\x -> not $ freeIn (Right x) f) ( v : freshen v )
+                                refresh :: Either b b -> b   
+                                refresh (Left v) = head $ filter (\x -> not $ freeIn (Right x :: Either b b) f) ( v : freshen v )
                                 refresh (Right v) = v
+
 
 ($=$) :: (ValueExpressionCastable a v, ValueExpressionCastable b v) => a v -> b v -> FOF ValueAtomic v
 ($=$) x y = FOFAtom $ toValueExpr x `VAEq` toValueExpr y
@@ -427,7 +426,7 @@ instance Monad Expr where
         (ValueExpr ve) >>= s = ValueExpr $ exprSub s ve
         (VariableExpr v) >>= s = s v
 
-instance FreeVariables Expr where
+instance FreeVariables (Expr v) v where
         foldrFree f x e = foldr f x e
 
 -- |Class for things that can be converted to general expressions.
@@ -449,7 +448,7 @@ instance ProverExpression Expr where
 -- |Cast an 'Integer' as an 'Expr'.
 integerExpr = ValueExpr . VEConst
 
-instance FreeVariables Condition where
+instance FreeVariables (Condition v) v where
         foldrFree f x (PermissionCondition fof) = foldrFree f x fof
         foldrFree f x (ValueCondition fof) = foldrFree f x fof
         foldrFree f x (EqualityCondition a b) = foldr f x [a,b]

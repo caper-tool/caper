@@ -49,13 +49,16 @@ data CaperException =
         | TypeMismatch VariableType VariableType
         -- |'ArgumentCountMismatch' indicates that the wrong number
         -- of arguments were supplied (e.g. for a region).  The fields
-        -- records @required@ and @actual@, or @-1@ and @actual - required@.
+        -- record @required@ and @actual@, or @-1@ and @actual - required@.
         | ArgumentCountMismatch Int Int
         -- |'IncompatibleGuardOccurrences' indicates that multiple guard
         -- occurences with the same name are incompatible.  This may be
         -- because they are of different types (named/permission) or
         -- there is more than one named guard. 
         | IncompatibleGuardOccurrences String
+        -- |'OverlappingStateInterpretation' indicates that there is some state
+        -- whose interpretation is (potentially) ambiguous.
+        | OverlappingStateInterpretation
         deriving (Eq, Typeable)
 
 instance Show CaperException where
@@ -73,6 +76,8 @@ instance Show CaperException where
                 show required ++ " arguments were expected, but " ++ show actual ++ " arguments were supplied."
         show (IncompatibleGuardOccurrences gname) =
                 "There were incompatible occurrences of guards named '" ++ gname ++ "'."
+        show (OverlappingStateInterpretation) =
+                "There are multiple possible interpretations for a single region state."
 
 
 -- |The 'MonadRaise' class supports raising 'CaperException's and

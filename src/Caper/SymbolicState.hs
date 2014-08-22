@@ -242,9 +242,8 @@ admitChecks = wrapRWST (fmap emptyAssertions) (fmap admitAssertions)
 check :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m) =>
         MSCheck p m a -> MSState p m a
 check c = admitChecks $ do
-                ps <- ask
                 r <- c
-                justCheck ps
+                justCheck
                 return r
 
 -- |Consumes a predicate.  Does not check that the predicate is well-formed.

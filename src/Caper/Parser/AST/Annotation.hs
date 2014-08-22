@@ -1,10 +1,12 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses #-}
 module Caper.Parser.AST.Annotation where
 import Data.List
 import Text.ParserCombinators.Parsec
 
 import Caper.Parser.AST.SourcePos
 import Caper.ExceptionContext
+import Caper.FreeVariables
 
 -- * Assertion syntax
 
@@ -14,6 +16,10 @@ data VarExpr = Variable SourcePos String  -- ^A logical variable
 instance Show VarExpr where
         show (Variable _ s) = s
         show (WildCard _) = "_"
+
+instance FreeVariables VarExpr (Maybe String) where
+        foldrFree f x (Variable _ s) = f (Just s) x
+        foldrFree f x (WildCard _) = f Nothing x
 
 -- |Value Expressions
 data ValExpr = VarValExpr SourcePos VarExpr                     -- ^Variable
@@ -27,6 +33,12 @@ instance Show ValExpr where
         show (UnaryValExpr _ uo ve) = show uo ++ show ve
         show (BinaryValExpr _ bo ve1 ve2) = "(" ++ show ve1 ++ show bo ++ show ve2 ++ ")"
         show (SetValExpr _ ves) = "{" ++ intercalate "," (map show ves) ++ "}"
+instance FreeVariables ValExpr (Maybe String) where
+        foldrFree f x (VarValExpr _ ve) = foldrFree f x ve
+        foldrFree _ x (ConstValExpr _ _) = x
+        foldrFree f x (UnaryValExpr _ _ ve) = foldrFree f x ve
+        foldrFree f x (BinaryValExpr _ _ ve1 ve2) = foldrFree f (foldrFree f x ve2) ve1
+        foldrFree f x (SetValExpr _ ves) = foldrFree f x ves 
 
 -- |Unary value operator
 data ValUnOp = ValNegation -- ^Unary minus
@@ -78,6 +90,11 @@ instance Show PermExpr where
         show (ConstPermExpr _ pc) = show pc
         show (UnaryPermExpr _ uo pe) = show uo ++ show pe
         show (BinaryPermExpr _ bo pe1 pe2) = "(" ++ show pe1 ++ show bo ++ show pe2 ++ ")"
+instance FreeVariables PermExpr (Maybe String) where
+        foldrFree f x (VarPermExpr _ ve) = foldrFree f x ve
+        foldrFree _ x (ConstPermExpr _ _) = x
+        foldrFree f x (UnaryPermExpr _ _ ve) = foldrFree f x ve
+        foldrFree f x (BinaryPermExpr _ _ ve1 ve2) = foldrFree f (foldrFree f x ve2) ve1
 
 -- |Permission constants.
 data PermConst = FullPerm
@@ -119,6 +136,12 @@ instance Show PureAssrt where
         show (BinaryVarAssrt _ br e1 e2) = show e1 ++ show br ++ show e2
         show (BinaryValAssrt _ br e1 e2) = show e1 ++ show br ++ show e2
         show (BinaryPermAssrt _ br e1 e2) = show e1 ++ show br ++ show e2
+instance FreeVariables PureAssrt (Maybe String) where
+        foldrFree _ x (ConstBAssrt _ _) = x
+        foldrFree f x (NotBAssrt _ ve) = foldrFree f x ve
+        foldrFree f x (BinaryVarAssrt _ _ ve1 ve2) = foldrFree f (foldrFree f x ve2) ve1
+        foldrFree f x (BinaryValAssrt _ _ ve1 ve2) = foldrFree f (foldrFree f x ve2) ve1
+        foldrFree f x (BinaryPermAssrt _ _ ve1 ve2) = foldrFree f (foldrFree f x ve2) ve1
 
 -- |Basic heap assertions
 data CellAssrt = Cell SourcePos ValExpr ValExpr         -- ^ Single cell: @/x/ |-> /y/@

@@ -48,7 +48,7 @@ instance Show RegionType where
                 "  transitions {\n    " ++ intercalate "\n    " (map show ts) ++ "\n  }\n" ++
                 "}"
 
-
+rtWeakGT :: RegionType -> WeakGuardType
 rtWeakGT = topLevelToWeakGuardType . rtGuardType
 
 rtParamVars :: RegionType -> Set RTDVar
@@ -91,11 +91,11 @@ data TransitionRule = TransitionRule
         }
 
 trVariables :: TransitionRule -> Set RTDVar
-trVariables (TransitionRule g prd pre post) = Set.fromList $ toList g ++ toList pre ++ toList post
+trVariables (TransitionRule g prd prec post) = Set.fromList $ toList g ++ toList prec ++ toList post
 
 instance Show TransitionRule where
-        show (TransitionRule gd pred pre post) =
-                show gd ++ " : " ++ show pre ++ " ~> " ++ show post
+        show (TransitionRule gd prd prec post) =
+                show gd ++ " : " ++ show prec ++ " ~> " ++ show post
 
 data RegionTypeContext = RegionTypeContext
         {

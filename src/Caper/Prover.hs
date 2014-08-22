@@ -50,6 +50,7 @@ module Caper.Prover(
         assertTrueE,
         assertFalseE,
         -- ** Checking assertions
+        checkAssertions,
         justCheck,
         hypothetical,
         hypotheticalCheck,
@@ -637,11 +638,10 @@ permissionAvars = filterAvars (== Just VTPermission)
 valueAvars :: (AssertionLenses a) => Getter a [VariableID]
 valueAvars = filterAvars (\x -> (x == Just VTValue) || isNothing x)
 
-justCheck :: (MonadIO m, MonadPlus m, MonadState s m, AssertionLenses s,
-        MonadLogger m, Provers p) => p -> m ()
--- ^Check that the assertions follow from the assumptions.
--- If not, fail this path
-justCheck ps = do
+-- |Check that the assertions follow from the assumptions.
+checkAssertions :: (MonadIO m, MonadState s m, AssertionLenses s,
+        MonadLogger m, MonadReader p m, Provers p) => m Bool
+checkAssertions = do
         printAssertions
         bdgs <- use bindings
         asms <- use assumptions
@@ -653,9 +653,10 @@ justCheck ps = do
         pavs <- use permissionAvars
         let passt = foldr FOFExists (foldr FOFAnd FOFTrue permissionAssertions) pevs
         liftIO $ print $ varToString <$> assumptionContext pavs lpermissionAssumptions passt
+        ps <- ask
         rp <- liftIO $ permissionsProver ps $ varToString <$> assumptionContext pavs lpermissionAssumptions passt
         if rp /= Just True then
-                mzero
+                return False
             else do
                 -- Check the value assertions
                 let lvalueAssumptions = valueConditions bdgs asms
@@ -666,7 +667,15 @@ justCheck ps = do
                 rv <- liftIO $ valueProver ps $ varToString <$> assumptionContext vavs lvalueAssumptions vasst
                 liftIO $ print $ varToString <$> assumptionContext vavs lvalueAssumptions vasst
                 liftIO $ print rv
-                when (rv /= Just True) mzero
+                return (rv == Just True)
+
+justCheck :: (MonadIO m, MonadPlus m, MonadState s m, AssertionLenses s,
+        MonadReader p m, MonadLogger m, Provers p) => m ()
+-- ^Check that the assertions follow from the assumptions.
+-- If not, fail this path
+justCheck = do
+        res <- checkAssertions
+        unless res mzero
 
 
 hypothetical :: ProverM s r m => RWST r () Assertions IO a -> m a
@@ -682,7 +691,7 @@ hypotheticalCheck :: (ProverM s r m, MonadLogger m) => --(MonadIO m, MonadState 
 hypotheticalCheck mn = do
                         rr <- ask
                         assms <- use theAssumptions
-                        ans <- liftLoggerT liftIO $ runMaybeT $ runRWST (mn >> justCheck rr) rr (emptyAssertions assms)
+                        ans <- liftLoggerT liftIO $ runMaybeT $ runRWST (mn >> justCheck) rr (emptyAssertions assms)
                         case ans of
                                 Just _ -> return True
                                 Nothing -> return False

@@ -120,6 +120,8 @@ pNormalise (FOFImpl f1 f2) = normImpl (pNormalise f1) (pNormalise f2)
 pNormalise (FOFNot f) = normNot (pNormalise f)
 pNormalise f = f
 
+normAO :: (Eq v, Functor t, Foldable t, Refreshable v) =>
+            (FOF t v -> FOF t v -> FOF t v) -> FOF t v -> FOF t v -> FOF t v
 normAO o (FOFForAll v f1) f2 = let (v', f1') = frsh v f1 f2 in
         FOFForAll v' (normAO o f1' f2)
 normAO o (FOFExists v f1) f2 = let (v', f1') = frsh v f1 f2 in
@@ -129,7 +131,9 @@ normAO o f1 (FOFForAll v f2) = let (v', f2') = frsh v f2 f1 in
 normAO o f1 (FOFExists v f2) = let (v', f2') = frsh v f2 f1 in
         FOFExists v' (normAO o f1 f2')
 normAO o f1 f2 = o f1 f2
-        
+
+normImpl :: (Eq v, Functor t, Foldable t, Refreshable v) =>
+            FOF t v -> FOF t v -> FOF t v
 normImpl (FOFForAll v f1) f2 = let (v', f1') = frsh v f1 f2 in
         FOFExists v' (normImpl f1' f2)
 normImpl (FOFExists v f1) f2 = let (v', f1') = frsh v f1 f2 in
@@ -140,6 +144,7 @@ normImpl f1 (FOFExists v f2) = let (v', f2') = frsh v f2 f1 in
         FOFExists v' (normImpl f1 f2')
 normImpl f1 f2 = FOFImpl f1 f2
 
+normNot :: FOF a v -> FOF a v
 normNot (FOFForAll v f) = FOFExists v (normNot f)
 normNot (FOFExists v f) = FOFForAll v (normNot f)
 normNot f = FOFNot f

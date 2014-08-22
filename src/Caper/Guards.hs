@@ -19,7 +19,7 @@ import Data.Traversable
 import Data.List (intercalate)
 import Control.Monad.State hiding (mapM_,mapM,sequence)
 import Debug.Trace              -- TODO: get rid of this
-import Control.Lens
+import Control.Lens hiding (op)
 
 import Caper.Logger
 import Caper.ProverDatatypes
@@ -74,7 +74,7 @@ type WeakGuardType = Set.Set (Map.Map String GuardParameterType)
 validateGuardTypeAST :: (Throws GuardTypeException l) => TopLevelGuardTypeAST -> EM l ()
 validateGuardTypeAST ZeroGT = return ()
 validateGuardTypeAST (SomeGT gt) = do
-                        vgt Set.empty gt
+                        _ <- vgt Set.empty gt
                         return ()
         where
                 vgt s (NamedGT n) = checkFresh s n
