@@ -86,9 +86,9 @@ instance Show Stmt where
   show (SeqStmt _ seq)               = unwords $ map show seq 
   show (IfElseStmt _ e s1 s2)        = "if (" ++ show e ++ ") {" ++ show s1 ++ "} else {" ++ show s2 ++ "}"
   show (WhileStmt _ Nothing e s)     = "while (" ++ show e ++ ") {" ++ show s ++ "}"
-  show (WhileStmt _ (Just ls) e s)   = "while (" ++ show e ++ ") {" ++ show s ++ "}"
+  show (WhileStmt _ (Just ls) e s)   = "while (" ++ show e ++ ") invariant " ++ show ls ++ "; {" ++ show s ++ "}"
   show (DoWhileStmt _ Nothing s e)   = "do {" ++ show s ++ "} while (" ++ show e ++ ");"
-  show (DoWhileStmt _ (Just ls) s e) = "do {" ++ show s ++ "} while (" ++ show e ++ ");"
+  show (DoWhileStmt _ (Just ls) s e) = "do invariant " ++ show ls ++ "; {" ++ show s ++ "} while (" ++ show e ++ ");"
   show (LocalAssignStmt _ n e)       = n ++ " := " ++ show e ++ ";"
   show (DerefStmt _ n e)             = n ++ " := [" ++ show e ++ "];"  
   show (AssignStmt _ e1 e2)          = "[" ++ show e1 ++ "] := " ++ show e2 ++ ";"

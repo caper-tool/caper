@@ -9,13 +9,10 @@ module Caper.Interpreter.Interpreter where
 import Caper.Parser.AST
 import Caper.Parser.Parser
 import Caper.Interpreter.Environment
-import Data.IORef
 import Data.Maybe
 import Data.List
-import Data.Typeable
 import Control.Monad.State
 import Control.Monad.Error
-import Control.Exception;
 import Control.Concurrent
 import System.IO
 import Text.ParserCombinators.Parsec
@@ -24,7 +21,7 @@ class Eval a b where
   eval :: Env -> a -> IOThrowsError b
 
 instance Eval BExpr Bool where
-  eval env (ConstBExpr _ b)                      = return b
+  eval _ (ConstBExpr _ b)                        = return b
   eval env (NotBExpr _ e)                        = (eval env e) >>= return . not
   eval env (BinaryBExpr _ And e1 e2)             = do r1 <- (eval env e1)
                                                       r2 <- (eval env e2)
@@ -69,7 +66,7 @@ instance Eval AExpr Integer where
                                                return $ quot r1 r2
 
 instance Eval Stmt (Maybe Integer) where
-  eval env (SeqStmt _ [])                 = return Nothing
+  eval _   (SeqStmt _ [])                 = return Nothing
   eval env (SeqStmt p (x:xs))             = do r <- (eval :: Env -> Stmt -> IOThrowsError (Maybe Integer)) env x
                                                case r of
                                                  Just v  -> return $ Just v
@@ -112,7 +109,7 @@ instance Eval Stmt (Maybe Integer) where
                                                r <- casHeap env a b c
                                                when (isJust n) $ writeStore env (fromJust n) (if r then 1 else 0)
                                                return Nothing
-  eval env (CallStmt _ n1 n2 es)          = do f@(FunctionDeclr _ _ _ _ a s) <- getDeclr env n2 (toInteger (genericLength es))
+  eval env (CallStmt _ n1 n2 es)          = do FunctionDeclr _ _ _ _ a s <- getDeclr env n2 (toInteger (genericLength es))
                                                args <- mapM ((eval :: Env -> AExpr -> IOThrowsError Integer) env) es
                                                nEnv <- liftIO $ newEnv env (zip a args)
                                                r <- (eval :: Env -> Stmt -> IOThrowsError (Maybe Integer)) nEnv s
@@ -120,10 +117,11 @@ instance Eval Stmt (Maybe Integer) where
                                                                                                   Just v  -> v
                                                                                                   Nothing -> 0)
                                                return Nothing
-  eval env (ReturnStmt _ Nothing)         = return $ Just 0
+  eval _ (ReturnStmt _ Nothing)           = return $ Just 0
   eval env (ReturnStmt _ (Just e))        = (eval :: Env -> AExpr -> IOThrowsError Integer) env e >>= return . Just
-  eval env (SkipStmt _)                   = return Nothing
-  eval env (ForkStmt _ n es)              = do f@(FunctionDeclr _ _ _ _ a s) <- getDeclr env n (toInteger (genericLength es))
+  eval _ (SkipStmt _)                     = return Nothing
+  eval _ (AssertStmt _ _)                 = return Nothing
+  eval env (ForkStmt _ n es)              = do FunctionDeclr _ _ _ _ a s <- getDeclr env n (toInteger (genericLength es))
                                                args <- mapM ((eval :: Env -> AExpr -> IOThrowsError Integer) env) es
                                                nEnv <- liftIO $ newEnv env (zip a args)
                                                liftIO $ forkIO $ runIOThrowsFork $ ((eval :: Env -> Stmt -> IOThrowsError (Maybe Integer)) nEnv s) >> return ()
@@ -154,6 +152,6 @@ readPrompt prompt = flushStr prompt >> getLine
 
 runInterpreter :: IO ()
 runInterpreter = do env <- emptyEnv
-                    declr <- liftIO $ parseFile "examples/Paper.t"
+                    declr <- liftIO $ parseFile "../examples/CASLock.t"
                     liftIO $ newDeclr env declr
                     (until_ (== "quit") (readPrompt "> ") . evalAndPrint) env

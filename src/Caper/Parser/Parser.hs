@@ -1,16 +1,10 @@
 module Caper.Parser.Parser(parseFile, parseString, parseAExpression, parseBExpression, aExpressionParser, statementParser, parseStatement) where
 
-import Debug.Trace
-import System.IO
-import Control.Monad
-import Control.Monad.Error
-import Data.List
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as Token
 import Caper.Parser.AST
---import Environment
 
 languageDef =
   emptyDef { Token.commentStart    = "/*"
@@ -32,7 +26,14 @@ languageDef =
                                      , "return"
                                      , "function"
                                      , "fork"
+                                     , "requires"
+                                     , "ensures"
+                                     , "invariant"
+                                     , "assert"
                                      , "region"
+                                     , "guards"
+                                     , "interpretation"
+                                     , "actions"
                                      , "predicate"
                                      , "("
                                      , ")"
@@ -43,12 +44,13 @@ languageDef =
                                      , "0p"
                                      , "1p"
                                      , "#cells"
+                                     , "_"
                                      ]
            , Token.reservedOpNames = ["+", "-", "*", "/", ":="
                                      , "=", "!=", "<", ">", ">=", "<="
                                      , "and", "or", "not", "?", ":"
                                      , "&*&", "=p=", "=v=", "$", "!"
-                                     , "==", "|->", "@"
+                                     , "==", "|->", "@", "~>"
                                      ]
            }
 
@@ -63,7 +65,6 @@ brackets   = Token.brackets   lexer -- parses surrounding brackets
 integer    = Token.integer    lexer -- parses an integer
 semi       = Token.semi       lexer -- parses a semicolon
 comma      = Token.comma      lexer -- parses a comma
-colon      = Token.comma      lexer -- parses a colon
 whiteSpace = Token.whiteSpace lexer -- parses whitespace
 
 parser :: Parser [Declr]
@@ -77,6 +78,8 @@ function =
      reserved "function"
      var  <- identifier
      args <- parens $ sepBy identifier comma
+     req  <- optionMaybe $ reserved "requires"
+     ens  <- optionMaybe $ reserved "ensures"
      stmt <- braces sequenceOfStmt
      return $ FunctionDeclr pos var Nothing Nothing args stmt
 
@@ -95,6 +98,7 @@ statement =  ifElseStatement
          <|> otherAssignStatement
          <|> returnStatement
          <|> skipStatement
+--         <|> assertStatement
 
 ifElseStatement :: Parser Stmt
 ifElseStatement =
@@ -193,6 +197,14 @@ skipStatement =
      semi
      return $ SkipStmt pos
 
+--assertStatement :: Parser Stmt
+--assertStatement =
+--  do pos <- getPosition
+--     reserved "assert"
+--     assrt <- assertion
+--     semi
+--     return $ AssertStmt pos assertion
+
 aExpression :: Parser AExpr
 aExpression = buildExpressionParser aOperators aTerm
 
@@ -243,6 +255,35 @@ relation =  (reservedOp "=" >> return Equal)
         <|> (reservedOp "<" >> return Less)
         <|> (reservedOp ">=" >> return GreaterOrEqual)
         <|> (reservedOp "<=" >> return LessOrEqual)
+
+--assertion :: Parser Assrt
+--assertion =
+--  do pos <- getPosition
+--     return $ AssrtPure pos (ConstBAssrt pos True)
+
+--valueExpression :: Parser Assrt
+--valueExpression = buildExpressionParser valueOperators valueTerm
+ 
+--valueOperators = [ [Prefix (do { pos <- getPosition; reservedOp "-"; return (UnaryValExpr pos ValNegation )})]
+--                 , [Infix  (do { pos <- getPosition; reservedOp "*"; return (BinaryValExpr pos Multiply)}) AssocLeft]
+--                 , [Infix  (do { pos <- getPosition; reservedOp "/"; return (BinaryValExpr pos Divide  )}) AssocLeft]
+--                 , [Infix  (do { pos <- getPosition; reservedOp "+"; return (BinaryValExpr pos Add     )}) AssocLeft]
+--                 , [Infix  (do { pos <- getPosition; reservedOp "-"; return (BinaryValExpr pos Subtract)}) AssocLeft]
+--                 ]
+
+--valueTerm =  parens valueExpression
+--        <|> (do { pos <- getPosition; vals <- braces $ sepBy valueExpression comma; return (SetValExpr pos vals)})
+--        <|> (do { pos <- getPosition; var <- varExpr; return (VarValExpr pos var)})
+--        <|> (do { pos <- getPosition; i <- integer; return (ConstValExpr pos i)})
+
+--varExpr :: Parser VarExpr
+--varExpr =
+--  do pos  <- getPosition
+--     wild <- optionMaybe $ reserved "_"
+--     case wild of
+--       Nothing -> do var <- identifier;
+--                     return $ Variable pos var
+--       Just _  -> return $ WildCard pos
 
 parseString :: String -> [Declr]
 parseString str =

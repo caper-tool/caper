@@ -209,6 +209,40 @@ instance Show Assrt where
         show (AssrtConj _ a1 a2) = show a1 ++ " &*& " ++ show a2
         show (AssrtITE _ ac a1 a2) = "(" ++ show ac ++ " ? " ++ show a1 ++ " : " ++ show a2 ++ ")"
 
+data StateInterpretation = StateInterpretation {
+        siSourcePos :: SourcePos,
+        siConditions :: [PureAssrt],
+        siState :: ValExpr,
+        siInterp :: Assrt
+}
+
+instance Show StateInterpretation where
+        show (StateInterpretation _ [] s i) = show s ++ " : " ++ show i
+        show (StateInterpretation _ c s i) = intercalate ", " (map show c) ++ " | " ++ show s ++ " : " ++ show i
+
+data Action = Action {
+        actionSourcePos :: SourcePos,
+        actionConditions :: [PureAssrt],
+        actionGuard :: [Guard],
+        actionPreState :: ValExpr,
+        actionPostState :: ValExpr
+}
+
+instance Show Action where
+        show (Action _ [] g pre post) = intercalate " * " (map show g) ++ " : " ++ show pre ++ " ~> " ++ show post
+        show (Action _ c g pre post) = intercalate ", " (map show c) ++ " | " ++ intercalate " * " (map show g) ++ " : " ++ show pre ++ " ~> " ++ show post
+
+
+-- |Guard assertions
+data GuardDeclr = NamedGuardDeclr SourcePos String
+                | PermGuardDeclr SourcePos String
+                | ParamGuardDeclr SourcePos String [AnyExpr]
+
+instance Show GuardDeclr where
+        show (NamedGuardDeclr _ n) = n
+        show (PermGuardDeclr _ n) = "%" ++ n
+        show (ParamGuardDeclr _ n paras) = n ++ "(" ++ intercalate "," (map show paras) ++ ")"
+
 makeSourcePos ''VarExpr
 makeSourcePos ''ValExpr
 makeSourcePos ''PermExpr
