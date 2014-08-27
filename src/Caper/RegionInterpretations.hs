@@ -7,6 +7,7 @@ import qualified Data.Map as Map
 import Control.Lens
 
 import qualified Caper.Parser.AST.Annotation as AST
+import Caper.Parser.AST.Annotation (StateInterpretation(..))
 import Caper.ProverDatatypes
 import Caper.RegionTypes
 import Caper.SymbolicState
@@ -15,12 +16,14 @@ import Caper.Logger
 import Caper.Assertions
 import Caper.Prover
 
+{--
 -- Actually, this is probably part of the AST...
 data StateInterpretation = StateInterpretation {
         siConditions :: [AST.PureAssrt],
         siState :: AST.ValExpr,
         siInterp :: AST.Assrt
         }
+--} 
 
 siVariables :: StateInterpretation -> Set.Set (Maybe String)
 siVariables si = Set.union (freeVariables (siConditions si))
@@ -35,7 +38,7 @@ checkStateInterpretationSelfAmbiguity ::
         -> StateInterpretation
                 -- ^The state interpretation to check for self-ambiguity
         -> m ()
-checkStateInterpretationSelfAmbiguity params si@(StateInterpretation cs se _) =
+checkStateInterpretationSelfAmbiguity params si@(StateInterpretation _ cs se _) =
                 flip evalStateT (fmap emptyAssertions emptySymbState) $ do
                         -- Produce the parameters
                         mapM_ produceVariable
@@ -49,8 +52,8 @@ checkStateInterpretationSelfAmbiguity params si@(StateInterpretation cs se _) =
                         -- Produce the conditions again, but with different
                         -- variables
                         mapM_ producePure cs
-                        vars2 <- use logicalVars
                         state2 <- produceValueExpr se
+                        vars2 <- use logicalVars
                         -- Assume the states are equal
                         assumeTrueE $ VAEq state1 state2
                         -- Now assert that the variables are equal
@@ -61,4 +64,46 @@ checkStateInterpretationSelfAmbiguity params si@(StateInterpretation cs se _) =
                                 assertTrueE $ EqualityCondition v1 v2
                         r <- checkAssertions
                         unless r $ raise OverlappingStateInterpretation
-       
+
+-- |Check that no state can match two (different) state interpretations. This
+-- check is conservative.
+checkStateInterpretationOtherAmbiguity ::
+        (MonadRaise m, MonadIO m, MonadLogger m,
+        MonadReader r m, Provers r) =>
+        [String] -- ^The region parameters
+        -> StateInterpretation
+        -> StateInterpretation
+        -> m ()
+checkStateInterpretationOtherAmbiguity params si1 si2 =
+        flip evalStateT emptySymbState $ do
+                        -- Produce the parameters
+                        mapM_ produceVariable
+                                [AST.Variable undefined x | x <- params]
+                        savedVars <- use logicalVars
+                        -- Produce the first value
+                        mapM_ producePure (siConditions si1)
+                        state1 <- produceValueExpr (siState si1)
+                        vars1 <- use logicalVars
+                        logicalVars .= savedVars
+                        -- Produce the second value
+                        mapM_ producePure (siConditions si2)
+                        state2 <- produceValueExpr (siState si2)
+                        vars2 <- use logicalVars
+                        -- Assume that the states are equal
+                        assumeTrueE $ VAEq state1 state2
+                        b <- isConsistent
+                        unless (b == Just False) $ raise OverlappingStateInterpretation
+                        
+-- |Check that a list of state interpretations are unambiguous.  That is, there
+-- is only one interpretation for each state.
+checkStateInterpretations ::
+        (MonadRaise m, MonadIO m, MonadLogger m,
+        MonadReader r m, Provers r) =>
+        [String] -- ^The region parameters
+        -> [StateInterpretation]
+        -> m ()
+checkStateInterpretations _ [] = return ()
+checkStateInterpretations params (si : sis) = do
+                checkStateInterpretationSelfAmbiguity params si
+                mapM_ (checkStateInterpretationOtherAmbiguity params si) sis
+                checkStateInterpretations params sis
