@@ -56,7 +56,8 @@ executable Caper
                    Caper.Contexts,
                    Caper.StabilityCheck,
                    Caper.RegionInterpretations,
-                   Caper.FreeVariables
+                   Caper.FreeVariables,
+                   Caper.DeclarationTyping
 
 executable Interpreter
   build-depends:   
