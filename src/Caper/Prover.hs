@@ -84,7 +84,6 @@ import Data.Foldable
 --import Data.Typeable
 --import Control.Monad hiding (mapM_,mapM)
 import Control.Lens
-import Debug.Trace
 import Data.List (intercalate)
 
 import Caper.ProverDatatypes

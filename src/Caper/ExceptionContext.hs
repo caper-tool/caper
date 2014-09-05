@@ -17,7 +17,8 @@ instance Show ExceptionContext where
 
 class Contextual a where
         toContext :: a -> ExceptionContext
-
+instance Contextual ExceptionContext where
+        toContext = id
 class ECLenses c where
         exceptionContext :: Simple Lens c [ExceptionContext] 
         

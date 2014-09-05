@@ -128,5 +128,13 @@ liftTUFailure :: (Monad m, MonadRaise m) => Either TUException a -> m a
 liftTUFailure (Left e) = raise (TypesNotUnifiable e)
 liftTUFailure (Right r) = return r
 
+liftTUMismatch :: (Monad m, MonadRaise m) =>
+        Either (TypeUnificationException a VariableType) b -> m b
+liftTUMismatch (Left (TypeUnificationException _ t1 t2)) =
+        raise (TypeMismatch t1 t2)
+liftTUMismatch (Left (TypeUnificationException2 _ t1 _ t2)) =
+        raise (TypeMismatch t1 t2)
+liftTUMismatch (Right r) = return r
+
 contextualise :: (Contextual a, MonadRaise m) => a -> m b -> m b
 contextualise = addContext . toContext 

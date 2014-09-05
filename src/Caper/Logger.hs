@@ -19,11 +19,16 @@ instance Show ProverType where
 
 data LogEvent
         = WarnAutoBind (Set VariableID)
+        | WarnUnconstrainedParameter String VariableType
         | ProverInvocation ProverType String
         | ProverResult (Maybe Bool)
 instance Show LogEvent where
         show (WarnAutoBind vars) = "WARNING: the variables " ++ show (Data.Set.toList vars) ++
                 " are being automatically bound as existentials."
+        show (WarnUnconstrainedParameter param typ) = 
+                "WARNING: The type of parameter '" ++ param ++
+                "' could not be inferred. Assuming type '" ++ show typ ++
+                "'."
         show (ProverInvocation pt assrt) = "PROVER: invoking " ++ show pt ++
                 " on:\n" ++ assrt
         show (ProverResult res) = "PROVER: " ++ case res of

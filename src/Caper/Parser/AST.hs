@@ -9,6 +9,7 @@ import Text.ParserCombinators.Parsec
 
 import Caper.Parser.AST.Code
 import Caper.Parser.AST.Annotation
+import Caper.ExceptionContext
 
 -- |Declarations
 data Declr = FunctionDeclr SourcePos String (Maybe Assrt) (Maybe Assrt) [String] Stmt
@@ -25,3 +26,10 @@ instance Show Declr where
     "function " ++ n ++ "(" ++ intercalate ", " args ++ ") requires " ++ show ls1 ++ "; ensures " ++ show ls2 ++ " { " ++ show s ++ " }"
   show (RegionDeclr _ n args guards intrp actions) =
     "region " ++ n ++ "(" ++ intercalate ", " args ++ ") { guards " ++ intercalate " * " (map show guards) ++ "; interpretation { " ++ intercalate "; " (map show intrp) ++ "; } actions { " ++ intercalate "; " (map show actions) ++ "; } }"
+
+instance Contextual Declr where
+  toContext (FunctionDeclr sp nm _ _ _ _) = DescriptiveContext sp $
+        "In the function named '" ++ nm ++ "'"
+  toContext (RegionDeclr sp nm _ _ _ _) = DescriptiveContext sp $
+        "In the declaration of region type '" ++ nm ++ "'"
+  
