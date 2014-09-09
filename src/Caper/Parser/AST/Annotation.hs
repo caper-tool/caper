@@ -158,6 +158,11 @@ data CellAssrt = Cell SourcePos ValExpr ValExpr         -- ^ Single cell: @/x/ |
 instance Show CellAssrt where
         show (Cell _ e1 e2) = show e1 ++ " |-> " ++ show e2
         show (CellBlock _ e1 e2) = show e1 ++ " |-> #cells(" ++ show e2 ++ ")"
+instance FreeVariables CellAssrt VarExpr where
+        foldrFree f x (Cell _ ve1 ve2) = foldrFree f x [ve1, ve2]
+        foldrFree f x (CellBlock _ ve1 ve2) = foldrFree f x [ve1, ve2]
+        
+
 
 data AnyExpr = AnyVar VarExpr | AnyVal ValExpr | AnyPerm PermExpr
 instance Show AnyExpr where
@@ -283,7 +288,12 @@ instance Contextual Guards where
                 "In a guard assertion for region '" ++ rid ++ "'"
 instance Contextual Predicate where
         toContext (Predicate sp pname _) = DescriptiveContext sp $
-                "In a predicate assertions '" ++ pname ++ "(...)'"
+                "In a predicate assertion '" ++ pname ++ "(...)'"
 instance Contextual RegionAssrt where
         toContext (Region sp rtn _ _ _) = DescriptiveContext sp $
-                "In a region assertion of type '" ++ rtn ++ "'" 
+                "In a region assertion of type '" ++ rtn ++ "'"
+instance Contextual CellAssrt where
+        toContext (Cell sp _ _) = DescriptiveContext sp
+                "In a heap-cell assertion (... |-> ...)"
+        toContext (CellBlock sp _ _) = DescriptiveContext sp
+                "In a heap-cell block assertion (... |-> #cells(...))"

@@ -3,13 +3,12 @@ module Caper.DeclarationTyping (
         typeDeclarations
 ) where
 
-import Prelude hiding (mapM_)
+import Prelude hiding (mapM_,foldl)
 import qualified Data.Map as Map
 import Data.Map(Map)
 import Data.Foldable
 import Control.Monad.State hiding (mapM_)
-import Data.List
---import Control.Monad.Exception()
+import Data.List hiding (foldl)
 import Control.Lens.Indexed
 
 import Caper.Logger
@@ -17,22 +16,32 @@ import Caper.Parser.AST
 import qualified Caper.TypingContext as TC
 import Caper.ProverDatatypes
 import Caper.Exceptions
+import Caper.Utils.SimilarStrings
 
+-- |List of free variables
+freeL :: (FreeVariables t v, Eq v) => t -> [v]
+freeL = foldrFree (:) []
 
+-- |'TC.bind', but with a specilised type signature for Either
 bindE :: (Ord v, Eq t) =>
         v -> t -> TC.TContext v t ->
         Either (TC.TypeUnificationException v t) (TC.TContext v t)
 bindE = TC.bind
 
+-- |Try to bind a variable to a type in a state context, possibly raising an
+-- exception
 bindR :: (Ord v, MonadState (TC.TContext v VariableType) m, MonadRaise m) =>
         v -> VariableType -> m ()
 bindR key val = get >>= liftTUMismatch . bindE key val >>= put
 
+-- |'TC.unify', but specialised for Either
 unifyE :: (Ord v, Eq t) => 
         v -> v -> TC.TContext v t -> 
         Either (TC.TypeUnificationException v t) (TC.TContext v t)
 unifyE = TC.unify
 
+-- |Try to unify the types of two variables in a state context, possibly
+-- raising an exception.
 unifyR :: (Ord v, MonadState (TC.TContext v VariableType) m, MonadRaise m) =>
         v -> v -> m ()
 unifyR k1 k2 = get >>= liftTUMismatch . unifyE k1 k2 >>= put
@@ -42,15 +51,18 @@ unifyR k1 k2 = get >>= liftTUMismatch . unifyE k1 k2 >>= put
    An exception can occur if the type is overspecified (i.e. a variable
    is used at inconsistent types).  If the type is underspecified, it defaults
    to Value, and a warning is logged.
-   
 -}
 typeDeclarations :: (MonadLogger m, MonadRaise m) =>
         [Declr] -> m (Map String [(String, VariableType)])
 typeDeclarations decs = do
+                let decCounts = foldl decCount Map.empty decs
                 tc <- flip execStateT TC.empty $
-                                mapM_ typeDeclaration decs
+                                mapM_ (typeDeclaration decCounts) decs
                 foldlM (tdm tc) Map.empty decs
         where
+                decCount m (RegionDeclr _ rtname rparas _ _ _) =
+                        Map.insert rtname (length rparas) m
+                decCount m _ = m
                 tdm tc m dc@(RegionDeclr _ rtname rparas _ _ _) = 
                     contextualise dc $ do
                         pts <- iforM rparas $ \i nm ->
@@ -69,30 +81,33 @@ typeDeclarations decs = do
 
 typeDeclaration :: (MonadState (TC.TContext (Either (String,Int) String) VariableType) m,
         MonadRaise m) =>
+        Map String Int ->
         Declr -> m ()
-typeDeclaration dc@(RegionDeclr sp rtname rparas gdecs sis actions) =
+typeDeclaration decCounts dc@(RegionDeclr sp rtname rparas gdecs sis actions) =
           contextualise dc $ do
                 modify $ TC.declareAll [Left (rtname, n) |
                                 n <- [0..length rparas - 1]]
                 modify $ either undefined id . bindE (Left (rtname, 0))
                                 VTRegionID
-                mapM_ (typeStateInterp resVar) sis
+                mapM_ (typeStateInterp decCounts resVar Left) sis
                 mapM_ (typeAction resVar) actions
         where
                 resVar s = maybe (Right s) (\x -> Left (rtname, x))
                         (elemIndex s rparas) 
-typeDeclaration _ = return ()
+typeDeclaration _ _ = return ()
 
 typeStateInterp :: (MonadState (TC.TContext a VariableType) m,
         MonadRaise m, Ord a)
-        => (String -> a)
+        => Map String Int
+        -> (String -> a)
+        -> ((String, Int) -> a) 
         -> StateInterpretation
         -> m ()
-typeStateInterp resVar si = do
+typeStateInterp decCounts resVar resArg si = do
         s <- get
         mapM_ (typePureAssrt resVar) (siConditions si)
-        mapM_ (typeVarExprAs VTValue resVar) (foldrFree (:) [] (siState si))
-        typeAssrt resVar Left (siInterp si)
+        mapM_ (typeVarExprAs VTValue resVar) (freeL (siState si))
+        typeAssrt decCounts resVar resArg (siInterp si)
         modify (`TC.intersection` s)
 
 typeAction :: (MonadState (TC.TContext a VariableType) m, 
@@ -103,13 +118,10 @@ typeAction :: (MonadState (TC.TContext a VariableType) m,
 typeAction resVar action = do
         s <- get
         mapM_ (typePureAssrt resVar) (actionConditions action)
-        mapM_ (typeVarExprAs VTValue resVar) $ foldrFree (:) []
+        mapM_ (typeVarExprAs VTValue resVar) $ freeL
                 [actionPreState action, actionPostState action]
         modify (`TC.intersection` s)
 
-
-type TCResult a b = Either (TC.TypeUnificationException a b)
-                        (TC.TContext a b)
 
 typeVarExprAs :: forall a m. (MonadState (TC.TContext a VariableType) m,
         MonadRaise m, Ord a) =>
@@ -135,21 +147,22 @@ typePureAssrt resVar = tpa
                         addContext (DescriptiveContext sp $
                                 "In the (dis)equality: '" ++ show a ++ "'") $
                                 unifyR (resVar v1) (resVar v2)
-                tpa (BinaryVarAssrt _ _ _ _) = return ()
+                tpa (BinaryVarAssrt {}) = return ()
                 tpa (BinaryValAssrt _ _ ve1 ve2) = mapM_ 
                         (typeVarExprAs VTValue resVar)
-                        (foldrFree (:) [] [ve1, ve2])
+                        (freeL [ve1, ve2])
                 tpa (BinaryPermAssrt _ _ pe1 pe2) = mapM_
                         (typeVarExprAs VTPermission resVar)
-                        (foldrFree (:) [] [pe1, pe2])
+                        (freeL [pe1, pe2])
 
 typeAssrt :: forall a m. (MonadState (TC.TContext a VariableType) m,
         MonadRaise m, Ord a)
-        => (String -> a)
+        => Map String Int
+        -> (String -> a)
         -> ((String, Int) -> a)
         -> Assrt
         -> m ()
-typeAssrt resVar resArg = ta
+typeAssrt decCounts resVar resArg = ta
         where
                 ta (AssrtPure _ a) = typePureAssrt resVar a
                 ta (AssrtSpatial _ a) = ts a
@@ -161,20 +174,29 @@ typeAssrt resVar resArg = ta
                 tArg _ (AnyVar _) = return ()
                 tArg arg (AnyVal ve) = do
                         mapM_ (typeVarExprAs VTValue resVar)
-                                (foldrFree (:) [] ve)
+                                (freeL ve)
                         bindR arg VTValue
                 tArg arg (AnyPerm pe) = do
                         mapM_ (typeVarExprAs VTPermission resVar)
-                                (foldrFree (:) [] pe)
+                                (freeL pe)
                         bindR arg VTPermission
-                ts (SARegion (Region sp tname rid args st)) = do -- TODO: check the number of arguments!
-                        
+                ts (SARegion regass@(Region sp tname rid args st)) = do
+                        contextualise regass $
+                                case Map.lookup tname decCounts of
+                                        Just c ->
+                                            unless (c == length args + 1) $
+                                                raise $ ArgumentCountMismatch 
+                                                        (c + 1)
+                                                        (length args + 2)
+                                        Nothing -> raise $ UndeclaredRegionType
+                                                tname (similarStrings tname 
+                                                        (Map.keys decCounts))
                         addContext (DescriptiveContext sp $
                                         "In the first argument" ++
                                         " of a region assertion of type '" ++
                                         tname ++ "'") $
                             bindR (resVar rid) VTRegionID
-                        iforM args $ \i a -> addContext
+                        iforM_ args $ \i a -> addContext
                                 (DescriptiveContext sp $
                                         "In argument " ++ show (i + 2) ++
                                         " of a region assertion of type '" ++
@@ -185,4 +207,18 @@ typeAssrt resVar resArg = ta
                                         " of a region assertion of type '" ++
                                         tname ++ "'") $
                             mapM_ (typeVarExprAs VTValue resVar)
-                                (foldrFree (:) [] st)
+                                (freeL st)
+                ts (SAPredicate pd) =
+                        contextualise pd $ 
+                                raise $ SyntaxNotImplemented "predicates"
+                ts (SACell ca) =
+                          contextualise ca $
+                                mapM_ (typeVarExprAs VTValue resVar)
+                                        (freeL ca)
+                ts (SAGuards grds@(Guards _ _ gds)) = contextualise grds $
+                        mapM_ tg gds
+                tg (NamedGuard _ _) = return ()
+                tg (PermGuard _ _ pe) = mapM_
+                        (typeVarExprAs VTPermission resVar) (freeL pe)
+                tg (ParamGuard _ _ args) = raise $ SyntaxNotImplemented
+                                "parametrised guards"
