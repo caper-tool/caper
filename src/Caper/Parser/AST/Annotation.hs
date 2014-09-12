@@ -247,15 +247,22 @@ instance Show Action where
         show (Action _ c g pre post) = intercalate ", " (map show c) ++ " | " ++ intercalate " * " (map show g) ++ " : " ++ show pre ++ " ~> " ++ show post
 
 
--- |Guard assertions
-data GuardDeclr = NamedGuardDeclr SourcePos String
-                | PermGuardDeclr SourcePos String
-                | ParamGuardDeclr SourcePos String [AnyExpr]
+-- |Guard declarations
+data TopLevelGuardDeclr = ZeroGuardDeclr | SomeGuardDeclr GuardDeclr
 
+data GuardDeclr = NamedGD SourcePos String
+                | PermissionGD SourcePos String
+                | ProductGD SourcePos GuardDeclr GuardDeclr
+                | SumGD SourcePos GuardDeclr GuardDeclr
 instance Show GuardDeclr where
-        show (NamedGuardDeclr _ n) = n
-        show (PermGuardDeclr _ n) = "%" ++ n
-        show (ParamGuardDeclr _ n paras) = n ++ "(" ++ intercalate "," (map show paras) ++ ")"
+        show (NamedGD _ n) = n
+        show (PermissionGD _ n) = "%" ++ n
+        show (ProductGD _ g1 g2) = "(" ++ show g1 ++ " * " ++ show g2 ++ ")"
+        show (SumGD _ g1 g2) =  "(" ++ show g1 ++ " + " ++ show g2 ++ ")"
+
+instance Show TopLevelGuardDeclr where
+        show ZeroGuardDeclr = "0"
+        show (SomeGuardDeclr gd) = show gd
 
 makeSourcePos ''VarExpr
 makeSourcePos ''ValExpr
