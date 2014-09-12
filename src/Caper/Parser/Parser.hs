@@ -261,29 +261,178 @@ relation =  (reservedOp "=" >> return Equal)
 --  do pos <- getPosition
 --     return $ AssrtPure pos (ConstBAssrt pos True)
 
---valueExpression :: Parser Assrt
---valueExpression = buildExpressionParser valueOperators valueTerm
+pureAssertion :: Parser PureAssrt
+pureAssertion = buildExpressionParser pureOperators pureTerm
+
+pureOperators = [ [Prefix (do { pos <- getPosition; reservedOp "!"; return (NotBAssrt pos            )})          ]
+             ]
+
+pureTerm =  parens pureAssertion
+        <|> (do { pos <- getPosition; reserved "true"; return (ConstBAssrt pos True)})
+        <|> (do { pos <- getPosition; reserved "false"; return (ConstBAssrt pos False)})
+        <|> binaryVariableAssertion
+        <|> binaryPermissionAssertion
+        <|> binaryValueAssertion
+
+binaryVariableAssertion =
+  do pos <- getPosition
+     e1  <- variableExpression
+     br  <- optionMaybe $ equalityRelation
+     case br of
+       Nothing -> do br2 <- valueRelation
+                     e2  <- valueExpression
+                     return $ BinaryValAssrt pos br2 (VarValExpr pos e1) e2
+       Just l  -> do e2  <- optionMaybe $ variableExpression
+                     case e2 of
+                       Nothing -> do e <- valueExpression
+                                     return $ BinaryValAssrt pos (ValEquality l) (VarValExpr pos e1) e
+                       Just m  -> return $ BinaryVarAssrt pos l e1 m
+
  
---valueOperators = [ [Prefix (do { pos <- getPosition; reservedOp "-"; return (UnaryValExpr pos ValNegation )})]
---                 , [Infix  (do { pos <- getPosition; reservedOp "*"; return (BinaryValExpr pos Multiply)}) AssocLeft]
---                 , [Infix  (do { pos <- getPosition; reservedOp "/"; return (BinaryValExpr pos Divide  )}) AssocLeft]
---                 , [Infix  (do { pos <- getPosition; reservedOp "+"; return (BinaryValExpr pos Add     )}) AssocLeft]
---                 , [Infix  (do { pos <- getPosition; reservedOp "-"; return (BinaryValExpr pos Subtract)}) AssocLeft]
---                 ]
+equalityRelation =  (reservedOp "=" >> return EqualRel)
+                <|> (reservedOp "!=" >> return NotEqualRel)
 
---valueTerm =  parens valueExpression
---        <|> (do { pos <- getPosition; vals <- braces $ sepBy valueExpression comma; return (SetValExpr pos vals)})
---        <|> (do { pos <- getPosition; var <- varExpr; return (VarValExpr pos var)})
---        <|> (do { pos <- getPosition; i <- integer; return (ConstValExpr pos i)})
+binaryValueAssertion =
+  do pos <- getPosition
+     e1  <- valueExpression
+     br  <- valueRelation
+     e2  <- valueExpression
+     return $ BinaryValAssrt pos br e1 e2
 
---varExpr :: Parser VarExpr
---varExpr =
---  do pos  <- getPosition
---     wild <- optionMaybe $ reserved "_"
---     case wild of
---       Nothing -> do var <- identifier;
---                     return $ Variable pos var
---       Just _  -> return $ WildCard pos
+valueRelation =  (do { vo <- equalityRelation; return (ValEquality vo) })
+             <|> (reservedOp ">" >> return ValGreater)
+             <|> (reservedOp ">=" >> return ValGreaterOrEqual)
+             <|> (reservedOp "<" >> return ValLess)
+             <|> (reservedOp "<=" >> return ValLessOrEqual)
+
+valueExpression :: Parser ValExpr
+valueExpression = buildExpressionParser valueOperators valueTerm
+ 
+valueOperators = [ [Prefix (do { pos <- getPosition; reservedOp "-"; return (UnaryValExpr pos ValNegation )})]
+                 , [Infix  (do { pos <- getPosition; reservedOp "*"; return (BinaryValExpr pos ValMultiply)}) AssocLeft]
+                 , [Infix  (do { pos <- getPosition; reservedOp "/"; return (BinaryValExpr pos ValDivide  )}) AssocLeft]
+                 , [Infix  (do { pos <- getPosition; reservedOp "+"; return (BinaryValExpr pos ValAdd     )}) AssocLeft]
+                 , [Infix  (do { pos <- getPosition; reservedOp "-"; return (BinaryValExpr pos ValSubtract)}) AssocLeft]
+                 ]
+
+valueTerm =  parens valueExpression
+         <|> variableValue
+         <|> constValue
+         <|> setValue
+
+variableValue =
+  do pos <- getPosition
+     ve  <- variableExpression
+     return $ VarValExpr pos ve
+
+variableExpression :: Parser VarExpr
+variableExpression =
+  do pos  <- getPosition
+     wild <- optionMaybe $ reserved "_"
+     case wild of
+       Nothing -> do s <- identifier;
+                     return $ Variable pos s
+       Just _  -> return $ WildCard pos
+
+constValue =
+  do pos <- getPosition
+     c   <- integer
+     return $ ConstValExpr pos c
+
+setValue =
+  do pos <- getPosition
+     ves <- braces (sepBy valueExpression comma)
+     return $ SetValExpr pos ves
+
+binaryPermissionAssertion =
+  do pos <- getPosition
+     e1  <- permissionExpression
+     br  <- permissionRelation
+     e2  <- permissionExpression
+     return $ BinaryPermAssrt pos br e1 e2
+
+permissionRelation =  (do { pe <- equalityRelation; return (PermEquality pe) })
+                  <|> (reservedOp "#" >> return Compatible)
+
+permissionExpression :: Parser PermExpr
+permissionExpression = buildExpressionParser permissionOperators permissionTerm
+ 
+permissionOperators = [ [Prefix (do { pos <- getPosition; reservedOp "~"; return (UnaryPermExpr pos Complement )})]
+                      , [Infix  (do { pos <- getPosition; reservedOp "$"; return (BinaryPermExpr pos Composition)}) AssocLeft]
+                      ]
+
+permissionTerm =  parens permissionExpression
+              <|> (do { pos <- getPosition; reserved "1p"; return (ConstPermExpr pos FullPerm)})
+              <|> (do { pos <- getPosition; reserved "0p"; return (ConstPermExpr pos EmptyPerm)})
+              <|> variablePermission
+
+variablePermission =
+  do pos <- getPosition
+     ve  <- variableExpression
+     return $ VarPermExpr pos ve
+
+spatialAssertion :: Parser SpatialAssrt
+spatialAssertion =  guards--regionAssertion
+--                <|> predicate
+--                <|> cellAssertion
+--                <|> guards
+
+--cellAssertion :: Parser SpatialAssrt
+--cellAssertion =
+--  do pos <- getPosition
+     
+
+--data CellAssrt = Cell SourcePos ValExpr ValExpr         -- ^ Single cell: @/x/ |-> /y/@
+--               | CellBlock SourcePos ValExpr ValExpr    -- ^ Block of cells: @/x/ |-> #cells(/y/)@
+--instance Show CellAssrt where
+--        show (Cell _ e1 e2) = show e1 ++ " |-> " ++ show e2
+--        show (CellBlock _ e1 e2) = show e1 ++ " |-> #cells(" ++ show e2 ++ ")"
+
+guards :: Parser SpatialAssrt
+guards = 
+  do pos   <- getPosition
+     ident <- identifier
+     reservedOp "@"
+     gds   <- parens (sepBy guard (reservedOp "*"))
+     return $ SAGuards $ Guards pos ident gds
+
+guard :: Parser Guard
+guard =
+  do pos <- getPosition
+     n   <- identifier
+     return $ NamedGuard pos n
+-- TODO
+--        show (NamedGuard _ n) = n
+--        show (PermGuard _ n pe) = n ++ "[" ++ show pe ++ "]"
+--        show (ParamGuard _ n paras) = n ++ "(" ++ intercalate "," (map show paras) ++ ")"
+
+
+spatialAssertionParser :: Parser SpatialAssrt
+spatialAssertionParser = whiteSpace >> spatialAssertion
+
+parseSpatialAssertion :: String -> SpatialAssrt
+parseSpatialAssertion str =
+  case parse spatialAssertionParser "" str of
+    Left e  -> error $ show e
+    Right r -> r
+
+valueExpressionParser :: Parser ValExpr
+valueExpressionParser = whiteSpace >> valueExpression
+
+parseValueExpression :: String -> ValExpr
+parseValueExpression str =
+  case parse valueExpressionParser "" str of
+    Left e  -> error $ show e
+    Right r -> r
+
+pureAssertionParser :: Parser PureAssrt
+pureAssertionParser = whiteSpace >> pureAssertion
+
+parsePureAssertion :: String -> PureAssrt
+parsePureAssertion str =
+  case parse pureAssertionParser "" str of
+    Left e  -> error $ show e
+    Right r -> r
 
 parseString :: String -> [Declr]
 parseString str =
