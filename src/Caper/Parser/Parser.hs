@@ -45,6 +45,7 @@ languageDef =
                                      , "1p"
                                      , "#cells"
                                      , "_"
+                                     , "%"
                                      ]
            , Token.reservedOpNames = ["+", "-", "*", "/", ":="
                                      , "=", "!=", "<", ">", ">=", "<="
@@ -66,6 +67,16 @@ integer    = Token.integer    lexer -- parses an integer
 semi       = Token.semi       lexer -- parses a semicolon
 comma      = Token.comma      lexer -- parses a comma
 whiteSpace = Token.whiteSpace lexer -- parses whitespace
+
+pIdentifier =
+  do s <- upper
+     r <- identifier
+     return $ s : r
+
+rIdentifier =
+  do s <- lower
+     r <- identifier
+     return $ s : r
 
 parser :: Parser [Declr]
 parser = whiteSpace >> sequenceOfDeclr
@@ -98,7 +109,7 @@ statement =  ifElseStatement
          <|> otherAssignStatement
          <|> returnStatement
          <|> skipStatement
---         <|> assertStatement
+         <|> assertStatement
 
 ifElseStatement :: Parser Stmt
 ifElseStatement =
@@ -197,13 +208,13 @@ skipStatement =
      semi
      return $ SkipStmt pos
 
---assertStatement :: Parser Stmt
---assertStatement =
---  do pos <- getPosition
---     reserved "assert"
---     assrt <- assertion
---     semi
---     return $ AssertStmt pos assertion
+assertStatement :: Parser Stmt
+assertStatement =
+  do pos <- getPosition
+     reserved "assert"
+     assrt <- assertion
+     semi
+     return $ AssertStmt pos assrt
 
 aExpression :: Parser AExpr
 aExpression = buildExpressionParser aOperators aTerm
@@ -256,10 +267,29 @@ relation =  (reservedOp "=" >> return Equal)
         <|> (reservedOp ">=" >> return GreaterOrEqual)
         <|> (reservedOp "<=" >> return LessOrEqual)
 
---assertion :: Parser Assrt
---assertion =
---  do pos <- getPosition
---     return $ AssrtPure pos (ConstBAssrt pos True)
+assertion :: Parser Assrt
+assertion = try (iteAssertion)
+         <|> assertionAux
+
+iteAssertion :: Parser Assrt
+iteAssertion =
+  do pos <- getPosition
+     ac  <- pureAssertion
+     reservedOp "?"
+     a1  <- assertionAux
+     reservedOp ":"
+     a2  <- assertionAux
+     return $ AssrtITE pos ac a1 a2
+
+assertionAux :: Parser Assrt
+assertionAux = buildExpressionParser assertionOperators assertionTerm
+
+assertionOperators = [ [Infix  (do { pos <- getPosition; reservedOp "&*&"; return (AssrtConj pos)}) AssocLeft]
+                     ]
+
+assertionTerm =  parens assertion
+             <|> (do { pos <- getPosition; a <- pureAssertion; return (AssrtPure pos a)})
+             <|> (do { pos <- getPosition; a <- spatialAssertion; return (AssrtSpatial pos a)})
 
 pureAssertion :: Parser PureAssrt
 pureAssertion = buildExpressionParser pureOperators pureTerm
@@ -270,25 +300,17 @@ pureOperators = [ [Prefix (do { pos <- getPosition; reservedOp "!"; return (NotB
 pureTerm =  parens pureAssertion
         <|> (do { pos <- getPosition; reserved "true"; return (ConstBAssrt pos True)})
         <|> (do { pos <- getPosition; reserved "false"; return (ConstBAssrt pos False)})
-        <|> binaryVariableAssertion
+        <|> try binaryVariableAssertion
         <|> binaryPermissionAssertion
         <|> binaryValueAssertion
 
 binaryVariableAssertion =
   do pos <- getPosition
      e1  <- variableExpression
-     br  <- optionMaybe $ equalityRelation
-     case br of
-       Nothing -> do br2 <- valueRelation
-                     e2  <- valueExpression
-                     return $ BinaryValAssrt pos br2 (VarValExpr pos e1) e2
-       Just l  -> do e2  <- optionMaybe $ variableExpression
-                     case e2 of
-                       Nothing -> do e <- valueExpression
-                                     return $ BinaryValAssrt pos (ValEquality l) (VarValExpr pos e1) e
-                       Just m  -> return $ BinaryVarAssrt pos l e1 m
+     br  <- equalityRelation
+     e2  <- variableExpression
+     return $ BinaryVarAssrt pos br e1 e2
 
- 
 equalityRelation =  (reservedOp "=" >> return EqualRel)
                 <|> (reservedOp "!=" >> return NotEqualRel)
 
@@ -372,21 +394,41 @@ variablePermission =
      return $ VarPermExpr pos ve
 
 spatialAssertion :: Parser SpatialAssrt
-spatialAssertion =  guards--regionAssertion
---                <|> predicate
---                <|> cellAssertion
---                <|> guards
+spatialAssertion =  try regionAssertion
+                <|> try predicate
+                <|> try cellAssertion
+                <|> guards
 
---cellAssertion :: Parser SpatialAssrt
---cellAssertion =
---  do pos <- getPosition
-     
+regionAssertion :: Parser SpatialAssrt
+regionAssertion =
+  do pos  <- getPosition
+     t    <- rIdentifier
+     reserved "("
+     v    <- identifier
+     comma
+     args <- endBy anyExpression comma
+     s    <- valueExpression
+     reserved ")"
+     return $ SARegion (Region pos t v args s)
 
---data CellAssrt = Cell SourcePos ValExpr ValExpr         -- ^ Single cell: @/x/ |-> /y/@
---               | CellBlock SourcePos ValExpr ValExpr    -- ^ Block of cells: @/x/ |-> #cells(/y/)@
---instance Show CellAssrt where
---        show (Cell _ e1 e2) = show e1 ++ " |-> " ++ show e2
---        show (CellBlock _ e1 e2) = show e1 ++ " |-> #cells(" ++ show e2 ++ ")"
+predicate :: Parser SpatialAssrt
+predicate =
+  do pos  <- getPosition
+     p    <- pIdentifier
+     args <- parens (sepBy anyExpression comma)
+     return $ SAPredicate (Predicate pos p args)
+
+cellAssertion :: Parser SpatialAssrt
+cellAssertion =
+  do pos <- getPosition
+     e1  <- valueExpression
+     reservedOp "|->"
+     block <- optionMaybe $ reserved "#cells"
+     case block of
+       Nothing -> do e2 <- valueExpression
+                     return $ SACell (Cell pos e1 e2)
+       Just _  -> do e2 <- parens valueExpression
+                     return $ SACell (CellBlock pos e1 e2)
 
 guards :: Parser SpatialAssrt
 guards = 
@@ -400,11 +442,18 @@ guard :: Parser Guard
 guard =
   do pos <- getPosition
      n   <- identifier
-     return $ NamedGuard pos n
--- TODO
---        show (NamedGuard _ n) = n
---        show (PermGuard _ n pe) = n ++ "[" ++ show pe ++ "]"
---        show (ParamGuard _ n paras) = n ++ "(" ++ intercalate "," (map show paras) ++ ")"
+     pe <- optionMaybe $ brackets permissionExpression
+     case pe of
+       Nothing -> do paras <- optionMaybe $ parens (sepBy anyExpression comma)
+                     case paras of
+                       Nothing -> return $ NamedGuard pos n
+                       Just m  -> return $ ParamGuard pos n m
+       Just l  -> return $ PermGuard pos n l
+
+anyExpression :: Parser AnyExpr
+anyExpression =  try (do { e <- valueExpression; return (AnyVal e) })
+             <|> try (do { e <- permissionExpression; return (AnyPerm e) })
+             <|> (do { e <- variableExpression; return (AnyVar e) })
 
 
 spatialAssertionParser :: Parser SpatialAssrt
@@ -433,6 +482,16 @@ parsePureAssertion str =
   case parse pureAssertionParser "" str of
     Left e  -> error $ show e
     Right r -> r
+
+assertionParser :: Parser Assrt
+assertionParser = whiteSpace >> assertion
+
+parseAssertion :: String -> Assrt
+parseAssertion str =
+  case parse assertionParser "" str of
+    Left e  -> error $ show e
+    Right r -> r
+
 
 parseString :: String -> [Declr]
 parseString str =
