@@ -21,38 +21,16 @@ import Control.Monad.State hiding (mapM_,mapM,sequence)
 import Debug.Trace              -- TODO: get rid of this
 import Control.Lens hiding (op)
 
+import Caper.Parser.AST.Annotation (GuardDeclr(..), TopLevelGuardDeclr(..))
 import Caper.Logger
 import Caper.ProverDatatypes
 import Caper.Prover
 import Caper.Utils.Choice
-
--- The empty guard type (ZeroGT) should not be allowed as a 
--- parameter to a sum or product.  We therefore split guard
--- types into two levels.
-
-data TopLevelGuardTypeAST =
-                ZeroGT | SomeGT GuardTypeAST
-
-data GuardTypeAST =
-                NamedGT String
-                | NamedPermissionGT String
---                | ParametrisedGT String
-                | ProductGT GuardTypeAST GuardTypeAST
-                | SumGT GuardTypeAST GuardTypeAST
-
-instance Show GuardTypeAST where
-        show (NamedGT nm) = nm
-        show (NamedPermissionGT nm) = "%" ++ nm
-        show (ProductGT gt1 gt2) = "(" ++ show gt1 ++ " * " ++ show gt2 ++ ")"
-        show (SumGT gt1 gt2) = "(" ++ show gt1 ++ " + " ++ show gt2 ++ ")"
-
-instance Show TopLevelGuardTypeAST where
-        show ZeroGT = "0"
-        show (SomeGT gt) = show gt
+import Caper.Utils.Mix
 
 
 data GuardTypeException =
-                GTEMultipleOccurrence String (Maybe GuardTypeAST)
+                GTEMultipleOccurrence String (Maybe GuardDeclr)
                 deriving Typeable
 
 instance Show GuardTypeException where
@@ -71,19 +49,19 @@ data GuardParameterType =
 -- INVARIANT : instances of WeakGuardType must be non-empty
 type WeakGuardType = Set.Set (Map.Map String GuardParameterType)
 
-validateGuardTypeAST :: (Throws GuardTypeException l) => TopLevelGuardTypeAST -> EM l ()
-validateGuardTypeAST ZeroGT = return ()
-validateGuardTypeAST (SomeGT gt) = do
+validateGuardDeclr :: (Throws GuardTypeException l) => TopLevelGuardDeclr -> EM l ()
+validateGuardDeclr ZeroGuardDeclr = return ()
+validateGuardDeclr (SomeGuardDeclr gt) = do
                         _ <- vgt Set.empty gt
                         return ()
         where
-                vgt s (NamedGT n) = checkFresh s n
-                vgt s (NamedPermissionGT n) = checkFresh s n
+                vgt s (NamedGD _ n) = checkFresh s n
+                vgt s (PermissionGD _ n) = checkFresh s n
 --                vgt s (ParametrisedGT n) = checkFresh s n
-                vgt s (ProductGT gt1 gt2) = do
+                vgt s (ProductGD _ gt1 gt2) = do
                                                 s1 <- vgt s gt1
                                                 vgt s1 gt2
-                vgt s (SumGT gt1 gt2) = do
+                vgt s (SumGD _ gt1 gt2) = do
                                                 s1 <- vgt s gt1
                                                 vgt s1 gt2
                 checkFresh s n = if Set.member n s then
@@ -91,24 +69,18 @@ validateGuardTypeAST (SomeGT gt) = do
                                 else
                                         return $ Set.insert n s
 
--- TODO: refactor these into somewhere more appropriate
-mixWith :: (Ord a, Ord b, Ord c) => (a -> b -> c) -> Set.Set a -> Set.Set b -> Set.Set c
-mixWith op s1 s2 = Set.unions $ Set.toList $ Set.map (\x -> Set.map (op x) s2) s1
-
-listMixWith :: (a -> b -> c) -> [a] -> [b] -> [c]
-listMixWith op l1 l2 = concatMap (\ x -> map (op x) l2) l1
 
 
-toWeakGuardType :: GuardTypeAST -> WeakGuardType
-toWeakGuardType (NamedGT n) = Set.singleton $ Map.singleton n UniqueGPT
-toWeakGuardType (NamedPermissionGT n) = Set.singleton $ Map.singleton n PermissionGPT
---toWeakGuardType (ParametrisedGT n) = Set.singleton $ Map.singleton n ValueGPT
-toWeakGuardType (ProductGT gt1 gt2) = mixWith Map.union (toWeakGuardType gt1) (toWeakGuardType gt2)
-toWeakGuardType (SumGT gt1 gt2) = Set.union (toWeakGuardType gt1) (toWeakGuardType gt2)
+toWeakGuardType :: GuardDeclr -> WeakGuardType
+toWeakGuardType (NamedGD _ n) = Set.singleton $ Map.singleton n UniqueGPT
+toWeakGuardType (PermissionGD _ n) = Set.singleton $ Map.singleton n PermissionGPT
+--toWeakGuardType (ParametrisedGD n) = Set.singleton $ Map.singleton n ValueGPT
+toWeakGuardType (ProductGD _ gt1 gt2) = mixWith Map.union (toWeakGuardType gt1) (toWeakGuardType gt2)
+toWeakGuardType (SumGD _ gt1 gt2) = Set.union (toWeakGuardType gt1) (toWeakGuardType gt2)
 
-topLevelToWeakGuardType :: TopLevelGuardTypeAST -> WeakGuardType
-topLevelToWeakGuardType ZeroGT = Set.singleton Map.empty
-topLevelToWeakGuardType (SomeGT gt) = toWeakGuardType gt
+topLevelToWeakGuardType :: TopLevelGuardDeclr -> WeakGuardType
+topLevelToWeakGuardType ZeroGuardDeclr = Set.singleton Map.empty
+topLevelToWeakGuardType (SomeGuardDeclr gt) = toWeakGuardType gt
 
 
 -- toWeakGuardTypeWorker :: WeakGuardType -> GuardType
@@ -252,15 +224,15 @@ mergeGuards (GD g1) (GD g2) = liftM GD $ sequence (Map.unionWith unionop (fmap r
                                                 return v1
 
 
-guardEquivalence :: GuardTypeAST -> Guard v1 -> Guard v2 -> (Guard v3, Guard v4)
--- Given a GuardTypeAST and a pair of guards, find a pair of guards that
+guardEquivalence :: GuardDeclr -> Guard v1 -> Guard v2 -> (Guard v3, Guard v4)
+-- Given a GuardDeclr and a pair of guards, find a pair of guards that
 -- could be used to rewrite the first to entail the second.
 -- This assumes the guards conform to the guard type.
-guardEquivalence (ProductGT gta1 gta2) gd1 gd2 = (guardJoin gd3a gd3b, guardJoin gd4a gd4b)
+guardEquivalence (ProductGD _ gta1 gta2) gd1 gd2 = (guardJoin gd3a gd3b, guardJoin gd4a gd4b)
         where
                 (gd3a, gd4a) = guardEquivalence gta1 gd1 gd2
                 (gd3b, gd4b) = guardEquivalence gta2 gd1 gd2
-guardEquivalence (SumGT gta1 gta2) gd1 gd2 =
+guardEquivalence (SumGD _ gta1 gta2) gd1 gd2 =
                 case (ma gta1 gd1, ma gta2 gd1, ma gta1 gd2, ma gta2 gd2) of
                                         (True, _, True, _) -> guardEquivalence gta1 gd1 gd2
                                         (True, _, _, True) -> (fgf gta1 gd1, fgf gta2 gd2)
@@ -268,16 +240,16 @@ guardEquivalence (SumGT gta1 gta2) gd1 gd2 =
                                         (_, True, True, _) -> (fgf gta2 gd1, fgf gta1 gd2)
                                         _ -> (GD Map.empty, GD Map.empty)
                 where
-                        ma :: GuardTypeAST -> Guard v -> Bool
-                        ma (NamedGT n) (GD g) = Map.member n g
-                        ma (NamedPermissionGT n) (GD g) = Map.member n g
-                        ma (ProductGT t1 t2) g = ma t1 g || ma t2 g
-                        ma (SumGT t1 t2) g = ma t1 g || ma t2 g
-                        fgf :: GuardTypeAST -> Guard v -> Guard w
-                        fgf (NamedGT n) _ = GD $ Map.singleton n NoGP
-                        fgf (NamedPermissionGT n) _ = GD $ Map.singleton n (PermissionGP PEFull)
-                        fgf (ProductGT gt1 gt2) g = guardJoin (fgf gt1 g) (fgf gt2 g)
-                        fgf (SumGT gt1 gt2) g = if ma gt2 g then fgf gt2 g else fgf gt1 g
+                        ma :: GuardDeclr -> Guard v -> Bool
+                        ma (NamedGD _ n) (GD g) = Map.member n g
+                        ma (PermissionGD _ n) (GD g) = Map.member n g
+                        ma (ProductGD _ t1 t2) g = ma t1 g || ma t2 g
+                        ma (SumGD _ t1 t2) g = ma t1 g || ma t2 g
+                        fgf :: GuardDeclr -> Guard v -> Guard w
+                        fgf (NamedGD _ n) _ = GD $ Map.singleton n NoGP
+                        fgf (PermissionGD _ n) _ = GD $ Map.singleton n (PermissionGP PEFull)
+                        fgf (ProductGD _ gt1 gt2) g = guardJoin (fgf gt1 g) (fgf gt2 g)
+                        fgf (SumGD _ gt1 gt2) g = if ma gt2 g then fgf gt2 g else fgf gt1 g
                         
 guardEquivalence _ _ _ = (GD Map.empty, GD Map.empty)
 
@@ -347,7 +319,7 @@ guardPrimitiveEntailmentM (GD g1) (GD g2) = if Map.null $ Map.differenceWith sam
 
 guardEntailment :: (MonadPlus m, MonadState s m, AssertionLenses s,
         MonadLogger m) =>
-                GuardTypeAST -> Guard VariableID -> Guard VariableID -> 
+                GuardDeclr -> Guard VariableID -> Guard VariableID -> 
                         m (Guard VariableID)
 guardEntailment gt g1 g2 = guardPrimitiveEntailmentM g1 g2 `mplus`
                         do
@@ -368,7 +340,7 @@ consumeGuardNoType gname gpara (GD g) = do
 
 consumeGuard' :: (MonadPlus m, MonadState s m, AssertionLenses s,
         MonadLogger m) =>
-                GuardTypeAST ->
+                GuardDeclr ->
                 String -> GuardParameters VariableID ->
                 Guard VariableID -> m (Guard VariableID)
 consumeGuard' gt gname gpara g = consumeGuardNoType gname gpara g `mplus`
@@ -380,11 +352,11 @@ consumeGuard' gt gname gpara g = consumeGuardNoType gname gpara g `mplus`
 
 consumeGuard :: (MonadPlus m, MonadState s m, AssertionLenses s,
         MonadLogger m) =>
-                TopLevelGuardTypeAST ->
+                TopLevelGuardDeclr ->
                 String -> GuardParameters VariableID ->
                 Guard VariableID -> m (Guard VariableID)
-consumeGuard ZeroGT = \_ _ _ -> mzero -- Something has gone wrong...
-consumeGuard (SomeGT gt) = consumeGuard' gt 
+consumeGuard ZeroGuardDeclr = \_ _ _ -> mzero -- Something has gone wrong...
+consumeGuard (SomeGuardDeclr gt) = consumeGuard' gt 
 
 {--
 
@@ -403,7 +375,7 @@ guardPrimitiveEntailment prover g1@(GD g1a) g2@(GD g2a) = if Map.null $ g2a `Map
 eGuardSubs :: Guard EVariable -> EvarSubstitution -> Guard VariableID
 eGuardSubs g subs = exprSub (fromJust . subs) g
 
-guardGeneralEntailment :: (MonadIO m, Monad m, PermissionsProver p) => p -> GuardTypeAST -> Guard VariableID -> Guard EVariable -> ProverT (MaybeT m) (Guard EVariable, EvarSubstitution)
+guardGeneralEntailment :: (MonadIO m, Monad m, PermissionsProver p) => p -> GuardDeclr -> Guard VariableID -> Guard EVariable -> ProverT (MaybeT m) (Guard EVariable, EvarSubstitution)
 guardGeneralEntailment p gt g1 g2 = guardPrimitiveEntailment p g1 g2 `mplus`
                 (do
                         let (gel, ger) = guardEquivalence gt g1 g2
