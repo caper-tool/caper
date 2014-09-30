@@ -34,7 +34,7 @@ checkStability a = do
                 wrapStateT (fmap emptyAssertions) (fmap admitAssertions) $ do
                         consumeAssrt a
                         printSymbState
-                        ask >>= justCheck
+                        justCheck
                 return True
         case r of
                 Just True -> return True

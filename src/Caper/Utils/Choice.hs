@@ -9,7 +9,6 @@ module Caper.Utils.Choice where
 import Control.Monad hiding (sequence)
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
-import Control.Monad.Writer
 import Control.Monad.Reader
 import Debug.Trace
 import Caper.Utils.NondetClasses

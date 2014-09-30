@@ -15,6 +15,7 @@ import Caper.Utils.SimilarStrings
 import Caper.Guards
 import Caper.ProverDatatypes
 import Caper.Exceptions
+import qualified Caper.Parser.AST as AST
 
 
 -- The internal representation of a region type identifier
@@ -35,7 +36,7 @@ data RegionType = RegionType
         {
                 rtRegionTypeName :: String,
                 rtParameters :: [(RTDVar, VariableType)],
-                rtGuardType :: TopLevelGuardTypeAST,
+                rtGuardType :: AST.TopLevelGuardDeclr,
                 rtStateSpace :: StateSpace,
                 rtTransitionSystem :: [TransitionRule],
                 rtInterpretation :: () -- TODO: replace with appropriate repr. of assertion

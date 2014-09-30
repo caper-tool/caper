@@ -3,6 +3,7 @@ import Control.Lens
 import qualified Data.Map as Map
 import Control.Monad.RWS
 import Data.Functor.Identity
+import Text.Parsec.Pos
 
 import qualified Caper.Utils.AliasingMap as AM
 import Caper.ProverDatatypes
@@ -12,12 +13,15 @@ import Caper.Guards
 import Caper.RegionTypes
 import Caper.Regions
 import Caper.SymbolicState
+import Caper.Parser.AST.Annotation
+
+p1 = initialPos "[None]"
 
 -- A[_] * ((B * C) + D[_])
-t_TLGuardType0 :: TopLevelGuardTypeAST
-t_TLGuardType0 = SomeGT $ ProductGT (NamedPermissionGT "A")
-                (SumGT (ProductGT (NamedGT "B") (NamedGT "C"))
-                        (NamedPermissionGT "D"))
+t_TLGuardType0 :: TopLevelGuardDeclr
+t_TLGuardType0 = SomeGuardDeclr $ ProductGD p1 (PermissionGD p1 "A")
+                (SumGD p1 (ProductGD p1 (NamedGD p1 "B") (NamedGD p1 "C"))
+                        (PermissionGD p1 "D"))
 
 
 instance RTCGetter a => RTCGetter (b, a) where

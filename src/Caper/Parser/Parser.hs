@@ -1,4 +1,14 @@
-module Caper.Parser.Parser(parseFile, parseString, parseAExpression, parseBExpression, aExpressionParser, statementParser, parseStatement) where
+module Caper.Parser.Parser(
+        parseFile,
+        parseString,
+        parseAExpression,
+        parseBExpression,
+        aExpressionParser,
+        statementParser,
+        parseStatement,
+        parseValueExpression,
+        valueExpressionParser
+        ) where
 
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Expr

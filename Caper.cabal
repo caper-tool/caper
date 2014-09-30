@@ -57,7 +57,8 @@ executable Caper
                    Caper.StabilityCheck,
                    Caper.RegionInterpretations,
                    Caper.FreeVariables,
-                   Caper.DeclarationTyping
+                   Caper.DeclarationTyping,
+                   Caper.Utils.Mix
 
 executable Interpreter
   build-depends:   
@@ -79,5 +80,6 @@ executable Interpreter
                    Caper.Parser.AST.Code,
                    Caper.Parser.AST.SourcePos,
                    Caper.Parser.Parser,
-                   Caper.FreeVariables
+                   Caper.FreeVariables,
+                   Caper.Utils.Mix
 

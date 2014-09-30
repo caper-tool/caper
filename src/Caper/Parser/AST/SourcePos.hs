@@ -26,3 +26,23 @@ makeSourcePos nm = do
                         [if x == ConT ''SourcePos then VarP spn else WildP | (_,_,x) <- sts ]
                 makePattern (ForallC _ _ c) = makePattern c
                 makePattern _ = fail "makeSourcePos: infix constructors are not supported."
+
+
+makeSPEq :: Name -> Q [Dec]
+makeSPEq nm = do
+        inf <- reify nm
+        case inf of
+                TyConI (DataD _ _ _ cs _) -> do
+                        spcs <- mapM makeClause cs
+                        let spcs' = spcs ++ [Clause [WildP, WildP] (NormalB $ (ConE 'False)) []]
+                        return [InstanceD [] (AppT (ConT ''Eq) (ConT nm)) [FunD '(==) spcs']]
+                _ -> fail "makeSPEq: Expected the name of a data type"
+        where
+                makeClause (NormalC n sts) = do
+                        let patterns = [ConP n [VarP $ mkName $ x : show i |
+                                                 i <- [1..length sts]]
+                                             | x <- "ab"]
+                        let conjs = [InfixE (Just $ VarE $ mkName $ 'a' : show i) (VarE '(==)) (Just $ VarE $ mkName $ 'b' : show i)
+                                | ((_,t), i) <- zip sts [(1::Int)..],
+                                        t /= ConT ''SourcePos]
+                        return $ Clause patterns (NormalB $ AppE (VarE 'and) (ListE conjs)) []

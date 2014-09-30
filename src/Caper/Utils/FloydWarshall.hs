@@ -51,7 +51,7 @@ instance Floydable Bool where
         fmin = (||)
         fadd = (&&)
         finfty = False
-
+{-
 test1 = floydInit 10 (==)
 test2 = floydInit 10 (\a b -> a + 1 == b)
 test3 = floydInit 100 (\a b -> a + 4 == b || a == b + 4)
@@ -59,3 +59,4 @@ test3 = floydInit 100 (\a b -> a + 4 == b || a == b + 4)
 showbm :: Matrix Bool -> String
 showbm = foldMap ((++"\n") . foldMap (\b -> if b then "1" else "."))
 printbm = putStrLn . showbm
+-}

@@ -1,6 +1,5 @@
 module Caper.Utils.MemoIO where
 import qualified Data.Map as Map
-import Data.Map (Map)
 import Data.IORef
 
 memoIO :: (Eq a, Ord a) => (a -> IO b) -> IO (a -> IO b)

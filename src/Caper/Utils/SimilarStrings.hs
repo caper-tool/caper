@@ -11,7 +11,7 @@ module Caper.Utils.SimilarStrings where
 -- the provided string.  An edit here is an insertion, deletion,
 -- substitution or transposition.
 similarStrings :: String -> [String] -> [String]
-similarStrings s = filter (similar s)
+similarStrings = filter . similar
         where
                 similar (a:r) (b:s) = if a == b then similar r s else
                                 r == s || a:r == s || r == b:s ||

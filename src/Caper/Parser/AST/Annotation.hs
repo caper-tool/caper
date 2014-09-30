@@ -16,10 +16,6 @@ data VarExpr = Variable SourcePos String  -- ^A logical variable
 instance Show VarExpr where
         show (Variable _ s) = s
         show (WildCard _) = "_"
-        
-instance Eq VarExpr where
-        Variable _ s == Variable _ s' = s == s'
-        _ == _ = False
 {-
 instance FreeVariables VarExpr (Maybe String) where
         foldrFree f x (Variable _ s) = f (Just s) x
@@ -35,7 +31,7 @@ data ValExpr = VarValExpr SourcePos VarExpr                     -- ^Variable
 instance Show ValExpr where
         show (VarValExpr _ ve) = show ve
         show (ConstValExpr _ c) = show c
-        show (UnaryValExpr _ uo ve) = show uo ++ show ve
+        show (UnaryValExpr _ uo ve) = "(" ++ show uo ++ show ve ++ ")"
         show (BinaryValExpr _ bo ve1 ve2) = "(" ++ show ve1 ++ show bo ++ show ve2 ++ ")"
         show (SetValExpr _ ves) = "{" ++ intercalate "," (map show ves) ++ "}"
 
@@ -277,6 +273,11 @@ instance HasSourcePos AnyExpr where
         sourcePos (AnyVar e) = sourcePos e
         sourcePos (AnyVal e) = sourcePos e
         sourcePos (AnyPerm e) = sourcePos e
+
+-- |Equality instances are syntactic modulo source position.
+-- (These are really for parser testing rather than anything else.)
+makeSPEq ''VarExpr
+makeSPEq ''ValExpr
 
 instance Contextual VarExpr where
         toContext (Variable sp n) = DescriptiveContext sp $

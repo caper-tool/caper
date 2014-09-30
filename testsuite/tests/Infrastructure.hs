@@ -66,7 +66,7 @@ impliesWithRTC rtc a1 a2 = do
                         produceAssrt False a1
                         goAdmit $ do
                                 consumeAssrt a2
-                                ask >>= justCheck
+                                justCheck
         case res of
                 Just _ -> return True
                 Nothing -> return False
@@ -77,7 +77,7 @@ isValid :: Assrt -> IO Bool
 isValid a = do
         res <- runWithRTC emptyRTContext $ flip runStateT emptySymbState $ goAdmit $ do
                 consumeAssrt a
-                ask >>= justCheck
+                justCheck
         case res of
                 Just _ -> return True
                 Nothing -> return False
