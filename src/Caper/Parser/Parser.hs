@@ -15,6 +15,7 @@ import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as Token
 import Caper.Parser.AST
+import qualified Control.Monad as Monad
 
 languageDef =
   emptyDef { Token.commentStart    = "/*"
@@ -61,7 +62,7 @@ languageDef =
                                      , "=", "!=", "<", ">", ">=", "<="
                                      , "and", "or", "not", "?", ":"
                                      , "&*&", "=p=", "=v=", "$", "!"
-                                     , "==", "|->", "@", "~>"
+                                     , "==", "|->", "@", "~>", "|"
                                      ]
            }
 
@@ -91,7 +92,10 @@ rIdentifier =
 parser :: Parser [Declr]
 parser = whiteSpace >> sequenceOfDeclr
 
-sequenceOfDeclr = sepBy function whiteSpace
+sequenceOfDeclr = sepBy declaration whiteSpace
+
+declaration =  function
+           <|> region
 
 function :: Parser Declr
 function =
@@ -103,6 +107,70 @@ function =
      ens  <- optionMaybe $ reserved "ensures"
      stmt <- braces sequenceOfStmt
      return $ FunctionDeclr pos var Nothing Nothing args stmt
+
+region :: Parser Declr
+region =
+  do pos <- getPosition
+     reserved "region"
+     var <- identifier
+     args <- parens $ sepBy identifier comma
+     reserved "{"
+     reserved "guards"
+     gds <- topLevelGuardDeclaration
+     semi
+     reserved "interpretation"
+     itr <- braces $ endBy interpretation semi
+     reserved "actions"
+     act <- braces $ endBy action semi
+     reserved "}"
+     return $ RegionDeclr pos var args gds itr act
+
+topLevelGuardDeclaration :: Parser TopLevelGuardDeclr
+topLevelGuardDeclaration =  (do { char '0'; return ZeroGuardDeclr})
+                        <|> (do { gds <- guardDeclaration; return $ SomeGuardDeclr gds})
+
+guardDeclaration :: Parser GuardDeclr
+guardDeclaration = buildExpressionParser guardDeclarationOperators guardDeclarationTerm
+ 
+guardDeclarationOperators = [ [Infix  (do { pos <- getPosition; reservedOp "*"; return (ProductGD pos)}) AssocLeft]
+                          , [Infix  (do { pos <- getPosition; reservedOp "+"; return (SumGD pos    )}) AssocLeft]
+                          ]
+
+guardDeclarationTerm =  parens guardDeclaration
+                    <|> permissionGuardDeclaration
+                    <|> namedGuardDeclaration
+
+permissionGuardDeclaration =
+  do pos <- getPosition
+     reserved "%"
+     n   <- identifier
+     return $ PermissionGD pos n
+
+namedGuardDeclaration =
+  do pos <- getPosition
+     n   <- identifier
+     return $ NamedGD pos n
+
+interpretation :: Parser StateInterpretation
+interpretation =
+  do pos <- getPosition
+     c <- sepBy pureAssertion comma
+     Monad.unless (null c) (reservedOp "|")
+     s   <- valueExpression
+     i   <- assertion
+     return $ StateInterpretation pos c s i
+
+action :: Parser Action
+action =
+  do pos  <- getPosition
+     c    <- sepBy pureAssertion comma
+     Monad.unless (null c) (reservedOp "|")
+     g    <- sepBy guard (reservedOp "*")
+     reservedOp ":"
+     pre  <- valueExpression
+     reservedOp "~>"
+     post <- valueExpression
+     return $ Action pos c g pre post
 
 sequenceOfStmt :: Parser Stmt
 sequenceOfStmt =
