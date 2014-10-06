@@ -16,6 +16,7 @@ import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as Token
 import Caper.Parser.AST
 import qualified Control.Monad as Monad
+import Debug.Trace
 
 languageDef =
   emptyDef { Token.commentStart    = "/*"
@@ -366,8 +367,8 @@ assertionOperators = [ [Infix  (do { pos <- getPosition; reservedOp "&*&"; retur
                      ]
 
 assertionTerm =  parens assertion
+             <|> try (do { pos <- getPosition; a <- spatialAssertion; return (AssrtSpatial pos a)})
              <|> (do { pos <- getPosition; a <- pureAssertion; return (AssrtPure pos a)})
-             <|> (do { pos <- getPosition; a <- spatialAssertion; return (AssrtSpatial pos a)})
 
 pureAssertion :: Parser PureAssrt
 pureAssertion = buildExpressionParser pureOperators pureTerm
@@ -471,8 +472,8 @@ variablePermission =
 
 spatialAssertion :: Parser SpatialAssrt
 spatialAssertion =  try regionAssertion
-                <|> try predicate
                 <|> try cellAssertion
+                <|> try predicate
                 <|> guards
 
 regionAssertion :: Parser SpatialAssrt
@@ -496,7 +497,7 @@ predicate =
 
 cellAssertion :: Parser SpatialAssrt
 cellAssertion =
-  do pos <- getPosition
+  do pos <- trace "ABC" $ getPosition
      e1  <- valueExpression
      reservedOp "|->"
      block <- optionMaybe $ reserved "#cells"
