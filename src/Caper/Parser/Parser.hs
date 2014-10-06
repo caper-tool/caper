@@ -56,13 +56,12 @@ languageDef =
                                      , "1p"
                                      , "#cells"
                                      , "_"
-                                     , "%"
                                      ]
            , Token.reservedOpNames = ["+", "-", "*", "/", ":="
                                      , "=", "!=", "<", ">", ">=", "<="
                                      , "and", "or", "not", "?", ":"
                                      , "&*&", "=p=", "=v=", "$", "!"
-                                     , "==", "|->", "@", "~>", "|"
+                                     , "==", "|->", "@", "~>", "|", "%"
                                      ]
            }
 
@@ -103,8 +102,8 @@ function =
      reserved "function"
      var  <- identifier
      args <- parens $ sepBy identifier comma
-     req  <- optionMaybe $ reserved "requires"
-     ens  <- optionMaybe $ reserved "ensures"
+     req  <- optionMaybe $ (do { reserved "requires"; a <- assertion; semi; return a})
+     ens  <- optionMaybe $ (do { reserved "ensures"; a <- assertion; semi; return a})
      stmt <- braces sequenceOfStmt
      return $ FunctionDeclr pos var Nothing Nothing args stmt
 
@@ -142,7 +141,7 @@ guardDeclarationTerm =  parens guardDeclaration
 
 permissionGuardDeclaration =
   do pos <- getPosition
-     reserved "%"
+     reservedOp "%"
      n   <- identifier
      return $ PermissionGD pos n
 
@@ -154,17 +153,20 @@ namedGuardDeclaration =
 interpretation :: Parser StateInterpretation
 interpretation =
   do pos <- getPosition
-     c <- sepBy pureAssertion comma
-     Monad.unless (null c) (reservedOp "|")
+     c   <- conditions
      s   <- valueExpression
-     i   <- assertion
+     reservedOp ":"
+     i <- assertion
      return $ StateInterpretation pos c s i
+
+conditions :: Parser [PureAssrt]
+conditions =  try (do { d <- sepBy pureAssertion comma; reservedOp "|"; return d })
+          <|> return []
 
 action :: Parser Action
 action =
   do pos  <- getPosition
-     c    <- sepBy pureAssertion comma
-     Monad.unless (null c) (reservedOp "|")
+     c    <- conditions
      g    <- sepBy guard (reservedOp "*")
      reservedOp ":"
      pre  <- valueExpression
@@ -376,7 +378,7 @@ pureOperators = [ [Prefix (do { pos <- getPosition; reservedOp "!"; return (NotB
 pureTerm =  parens pureAssertion
         <|> (do { pos <- getPosition; reserved "true"; return (ConstBAssrt pos True)})
         <|> (do { pos <- getPosition; reserved "false"; return (ConstBAssrt pos False)})
-        <|> try binaryVariableAssertion
+        <|> try (binaryVariableAssertion)
         <|> binaryPermissionAssertion
         <|> binaryValueAssertion
 
