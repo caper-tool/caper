@@ -73,7 +73,7 @@ reservedOp = Token.reservedOp lexer -- parses an operator
 parens     = Token.parens     lexer -- parses surrounding parenthesis
 braces     = Token.braces     lexer -- parses surrounding braces
 brackets   = Token.brackets   lexer -- parses surrounding brackets
-integer    = Token.integer    lexer -- parses an integer
+decimal    = Token.decimal    lexer -- parses a natural number
 semi       = Token.semi       lexer -- parses a semicolon
 comma      = Token.comma      lexer -- parses a comma
 whiteSpace = Token.whiteSpace lexer -- parses whitespace
@@ -255,7 +255,7 @@ variable =
 
 intConst =
   do pos <- getPosition
-     i   <- integer
+     i   <- decimal
      return $ ConstAExpr pos i
 
 bTerm =  parens bExpression
@@ -368,7 +368,7 @@ variableExpression =
 
 constValue =
   do pos <- getPosition
-     c   <- integer
+     c   <- decimal
      return $ ConstValExpr pos c
 
 setValue =
