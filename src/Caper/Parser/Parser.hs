@@ -233,10 +233,8 @@ bExpression :: Parser BExpr
 bExpression = buildExpressionParser bOperators bTerm
 
 aOperators = [ [Prefix (do { pos <- getPosition; reservedOp "-"; return (NegAExpr pos            )})          ]
-             , [Infix  (do { pos <- getPosition; reservedOp "*"; return (BinaryAExpr pos Multiply)}) AssocLeft]
-             , [Infix  (do { pos <- getPosition; reservedOp "/"; return (BinaryAExpr pos Divide  )}) AssocLeft]
-             , [Infix  (do { pos <- getPosition; reservedOp "+"; return (BinaryAExpr pos Add     )}) AssocLeft]
-             , [Infix  (do { pos <- getPosition; reservedOp "-"; return (BinaryAExpr pos Subtract)}) AssocLeft]
+             , [Infix  (do { pos <- getPosition; reservedOp "*"; return (BinaryAExpr pos Multiply)}) AssocLeft, Infix  (do { pos <- getPosition; reservedOp "/"; return (BinaryAExpr pos Divide  )}) AssocLeft]
+             , [Infix  (do { pos <- getPosition; reservedOp "+"; return (BinaryAExpr pos Add     )}) AssocLeft, Infix  (do { pos <- getPosition; reservedOp "-"; return (BinaryAExpr pos Subtract)}) AssocLeft]
              ]
  
 bOperators = [ [Prefix (do { pos <- getPosition; reservedOp "not"; return (NotBExpr pos            )})          ]
@@ -341,10 +339,8 @@ valueExpression :: Parser ValExpr
 valueExpression = buildExpressionParser valueOperators valueTerm
  
 valueOperators = [ [Prefix (do { pos <- getPosition; reservedOp "-"; return (UnaryValExpr pos ValNegation )})]
-                 , [Infix  (do { pos <- getPosition; reservedOp "*"; return (BinaryValExpr pos ValMultiply)}) AssocLeft]
-                 , [Infix  (do { pos <- getPosition; reservedOp "/"; return (BinaryValExpr pos ValDivide  )}) AssocLeft]
-                 , [Infix  (do { pos <- getPosition; reservedOp "+"; return (BinaryValExpr pos ValAdd     )}) AssocLeft]
-                 , [Infix  (do { pos <- getPosition; reservedOp "-"; return (BinaryValExpr pos ValSubtract)}) AssocLeft]
+                 , [Infix  (do { pos <- getPosition; reservedOp "*"; return (BinaryValExpr pos ValMultiply)}) AssocLeft, Infix  (do { pos <- getPosition; reservedOp "/"; return (BinaryValExpr pos ValDivide  )}) AssocLeft]
+                 , [Infix  (do { pos <- getPosition; reservedOp "+"; return (BinaryValExpr pos ValAdd     )}) AssocLeft, Infix  (do { pos <- getPosition; reservedOp "-"; return (BinaryValExpr pos ValSubtract)}) AssocLeft]
                  ]
 
 valueTerm =  parens valueExpression
