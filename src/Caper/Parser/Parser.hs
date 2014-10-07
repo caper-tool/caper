@@ -16,6 +16,8 @@ import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as Token
 import Caper.Parser.AST
+import qualified Control.Monad as Monad
+import Debug.Trace
 
 languageDef =
   emptyDef { Token.commentStart    = "/*"
@@ -56,13 +58,12 @@ languageDef =
                                      , "1p"
                                      , "#cells"
                                      , "_"
-                                     , "%"
                                      ]
            , Token.reservedOpNames = ["+", "-", "*", "/", ":="
                                      , "=", "!=", "<", ">", ">=", "<="
                                      , "and", "or", "not", "?", ":"
                                      , "&*&", "=p=", "=v=", "$", "!"
-                                     , "==", "|->", "@", "~>"
+                                     , "==", "|->", "@", "~>", "|", "%"
                                      ]
            }
 
@@ -92,7 +93,10 @@ rIdentifier =
 parser :: Parser [Declr]
 parser = whiteSpace >> sequenceOfDeclr
 
-sequenceOfDeclr = sepBy function whiteSpace
+sequenceOfDeclr = sepBy declaration whiteSpace
+
+declaration =  function
+           <|> region
 
 function :: Parser Declr
 function =
@@ -100,10 +104,77 @@ function =
      reserved "function"
      var  <- identifier
      args <- parens $ sepBy identifier comma
-     req  <- optionMaybe $ reserved "requires"
-     ens  <- optionMaybe $ reserved "ensures"
+     req  <- optionMaybe $ (do { reserved "requires"; a <- assertion; semi; return a})
+     ens  <- optionMaybe $ (do { reserved "ensures"; a <- assertion; semi; return a})
      stmt <- braces sequenceOfStmt
      return $ FunctionDeclr pos var Nothing Nothing args stmt
+
+region :: Parser Declr
+region =
+  do pos <- getPosition
+     reserved "region"
+     var <- identifier
+     args <- parens $ sepBy identifier comma
+     reserved "{"
+     reserved "guards"
+     gds <- topLevelGuardDeclaration
+     semi
+     reserved "interpretation"
+     itr <- braces $ endBy interpretation semi
+     reserved "actions"
+     act <- braces $ endBy action semi
+     reserved "}"
+     return $ RegionDeclr pos var args gds itr act
+
+topLevelGuardDeclaration :: Parser TopLevelGuardDeclr
+topLevelGuardDeclaration =  (do { char '0'; return ZeroGuardDeclr})
+                        <|> (do { gds <- guardDeclaration; return $ SomeGuardDeclr gds})
+
+guardDeclaration :: Parser GuardDeclr
+guardDeclaration = buildExpressionParser guardDeclarationOperators guardDeclarationTerm
+ 
+guardDeclarationOperators = [ [Infix  (do { pos <- getPosition; reservedOp "*"; return (ProductGD pos)}) AssocLeft]
+                          , [Infix  (do { pos <- getPosition; reservedOp "+"; return (SumGD pos    )}) AssocLeft]
+                          ]
+
+guardDeclarationTerm =  parens guardDeclaration
+                    <|> permissionGuardDeclaration
+                    <|> namedGuardDeclaration
+
+permissionGuardDeclaration =
+  do pos <- getPosition
+     reservedOp "%"
+     n   <- identifier
+     return $ PermissionGD pos n
+
+namedGuardDeclaration =
+  do pos <- getPosition
+     n   <- identifier
+     return $ NamedGD pos n
+
+interpretation :: Parser StateInterpretation
+interpretation =
+  do pos <- getPosition
+     c   <- conditions
+     s   <- valueExpression
+     reservedOp ":"
+     i <- assertion
+     return $ StateInterpretation pos c s i
+
+conditions :: Parser [PureAssrt]
+conditions =  try (do { d <- sepBy pureAssertion comma; reservedOp "|"; return d })
+          <|> return []
+
+action :: Parser Action
+action =
+  do pos  <- getPosition
+     c    <- conditions
+     g    <- sepBy guard (reservedOp "*")
+     reservedOp ":"
+     pre  <- valueExpression
+     reservedOp "~>"
+     post <- valueExpression
+     return $ Action pos c g pre post
 
 sequenceOfStmt :: Parser Stmt
 sequenceOfStmt =
@@ -297,8 +368,8 @@ assertionOperators = [ [Infix  (do { pos <- getPosition; reservedOp "&*&"; retur
                      ]
 
 assertionTerm =  parens assertion
+             <|> try (do { pos <- getPosition; a <- spatialAssertion; return (AssrtSpatial pos a)})
              <|> (do { pos <- getPosition; a <- pureAssertion; return (AssrtPure pos a)})
-             <|> (do { pos <- getPosition; a <- spatialAssertion; return (AssrtSpatial pos a)})
 
 pureAssertion :: Parser PureAssrt
 pureAssertion = buildExpressionParser pureOperators pureTerm
@@ -309,7 +380,7 @@ pureOperators = [ [Prefix (do { pos <- getPosition; reservedOp "!"; return (NotB
 pureTerm =  parens pureAssertion
         <|> (do { pos <- getPosition; reserved "true"; return (ConstBAssrt pos True)})
         <|> (do { pos <- getPosition; reserved "false"; return (ConstBAssrt pos False)})
-        <|> try binaryVariableAssertion
+        <|> try (binaryVariableAssertion)
         <|> binaryPermissionAssertion
         <|> binaryValueAssertion
 
@@ -402,8 +473,8 @@ variablePermission =
 
 spatialAssertion :: Parser SpatialAssrt
 spatialAssertion =  try regionAssertion
-                <|> try predicate
                 <|> try cellAssertion
+                <|> try predicate
                 <|> guards
 
 regionAssertion :: Parser SpatialAssrt
@@ -427,7 +498,7 @@ predicate =
 
 cellAssertion :: Parser SpatialAssrt
 cellAssertion =
-  do pos <- getPosition
+  do pos <- trace "ABC" $ getPosition
      e1  <- valueExpression
      reservedOp "|->"
      block <- optionMaybe $ reserved "#cells"
