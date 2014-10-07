@@ -7,7 +7,8 @@ module Caper.Parser.Parser(
         statementParser,
         parseStatement,
         parseValueExpression,
-        valueExpressionParser
+        valueExpressionParser,
+        permissionExpression
         ) where
 
 import Text.ParserCombinators.Parsec

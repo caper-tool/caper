@@ -1,8 +1,10 @@
 
 import Test.QuickCheck
 import Test.QuickCheck.Arbitrary
+import Test.QuickCheck.Property
 import Control.Monad
 --import Debug.Trace
+import Text.Parsec (parse)
 
 import Caper.Parser.AST
 import Caper.Parser.Parser
@@ -34,5 +36,20 @@ instance Arbitrary ValExpr where
                                         return $ SetValExpr p0 s))
                                 ]
 
-testValExpr :: ValExpr -> Bool
-testValExpr ve = parseValueExpression (show ve) == ve
+instance Arbitrary PermExpr where
+        arbitrary = sized arb
+            where
+                arb n | n>=0 =
+                        frequency [(1,liftM (VarPermExpr p0) arbitrary),
+                                (1,liftM (ConstPermExpr p0) (elements [FullPerm, EmptyPerm])),
+                                (n,liftM (UnaryPermExpr p0 Complement) (arb (n-1))),
+                                (n,liftM2 (BinaryPermExpr p0 Composition) (arb (n `div` 2)) (arb (n `div` 2)))]
+
+
+testValExpr :: ValExpr -> Property
+testValExpr ve = parseValueExpression (show ve) === ve
+
+testPermExpr :: PermExpr -> Property
+testPermExpr pe = case parse permissionExpression "" (show pe) of
+        Left e -> counterexample (show e) failed
+        Right pe' -> pe' === pe

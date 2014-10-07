@@ -278,6 +278,7 @@ instance HasSourcePos AnyExpr where
 -- (These are really for parser testing rather than anything else.)
 makeSPEq ''VarExpr
 makeSPEq ''ValExpr
+makeSPEq ''PermExpr
 
 instance Contextual VarExpr where
         toContext (Variable sp n) = DescriptiveContext sp $
