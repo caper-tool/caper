@@ -90,7 +90,7 @@ data PermExpr = VarPermExpr SourcePos VarExpr                           -- ^Vari
 instance Show PermExpr where
         show (VarPermExpr _ ve) = show ve
         show (ConstPermExpr _ pc) = show pc
-        show (UnaryPermExpr _ uo pe) = show uo ++ show pe
+        show (UnaryPermExpr _ uo pe) = "(" ++ show uo ++ show pe ++ ")"
         show (BinaryPermExpr _ bo pe1 pe2) = "(" ++ show pe1 ++ show bo ++ show pe2 ++ ")"
 
 instance FreeVariables PermExpr VarExpr where

@@ -1,6 +1,7 @@
 import Test.HUnit
 import Control.Monad
 import Text.Parsec (parse)
+import Data.Either
 
 import Caper.Parser.AST
 import Caper.Parser.Parser
@@ -22,13 +23,13 @@ testNegative = pve "- - 1" `eeq` (Right (UnaryValExpr p0 ValNegation (UnaryValEx
 stripParens :: String -> String
 stripParens = filter (not . (`elem` "()"))
 
-eqWOParens :: String -> Test
-eqWOParens s = (stripParens s) ~: (r0 === r1) ~? ("expected: " ++ show r0 ++ "\nobserved: " ++ show r1)
+eqWOParens :: (Eq a, Show a, Show b) => (String -> Either b a) -> String -> Test
+eqWOParens prse s = (stripParens s) ~: (r0 === r1) ~? ("expected: " ++ show r0 ++ "\nobserved: " ++ show r1)
         where
-                r0 = pve s
-                r1 = pve (stripParens s)
+                r0 = prse s
+                r1 = prse (stripParens s)
 
-assocTests = "Associativity/precedence tests" ~: map eqWOParens [
+valAssocTests = "Associativity/precedence tests" ~: map (eqWOParens pve) [
         "(1 + 2) + 3",
         "(1 - 2) - 3",
         "(a * b) * c",
@@ -53,3 +54,29 @@ assocTests = "Associativity/precedence tests" ~: map eqWOParens [
         "1 - ((2 * 3) / 4)",
         "2 - ((1 / 3) * 4)"
         ]
+
+checkNoParse :: (String -> Either a b) -> String -> Test
+checkNoParse prse s = s ~: either (\_ -> True) (\_ -> False) (prse s) ~? "Should not parse"
+
+valNegationTests = "Negation non-parsing tests" ~: map (checkNoParse pve) [
+        "- - 1", "--1", "-- 1", "- -1", "+1", "1+-1","1 + - 1"]
+
+eqWOParensNP :: (Eq a, Show a, Show b) => (String -> Either b a) -> String -> Test
+eqWOParensNP prse s = (stripParens s) ~: (r0 `eeq` r1) ~? ("expected: " ++ show r0 ++ "\nobserved: " ++ show r1)
+        where
+                r0 = prse s
+                r1 = prse (stripParens s)
+
+valEQNPTests = "Should either not parse without parens or give same result" ~: map (eqWOParensNP pve) [
+        "(1 + (- 1))",
+        "(1+(-1))",
+        "(a+(-2))",
+        "(a+(-b))",
+        "(1+(-(-2)))",
+        "(3*(-7))",
+        "(2/(-2))",
+        "(a-(-b))",
+        "(1-(-2))",
+        "(-(-2))"]
+
+
