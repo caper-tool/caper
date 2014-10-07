@@ -4,7 +4,7 @@ import Test.QuickCheck.Arbitrary
 import Test.QuickCheck.Property
 import Control.Monad
 --import Debug.Trace
-import Text.Parsec (parse)
+import Text.Parsec (parse, eof)
 
 import Caper.Parser.AST
 import Caper.Parser.Parser
@@ -53,3 +53,21 @@ testPermExpr :: PermExpr -> Property
 testPermExpr pe = case parse permissionExpression "" (show pe) of
         Left e -> counterexample (show e) failed
         Right pe' -> pe' === pe
+
+pseudoPermString :: Gen String
+pseudoPermString = sized arb
+        where
+                arb 0 = return ""
+                arb n | n > 0 = do
+                        l <- (elements "01p~$xP")
+                        r <- (arb (n-1))
+                        return (l : r)
+
+stripParensSpaces s = [x | x <- s, x `notElem` "() "]
+
+testPermBack :: Gen Property
+testPermBack = liftM tpb pseudoPermString
+        where
+                tpb s = case parse (do {r <- permissionExpression; eof; return r}) "" s of
+                        Left _ -> property succeeded
+                        Right pe' -> verbose $ stripParensSpaces (show pe') === s

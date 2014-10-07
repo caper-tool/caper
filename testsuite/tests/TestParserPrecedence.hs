@@ -18,6 +18,8 @@ eeq _ _ = True
 
 pve = parse valueExpressionParser ""
 
+ppe = parse permissionExpression ""
+
 testNegative = pve "- - 1" `eeq` (Right (UnaryValExpr p0 ValNegation (UnaryValExpr p0 ValNegation (ConstValExpr p0 1))))
 
 stripParens :: String -> String
@@ -79,4 +81,14 @@ valEQNPTests = "Should either not parse without parens or give same result" ~: m
         "(1-(-2))",
         "(-(-2))"]
 
+permAssocTests = "Associativity/precedence tests" ~: map (eqWOParens ppe) [
+        "(1p $ 0p)",
+        "((1p $ 0p) $ 1p)",
+        "(((a$b)$c)$d)",
+        "(~a)"
+        ]
+permEQNPTests = "Should either not parse without parens or give same result" ~: map (eqWOParensNP ppe) [
+        "(a$(~b))",
+        "((~a)$b)",
+        "(~(~1p))"]
 
