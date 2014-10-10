@@ -498,7 +498,7 @@ predicate =
 
 cellAssertion :: Parser SpatialAssrt
 cellAssertion =
-  do pos <- trace "ABC" $ getPosition
+  do pos <- getPosition
      e1  <- valueExpression
      reservedOp "|->"
      block <- optionMaybe $ reserved "#cells"

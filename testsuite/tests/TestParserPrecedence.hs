@@ -1,6 +1,6 @@
 import Test.HUnit
 import Control.Monad
-import Text.Parsec (parse)
+import Text.Parsec (parse,eol)
 import Data.Either
 
 import Caper.Parser.AST
@@ -18,7 +18,7 @@ eeq _ _ = True
 
 pve = parse valueExpressionParser ""
 
-ppe = parse permissionExpression ""
+ppe = parse (do {r <- permissionExpression; eof; return r}) ""
 
 testNegative = pve "- - 1" `eeq` (Right (UnaryValExpr p0 ValNegation (UnaryValExpr p0 ValNegation (ConstValExpr p0 1))))
 

@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, UndecidableInstances, OverlappingInstances #-}
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, UndecidableInstances, OverlappingInstances, TypeSynonymInstances, FlexibleContexts #-}
 {- |Infrastructure for tests. -}
 module Infrastructure where
 import Control.Monad.Reader
@@ -26,6 +26,14 @@ import Text.Parsec.Pos
 instance MonadReader r m => MonadReader r (ReaderT r' m) where
         ask = lift ask
         local m = hoist (local m)
+
+runNoContext :: RaiseT (LoggerT IO) a -> IO a
+runNoContext a = do
+        (r, log) <- runLoggerT $ runRaiseT a
+        mapM_ print log
+        case r of
+                Left ex -> error (show ex)
+                Right res -> return res
 
 
 runWithRTC' :: RegionTypeContext ->
