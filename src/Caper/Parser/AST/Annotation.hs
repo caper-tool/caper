@@ -162,9 +162,9 @@ instance FreeVariables CellAssrt VarExpr where
 
 data AnyExpr = AnyVar VarExpr | AnyVal ValExpr | AnyPerm PermExpr
 instance Show AnyExpr where
-        show (AnyVar e) = show e
-        show (AnyVal e) = show e
-        show (AnyPerm e) = show e
+        show (AnyVar e) = show e -- ++ "::VAR"
+        show (AnyVal e) = show e -- ++ "::VAL"
+        show (AnyPerm e) = show e -- ++ "::PERM"
 
 -- |Region assertions
 data RegionAssrt = Region {

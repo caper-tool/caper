@@ -80,6 +80,7 @@ natural    = Token.natural    lexer -- parses a natural number
 semi       = Token.semi       lexer -- parses a semicolon
 comma      = Token.comma      lexer -- parses a comma
 whiteSpace = Token.whiteSpace lexer -- parses whitespace
+symbol     = Token.symbol     lexer
 
 rIdentifier =
   do s <- upper
@@ -482,13 +483,24 @@ regionAssertion :: Parser SpatialAssrt
 regionAssertion =
   do pos  <- getPosition
      t    <- rIdentifier
-     reserved "("
+     symbol "("
      v    <- identifier
      comma
-     args <- endBy anyExpression comma
-     s    <- valueExpression
-     reserved ")"
+     (args, s) <- remargs
      return $ SARegion (Region pos t v args s)
+  where
+     remargs = (do
+                arg <- (try $ do
+                        arg <- anyExpression
+                        comma
+                        return arg)
+                (args',s) <- remargs
+                return (arg : args', s))
+        <|> (do
+                s <- valueExpression
+                symbol ")"
+                return ([],s))
+                
 
 predicate :: Parser SpatialAssrt
 predicate =
