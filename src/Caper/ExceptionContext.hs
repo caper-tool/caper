@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleInstances #-}
 module Caper.ExceptionContext where
 
 import Text.ParserCombinators.Parsec
@@ -21,4 +22,5 @@ instance Contextual ExceptionContext where
         toContext = id
 class ECLenses c where
         exceptionContext :: Simple Lens c [ExceptionContext] 
-        
+instance ECLenses [ExceptionContext] where
+        exceptionContext = lens id (\_ y -> y)

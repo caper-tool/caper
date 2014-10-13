@@ -1,6 +1,5 @@
-{-# LANGUAGE FlexibleInstances, OverlappingInstances,
-        FlexibleContexts, UndecidableInstances, Rank2Types,
-        GeneralizedNewtypeDeriving
+{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, OverlappingInstances,
+        FlexibleContexts, UndecidableInstances, Rank2Types
          #-}
 module Caper.Logger where
 import Data.Set (Set)
@@ -39,11 +38,10 @@ instance Show LogEvent where
                 
 
 type Log = [([ExceptionContext], LogEvent)]
---type LoggerT = WriterT Log
-newtype LoggerT m a = LoggerT (WriterT Log m a) deriving (Monad,MonadHoist,MonadIO)
+type LoggerT = WriterT Log
 
 runLoggerT :: LoggerT m a -> m (a, Log)
-runLoggerT (LoggerT w) = runWriterT w
+runLoggerT = runWriterT
 
 class Monad m => MonadLogger m where
         logAll :: Log -> m ()
@@ -63,7 +61,9 @@ liftLoggerT :: (Monad n, MonadLogger m) =>
         (forall b. n b -> m b) -> LoggerT n a -> m a
 liftLoggerT f = joinLoggerT . hoist f
 
-
+instance (Monad m) => MonadLogger (LoggerT m) where
+        logAll = tell
+        logEventContext ec = tell [ec] 
 
 instance (MonadTrans t, Monad (t m), MonadLogger m) => MonadLogger (t m) where
         logAll = lift . logAll
@@ -77,10 +77,6 @@ instance (MonadLogger m) => MonadLogger (ReaderT [ExceptionContext] m) where
         logEventContext (ec,e) = do
                 ctx <- ask
                 lift $ logEventContext (ec ++ ctx, e)
-
-instance (Monad m) => MonadLogger (LoggerT m) where
-        logAll = LoggerT . tell
-        logEventContext ec = logAll [ec] 
 
 
 {-

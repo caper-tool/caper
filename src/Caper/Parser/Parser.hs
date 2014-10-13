@@ -8,7 +8,8 @@ module Caper.Parser.Parser(
         parseStatement,
         parseValueExpression,
         valueExpressionParser,
-        permissionExpression
+        permissionExpression,
+        regionAssertion
         ) where
 
 import Text.ParserCombinators.Parsec
@@ -24,7 +25,7 @@ languageDef =
            , Token.commentEnd      = "*/"
            , Token.commentLine     = "//"
            , Token.identStart      = letter
-           , Token.identLetter     = alphaNum
+           , Token.identLetter     = alphaNum  -- FIXME : '_' should be allowed (non-initially) in identifiers
            , Token.caseSensitive   = True
            , Token.reservedNames   = [ "if"
                                      , "else"
@@ -80,12 +81,12 @@ semi       = Token.semi       lexer -- parses a semicolon
 comma      = Token.comma      lexer -- parses a comma
 whiteSpace = Token.whiteSpace lexer -- parses whitespace
 
-pIdentifier =
+rIdentifier =
   do s <- upper
      r <- identifier
      return $ s : r
 
-rIdentifier =
+pIdentifier =
   do s <- lower
      r <- identifier
      return $ s : r
@@ -113,7 +114,7 @@ region :: Parser Declr
 region =
   do pos <- getPosition
      reserved "region"
-     var <- identifier
+     var <- rIdentifier
      args <- parens $ sepBy identifier comma
      reserved "{"
      reserved "guards"
