@@ -138,3 +138,7 @@ liftTUMismatch (Right r) = return r
 
 contextualise :: (Contextual a, MonadRaise m) => a -> m b -> m b
 contextualise = addContext . toContext 
+
+showException :: ([ExceptionContext], CaperException) -> String
+showException (ec, e) = show e ++ "\n" ++
+        concat ["  " ++ show c ++ "\n" | c <- ec]  

@@ -27,12 +27,12 @@ instance MonadReader r m => MonadReader r (ReaderT r' m) where
         ask = lift ask
         local m = hoist (local m)
 
-runNoContext :: RaiseT (ReaderT [ExceptionContext] (LoggerT IO)) a -> IO a
+runNoContext :: RaiseT (ReaderT [ExceptionContext] (HLoggerT IO)) a -> IO a
 runNoContext a = do
-        (r, log) <- runLoggerT $ flip runReaderT [] $ runRaiseT a
-        mapM_ print log
+        r <- runErrLogger $ flip runReaderT [] $ runRaiseT a
+        -- mapM_ print log
         case r of
-                Left ex -> error (show ex)
+                Left ex -> error (showException ex)
                 Right res -> return res
 
 

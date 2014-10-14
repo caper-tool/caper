@@ -15,7 +15,15 @@ s = "region RegionA(r,x) {\
 \  actions {\
 \    : 0 ~> 1;\
 \  }\
+\}\n\
+\ region RegionB(x,y,z) {\
+\   guards 0;\
+\   interpretation {\
+\     0 : x@(G[y]) &*& RegionA(z,9);\
+\   }\
+\   actions { }\
 \}"
+
 
 
 

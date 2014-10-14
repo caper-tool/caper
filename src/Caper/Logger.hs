@@ -1,11 +1,13 @@
 {-# LANGUAGE TypeSynonymInstances, FlexibleInstances, OverlappingInstances,
-        FlexibleContexts, UndecidableInstances, Rank2Types
+        FlexibleContexts, UndecidableInstances, Rank2Types,
+        GeneralizedNewtypeDeriving
          #-}
 module Caper.Logger where
 import Data.Set (Set)
 import qualified Data.Set
 import Control.Monad.Writer
 import Control.Monad.Reader
+import System.IO
 
 import Caper.Utils.MonadHoist
 import Caper.ProverDatatypes
@@ -77,6 +79,19 @@ instance (MonadLogger m) => MonadLogger (ReaderT [ExceptionContext] m) where
         logEventContext (ec,e) = do
                 ctx <- ask
                 lift $ logEventContext (ec ++ ctx, e)
+
+newtype HLoggerT m a = HLoggerT (ReaderT Handle m a)
+        deriving (Monad,MonadIO,MonadHoist,Functor,MonadPlus)
+
+instance (MonadIO m) => MonadLogger (HLoggerT m) where
+        logEventContext (ec, e) = HLoggerT $ do
+                h <- ask
+                liftIO $ do
+                        hPutStrLn h $ show e  
+                        mapM_ (hPutStrLn h . ("  " ++) . show) ec
+
+runErrLogger :: HLoggerT m a -> m a
+runErrLogger (HLoggerT x) = runReaderT x stderr
 
 
 {-

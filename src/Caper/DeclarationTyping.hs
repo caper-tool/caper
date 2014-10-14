@@ -11,6 +11,8 @@ import Control.Monad.State hiding (mapM_)
 import Data.List hiding (foldl)
 import Control.Lens.Indexed
 
+-- import Debug.Trace
+
 import Caper.Logger
 import Caper.Parser.AST
 import qualified Caper.TypingContext as TC
@@ -32,7 +34,8 @@ bindE = TC.bind
 -- exception
 bindR :: (Ord v, MonadState (TC.TContext v VariableType) m, MonadRaise m) =>
         v -> VariableType -> m ()
-bindR key val = get >>= liftTUMismatch . bindE key val >>= put
+bindR key val = 
+         get >>= liftTUMismatch . bindE key val >>= put
 
 -- |'TC.unify', but specialised for Either
 unifyE :: (Ord v, Eq t) => 
@@ -44,7 +47,8 @@ unifyE = TC.unify
 -- raising an exception.
 unifyR :: (Ord v, MonadState (TC.TContext v VariableType) m, MonadRaise m) =>
         v -> v -> m ()
-unifyR k1 k2 = get >>= liftTUMismatch . unifyE k1 k2 >>= put
+unifyR k1 k2 =
+        get >>= liftTUMismatch . unifyE k1 k2 >>= put
 
 
 {- |Determine the parameter typing for the given declarations.
@@ -56,7 +60,8 @@ typeDeclarations :: (MonadLogger m, MonadRaise m) =>
         [Declr] -> m (Map String [(String, VariableType)])
 typeDeclarations decs = do
                 let decCounts = foldl decCount Map.empty decs
-                tc <- flip execStateT TC.empty $
+                let tc0 = ifoldl initialDec TC.empty decCounts
+                tc <- flip execStateT tc0 $
                                 mapM_ (typeDeclaration decCounts) decs
                 foldlM (tdm tc) Map.empty decs
         where
@@ -77,6 +82,10 @@ typeDeclarations decs = do
                                         ++ rtname ++ "' has no type."
                         return $ Map.insert rtname pts m
                 tdm _ m _ = return m
+                initialDec i m v =
+                        (either undefined id . bindE (Left (i,0)) VTRegionID) $ 
+                        TC.declareAll [Left (i, n) | n <- [0..v - 1]]
+                                                m
 
 
 typeDeclaration :: (MonadState (TC.TContext (Either (String,Int) String) VariableType) m,
@@ -85,10 +94,6 @@ typeDeclaration :: (MonadState (TC.TContext (Either (String,Int) String) Variabl
         Declr -> m ()
 typeDeclaration decCounts dc@(RegionDeclr sp rtname rparas gdecs sis actions) =
           contextualise dc $ do
-                modify $ TC.declareAll [Left (rtname, n) |
-                                n <- [0..length rparas - 1]]
-                modify $ either undefined id . bindE (Left (rtname, 0))
-                                VTRegionID
                 mapM_ (typeStateInterp decCounts resVar Left) sis
                 mapM_ (typeAction resVar) actions
         where

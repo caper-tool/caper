@@ -14,7 +14,7 @@ data ExceptionContext =
 instance Show ExceptionContext where
         show (StringContext s) = s
         show (SourcePosContext sp) = show sp
-        show (DescriptiveContext sp s) = show sp ++ ": " ++ show s
+        show (DescriptiveContext sp s) = show sp ++ ": " ++ s
 
 class Contextual a where
         toContext :: a -> ExceptionContext

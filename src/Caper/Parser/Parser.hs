@@ -25,7 +25,7 @@ languageDef =
            , Token.commentEnd      = "*/"
            , Token.commentLine     = "//"
            , Token.identStart      = letter
-           , Token.identLetter     = alphaNum  -- FIXME : '_' should be allowed (non-initially) in identifiers
+           , Token.identLetter     = alphaNum <|> char '_'  -- FIXED? : '_' should be allowed (non-initially) in identifiers
            , Token.caseSensitive   = True
            , Token.reservedNames   = [ "if"
                                      , "else"
@@ -486,7 +486,7 @@ regionAssertion =
      symbol "("
      v    <- identifier
      comma
-     (args, s) <- remargs
+     (args, s) <- remargs <?> "','-separated list of value/permission expressions"
      return $ SARegion (Region pos t v args s)
   where
      remargs = (do
@@ -541,10 +541,13 @@ guard =
                        Just m  -> return $ ParamGuard pos n m
        Just l  -> return $ PermGuard pos n l
 
+-- |Parse an 'AnyExpr', provided it's followed by ',', ';' or ')'.
 anyExpression :: Parser AnyExpr
-anyExpression =  try (do { e <- valueExpression; return (AnyVal e) })
-             <|> try (do { e <- permissionExpression; return (AnyPerm e) })
-             <|> (do { e <- variableExpression; return (AnyVar e) })
+anyExpression =  try (do { e <- variableExpression; checkNext; return (AnyVar e) })
+             <|> try (do { e <- permissionExpression; checkNext; return (AnyPerm e) })
+             <|> (do { e <- valueExpression; checkNext; return (AnyVal e) })
+        where
+                checkNext = lookAhead (try (comma <|> semi <|> symbol ")"))
 
 
 spatialAssertionParser :: Parser SpatialAssrt
