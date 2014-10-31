@@ -1,6 +1,7 @@
 --import PermissionsInterface
-import ProverDatatypes
-import PermissionsI
+import Caper.ProverDatatypes
+import Caper.PermissionsI
+import Caper.PermissionsSMT
 --import PermissionsE
 
 fpf1 = FOFExists "v" $ FOFForAll "w" $ FOFAtom $ PADis (PEVar "v") (PEVar "w")
@@ -21,13 +22,16 @@ provers = do
 	prel <- tptpBAPrelude
 	return (TPProver (), EPProver prel "c:\\cygwin64\\home\\Thomas\\E\\PROVER\\eprover.exe")
 --}
+{--
 main = mapM_ doit [1000..1010]
     where
       doit n = do
         let f = softEq n
-        r <- permCheckTree f
+        r <- permCheckBigInt f
         --print f
         print r
+--}
+main = permCheckBigInt fpf6 >>= print
 
 deepEq n = de ["x" ++ show k | k <- [1..n]]
         where
