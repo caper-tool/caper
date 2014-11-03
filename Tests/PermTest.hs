@@ -2,6 +2,8 @@
 import Caper.ProverDatatypes
 import Caper.PermissionsI
 import Caper.PermissionsSMT
+-- import Caper.PermissionsE
+import Caper.Provers
 --import PermissionsE
 
 fpf1 = FOFExists "v" $ FOFForAll "w" $ FOFAtom $ PADis (PEVar "v") (PEVar "w")

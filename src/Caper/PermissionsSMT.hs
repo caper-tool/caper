@@ -6,12 +6,18 @@ import Numeric
 import Data.List
 import Data.Bits
 import Data.Maybe
+import Z3.Monad
+import Control.Monad
 
 import Caper.ProverDatatypes
 
 toBinary :: Int -> Integer -> String
 toBinary bitcount v = "#b" ++ (tail $ showIntAtBase 2 (head . show)
                 ((v .&. (2 ^ (2 ^ bitcount) - 1)) + 2 ^ (2 ^ bitcount)) "")
+
+toZ3BV :: Int -> Integer -> Z3 AST
+toZ3BV bitcount v = 
+                mkInt2bv (2^bitcount) =<< mkInt v
 
 -- | Compute bit mask for a permission expression
 smtpe :: forall v. Eq v => [v] -> PermissionExpression v -> Integer
@@ -34,6 +40,76 @@ smtdjs :: Eq v => [v] -> PermissionExpression v -> [Integer]
 smtdjs ctx (PESum e1 e2) = (smtpe ctx e1 .&. smtpe ctx e2) : smtdjs ctx e1 ++ smtdjs ctx e2
 smtdjs ctx (PECompl e) = smtdjs ctx e
 smtdjs ctx _ = []
+
+z3ifyQuant :: Eq v => Bool -> [v] -> v -> FOF PermissionAtomic v -> Z3 AST
+z3ifyQuant isForall ctx v f = do
+                -- Old bit vector
+                bits <- if l == 0 then toZ3BV 0 1
+                        else (mkBound 1 =<< mkBvSort (2^l))
+                bsymb <- mkStringSymbol ("bits" ++ show l)
+                newbvsort <- mkBvSort (2^(l+1))
+                newbits <- mkBound 0 newbvsort
+                ex1 <- mkExtract (2^l - 1) 0 newbits
+                ex2 <- mkExtract (2^(l+1) - 1) (2^l) newbits
+                extracts <- mkBvor ex1 ex2
+                cond <- mkEq bits extracts
+                rec <- z3ify ctx' f
+                imp <- mkImplies cond rec
+                (if isForall then mkForall else mkExists)
+                        [] [bsymb] [newbvsort] imp
+        where
+                ctx' = v : ctx
+                l = length ctx
+
+z3ify :: Eq v => [v] -> FOF PermissionAtomic v -> Z3 AST
+z3ify ctx (FOFForAll v f) = z3ifyQuant True ctx v f
+z3ify ctx (FOFExists v f) = z3ifyQuant False ctx v f
+z3ify ctx (FOFAtom atm) = do
+                bits <- if l == 0 then toBin 1
+                        else mkBound 0 =<< mkBvSort (2^l)
+                conjs <- forM (masks atm) $ \msk -> do
+                        bvand <- mkBvand bits =<< toBin msk
+                        zro <- toBin 0
+                        mkEq zro bvand
+                mkAnd conjs
+        where
+                l = length ctx
+                toBin = toZ3BV l
+                masks (PADis e1 e2) = (smtpe ctx e1 .&. smtpe ctx e2) : smtdjs ctx e1 ++ smtdjs ctx e2
+                masks (PAEq e1 e2) = (smtpe ctx (PECompl e1) .&. smtpe ctx e2) : 
+                        (smtpe ctx e1 .&. smtpe ctx (PECompl e2)) :
+                                smtdjs ctx e1 ++ smtdjs ctx e2
+z3ify ctx (FOFAnd f1 f2) = do
+                r1 <- z3ify ctx f1
+                r2 <- z3ify ctx f2
+                mkAnd [r1, r2] 
+z3ify ctx (FOFOr f1 f2) = do
+                r1 <- z3ify ctx f1
+                r2 <- z3ify ctx f2
+                mkOr [r1, r2]
+z3ify ctx (FOFImpl f1 f2) = do
+                r1 <- z3ify ctx f1
+                r2 <- z3ify ctx f2
+                mkImplies r1 r2
+z3ify ctx (FOFNot f1) = mkNot =<< z3ify ctx f1
+z3ify ctx FOFFalse = mkFalse
+z3ify ctx FOFTrue = mkTrue
+
+permCheckZ3 :: Eq v => Maybe Int -> FOF PermissionAtomic v -> IO (Maybe Bool)
+permCheckZ3 timeout f = evalZ3With Nothing opts $ do
+                f' <- z3ify [] f
+                assertCnstr =<< mkNot f'
+                r <- check
+                return $ case r of
+                        Sat -> Just False
+                        Unsat -> Just True
+                        _ -> Nothing
+        where
+                opts = case timeout of
+                        (Just x) -> if x > 0 then opt "SOFT_TIMEOUT" x else stdOpts
+                        _ -> stdOpts
+                 
+
 
 smtify :: Eq v => String -> [v] -> FOF PermissionAtomic v -> String
 smtify bits ctx (FOFForAll v f) = "(forall ((" ++ newbits ++ " (_ BitVec "
