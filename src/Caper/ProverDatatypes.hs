@@ -39,14 +39,15 @@ data PermissionExpression v = PEFull
                         | PEVar v
                         | PESum (PermissionExpression v) (PermissionExpression v)
                         | PECompl (PermissionExpression v)
-                        deriving (Eq,Ord,Functor, Foldable, Traversable)
+                        deriving (Eq,Ord,Functor, Foldable, Traversable, Show)
+{-
 instance Show v => Show (PermissionExpression v) where
         show PEFull = "1"
         show PEZero = "0"
         show (PESum e1 e2) = "(" ++ show e1 ++ " + " ++ show e2 ++ ")"
         show (PECompl e) = "(1 - " ++ show e ++ ")"
         show (PEVar v) = show v
-
+-}
 instance Monad PermissionExpression where
         return = PEVar
         (PEVar v) >>= b = b v
@@ -65,7 +66,7 @@ instance Expression PermissionExpression where
 data PermissionAtomic v =
                  PAEq (PermissionExpression v) (PermissionExpression v)
                 | PADis (PermissionExpression v) (PermissionExpression v)
-                deriving (Functor, Foldable, Traversable, Eq, Ord)
+                deriving (Functor, Foldable, Traversable, Eq, Ord, Show)
 
 class ExpressionSub c e where
         exprSub :: (v -> e w) -> c v -> c w
@@ -77,10 +78,11 @@ instance ExpressionSub PermissionExpression e => ExpressionSub PermissionAtomic 
         exprSub s (PAEq x y) = PAEq (exprSub s x) (exprSub s y)
         exprSub s (PADis x y) = PADis (exprSub s x) (exprSub s y)
 
+{-
 instance Show v => Show (PermissionAtomic v) where
         show (PAEq v1 v2) = show v1 ++ " =p= " ++ show v2
         show (PADis v1 v2) = show v1 ++ " # " ++ show v2
-
+-}
 
 type PermissionLiteral = Literal PermissionAtomic
 
@@ -243,8 +245,8 @@ data FOF a v =
         | FOFNot (FOF a v)
         | FOFFalse
         | FOFTrue
-        deriving (Eq, Ord, Functor, Foldable, Traversable)
-        
+        deriving (Eq, Ord, Functor, Foldable, Traversable, Show)
+{-        
 instance (Show (a v), Show v) => Show (FOF a v) where
         show FOFFalse = "_|_"
         show FOFTrue = "T"
@@ -255,7 +257,7 @@ instance (Show (a v), Show v) => Show (FOF a v) where
         show (FOFImpl f1 f2) = "(" ++ show f1 ++ " => " ++ show f2 ++ ")"
         show (FOFForAll v f1) = "![" ++ show v ++ "](" ++ show f1 ++ ")"
         show (FOFExists v f1) = "?[" ++ show v ++ "](" ++ show f1 ++ ")"
-
+-}
 instance (Foldable a) => FreeVariables (FOF a b) b where
         foldrFree f = ff []
                 where

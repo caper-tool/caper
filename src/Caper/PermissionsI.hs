@@ -223,8 +223,8 @@ isPCEmpty d et = isNPCEmpty et . correctIndexes d . simplify . normalise
 
 -- |Check a permission assertion using an Integer representation of binary trees.
 permCheckBigInt :: PD.PermissionsProver
-permCheckBigInt = return . Just . formulaEvalBigInt . toPermSentence
+permCheckBigInt f = return $! Just $! formulaEvalBigInt $ toPermSentence f
 
 -- |Check a permission assertion using a binary-tree representation.
 permCheckTree :: PD.PermissionsProver
-permCheckTree = return . Just . formulaEvalTree . toPermSentence
+permCheckTree f = return $! Just $! formulaEvalTree $ toPermSentence f

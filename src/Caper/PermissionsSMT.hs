@@ -8,6 +8,7 @@ import Data.Bits
 import Data.Maybe
 import Z3.Monad
 import Control.Monad
+import Control.Monad.IO.Class
 
 import Caper.ProverDatatypes
 
@@ -54,9 +55,12 @@ z3ifyQuant isForall ctx v f = do
                 extracts <- mkBvor ex1 ex2
                 cond <- mkEq bits extracts
                 rec <- z3ify ctx' f
-                imp <- mkImplies cond rec
-                (if isForall then mkForall else mkExists)
-                        [] [bsymb] [newbvsort] imp
+                if isForall then do
+                        imp <- mkImplies cond rec
+                        mkForall [] [bsymb] [newbvsort] imp
+                    else do
+                        cnj <- mkAnd [cond,rec]
+                        mkExists [] [bsymb] [newbvsort] cnj
         where
                 ctx' = v : ctx
                 l = length ctx
@@ -98,6 +102,7 @@ z3ify ctx FOFTrue = mkTrue
 permCheckZ3 :: Eq v => Maybe Int -> FOF PermissionAtomic v -> IO (Maybe Bool)
 permCheckZ3 timeout f = evalZ3With Nothing opts $ do
                 f' <- z3ify [] f
+                --liftIO . putStrLn =<< astToString f'
                 assertCnstr =<< mkNot f'
                 r <- check
                 return $ case r of
