@@ -160,6 +160,10 @@ timeoutSem n sem = unless (n <= 0) $
   do threadDelay n
      MSem.signal sem
 
+-- TODO: Handle errors removing files more gracefully;
+--       Ensure termination of subprocesses on error;
+--       Handle errors in terminating subprocesses
+
 checkBothWays :: Show v => EPProver -> BAFormula v -> IO (Maybe Bool)
 checkBothWays epp formula = trace ("Calling E on:\n" ++ show formula) $ bracket
         (do

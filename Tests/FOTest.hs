@@ -1,18 +1,19 @@
 {-# LANGUAGE FlexibleContexts #-}
 
 import Test.QuickCheck
-import Control.Monad
-import Prelude hiding (foldl, foldr)
+import Control.Monad hiding (forM_)
+import Prelude hiding (foldl, foldr, concat)
 import Data.Foldable
 import qualified Data.Set as Set
 import Test.QuickCheck.Monadic
 import Text.Printf
 --import Control.Exception
 import System.CPUTime
--- import Data.Time.Clock
+import Data.Time.Clock
 import Control.Monad.IO.Class
 import System.Timeout
 import System.Win32.Time
+import Data.List (intercalate)
 
 import System.IO.Unsafe
 
@@ -26,7 +27,27 @@ import Caper.FirstOrder
 
 
 
+class Sized c where
+        size :: c -> Int
 
+instance Sized (PermissionExpression v) where
+        size (PESum x y) = 1 + size x + size y
+        size (PECompl x) = 1 + size x
+        size _ = 1
+
+instance Sized (PermissionAtomic v) where
+        size (PAEq e1 e2) = 1 + size e1 + size e2
+        size (PADis e1 e2) = 1 + size e1 + size e2
+
+instance Sized (a v) => Sized (FOF a v) where
+        size (FOFForAll _ f) = 1 + size f
+        size (FOFExists _ f) = 1 + size f
+        size (FOFAtom a) = size a
+        size (FOFAnd x y) = size x + size y
+        size (FOFOr x y) = size x + size y
+        size (FOFImpl x y) = size x + size y
+        size (FOFNot x) = size x
+        size _ = 0
 
 newtype StringVar = StringVar String deriving (Eq, Ord)
 instance Show StringVar where
@@ -104,7 +125,7 @@ timeoutSolver n f x = timeout n (f x) >>= return . join
 
 prop_ProverEquivSMT :: FOF PermissionAtomic StringVar -> Property
 prop_ProverEquivSMT x = quantifierDepth x <= 6 ==> let x' = simplify (close x) in
-                        quantifierDepth x' <= 6 ==> monadicIO $ do
+                        quantifierDepth x' <= 5 ==> monadicIO $ do
                                 liftIO $ putStrLn "Z3 "
                                 r2 <- run $ time $ permCheckZ3 (Just 10000) x'
                                 liftIO $ putStrLn "BigInt "
@@ -112,7 +133,7 @@ prop_ProverEquivSMT x = quantifierDepth x <= 6 ==> let x' = simplify (close x) i
                                 assert $ r1 == r2
                                         
 
-main = quickCheck prop_ProverEquivSMT
+--main = quickCheck prop_ProverEquivSMT
 
 args' = stdArgs {maxSize = 6}
 
@@ -131,9 +152,19 @@ time a = do
     --let diff = (fromIntegral (end - start)) / (10^12)
     --printf "Computation time: %0.6f sec\n" (diff :: Double)
     return v
+
+doTime :: IO t -> IO (t, Float)
+doTime a = do
+        start <- queryPerformanceCounter
+        v <- a
+        end <- v `seq` queryPerformanceCounter
+        let t = (fromInteger (end - start)) / (fromInteger pcf)
+        return (v, t)
+
+
 {-
-time' :: Show t => IO t -> IO t
-time' a = do
+time :: Show t => IO t -> IO t
+time a = do
     start <- getCurrentTime -- getCPUTime
     v <- a
     seq v $ print v
@@ -142,7 +173,14 @@ time' a = do
     --let diff = (fromIntegral (end - start)) / (10^12)
     --printf "Computation time: %0.6f sec\n" (diff :: Double)
     return v
--}
+
+doTime :: IO t -> IO (t, Float)
+doTime a = do
+        start <- getCurrentTime
+        v <- a
+        end <- v `seq` getCurrentTime
+        return (v, fromRational $ toRational (diffUTCTime end start))
+-}        
 
 fpf6 = FOFForAll "a" $ FOFForAll "b" $ FOFForAll "c" $ FOFForAll "d" $
         FOFImpl (FOFAtom $ PAEq (PESum (PEVar "a") (PEVar "b")) (PESum (PEVar "c") (PEVar "d"))) $
@@ -152,3 +190,35 @@ fpf6 = FOFForAll "a" $ FOFForAll "b" $ FOFForAll "c" $ FOFForAll "d" $
                         (FOFAtom $ PAEq (PEVar "b") (PESum (PEVar "bc") (PEVar "bd"))))
                 (FOFAnd (FOFAtom $ PAEq (PEVar "c") (PESum (PEVar "ac") (PEVar "bc")))
                         (FOFAtom $ PAEq (PEVar "d") (PESum (PEVar "ad") (PEVar "bd"))))
+
+samples :: IO [FOF PermissionAtomic StringVar]
+samples = generate (sequence (concat [replicate 10 (liftM (simplify . close) $ resize n arbitrary) | n <- [1..100]]))
+
+myProvers :: IO [PermissionsProver]
+myProvers = do
+        let timeout = 1000
+        epp <- makeEPProver "C:\\Users\\tyoung\\Local Documents\\eprover\\E\\PROVER\\eprover.exe" timeout
+        return [epp,
+                permCheckZ3 (Just timeout),
+                (timeoutSolver (timeout * 1000) permCheckBigInt),
+                (timeoutSolver (timeout * 1000) permCheckTree)]
+
+
+testSample :: [PermissionsProver] -> FOF PermissionAtomic StringVar -> IO String
+testSample provers f = do
+                let f' = fmap show f
+                rs <- sequence [doTime (p f') | p <- provers]
+                return $ intercalate "," $ show f' : show (size f') : show (quantifierDepth f') :
+                                [show t ++ "," ++ showres r | (r, t) <- rs]
+        where
+                showres Nothing = "Timeout"
+                showres (Just x) = show x
+
+
+main = do
+        ss <- samples
+        ps <- myProvers
+        forM_ ss $ \s -> do
+                r <- testSample ps s
+                appendFile "permTests.csv" $ r ++ "\n"
+
