@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, CPP #-}
 
 import Test.QuickCheck
 import Control.Monad hiding (forM_)
@@ -9,10 +9,14 @@ import Test.QuickCheck.Monadic
 import Text.Printf
 --import Control.Exception
 import System.CPUTime
-import Data.Time.Clock
 import Control.Monad.IO.Class
 import System.Timeout
+
+#ifdef USEWIN32
 import System.Win32.Time
+#else
+import Data.Time.Clock
+#endif
 import Data.List (intercalate)
 
 import System.IO.Unsafe
@@ -95,6 +99,20 @@ instance (Arbitrary v, Arbitrary (a v), Eq v, Foldable a) => Arbitrary (FOF a v)
                                         f' <- arb $ floor (sqrt $ fromIntegral n) - 1
                                         return (v, f')
 
+genPE :: [v] -> Gen (PermissionExpression v)
+genPE l = sized arbPE
+        where
+                arbPE n = frequency $ [(1, return PEFull), (1,return PEZero)] ++ [(1, return $ PEVar x) | x <- l] ++
+                        [(n `div` 2, arbsum (n `div` 2)), (n `div` 2, arbcompl (n `div` 2))]
+                arbsum n = do
+                        s1 <- arbPE n
+                        s2 <- arbPE n
+                        return $ PESum s1 s2
+                arbcompl n = do
+                        s <- arbPE n
+                        return $ PECompl s
+
+
 close :: (Eq v, Ord v, Foldable a) => FOF a v -> FOF a v
 close f = foldr (\x -> if freeIn x f then FOFForAll x else id) f (foldr (Set.insert) Set.empty f)
 
@@ -137,6 +155,8 @@ prop_ProverEquivSMT x = quantifierDepth x <= 6 ==> let x' = simplify (close x) i
 
 args' = stdArgs {maxSize = 6}
 
+#ifdef USEWIN32
+
 pcf :: Integer
 {-# NOINLINE pcf #-}
 pcf = unsafePerformIO queryPerformanceFrequency
@@ -162,7 +182,7 @@ doTime a = do
         return (v, t)
 
 
-{-
+#else
 time :: Show t => IO t -> IO t
 time a = do
     start <- getCurrentTime -- getCPUTime
@@ -180,7 +200,7 @@ doTime a = do
         v <- a
         end <- v `seq` getCurrentTime
         return (v, fromRational $ toRational (diffUTCTime end start))
--}        
+#endif     
 
 fpf6 = FOFForAll "a" $ FOFForAll "b" $ FOFForAll "c" $ FOFForAll "d" $
         FOFImpl (FOFAtom $ PAEq (PESum (PEVar "a") (PEVar "b")) (PESum (PEVar "c") (PEVar "d"))) $

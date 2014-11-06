@@ -193,7 +193,7 @@ checkBothWays epp formula = trace ("Calling E on:\n" ++ show formula) $ bracket
                 let hs = [htrue,hfalse]
                 tidTimeout <- forkIO $ timeoutSem (eTimeout epp) sem
                 MSem.wait sem
-                mapM_ terminateProcess hs
+                mapM_ (try . terminateProcess :: ProcessHandle -> IO (Either SomeException ())) hs
                 rtrue <- takeMVar mvtrue
                 rfalse <- takeMVar mvfalse
                 return $ if rtrue == ExitSuccess then
