@@ -1,6 +1,8 @@
 {-# LANGUAGE FlexibleContexts, CPP #-}
 
 import Test.QuickCheck
+import Test.QuickCheck.Gen
+import Test.QuickCheck.Random
 import Control.Monad hiding (forM_)
 import Prelude hiding (foldl, foldr, concat)
 import Data.Foldable
@@ -11,6 +13,8 @@ import Text.Printf
 import System.CPUTime
 import Control.Monad.IO.Class
 import System.Timeout
+
+#define USEWIN32
 
 #ifdef USEWIN32
 import System.Win32.Time
@@ -144,9 +148,9 @@ timeoutSolver n f x = timeout n (f x) >>= return . join
 prop_ProverEquivSMT :: FOF PermissionAtomic StringVar -> Property
 prop_ProverEquivSMT x = quantifierDepth x <= 6 ==> let x' = simplify (close x) in
                         quantifierDepth x' <= 5 ==> monadicIO $ do
-                                liftIO $ putStrLn "Z3 "
+                                run $ putStrLn "Z3 "
                                 r2 <- run $ time $ permCheckZ3 (Just 10000) x'
-                                liftIO $ putStrLn "BigInt "
+                                run $ putStrLn "BigInt "
                                 r1 <- run $ time $ (timeoutSolver (10^7) permCheckBigInt) (fmap show x')
                                 assert $ r1 == r2
                                         
@@ -214,14 +218,24 @@ fpf6 = FOFForAll "a" $ FOFForAll "b" $ FOFForAll "c" $ FOFForAll "d" $
 samples :: IO [FOF PermissionAtomic StringVar]
 samples = generate (sequence (concat [replicate 10 (liftM (simplify . close) $ resize n arbitrary) | n <- [1..100]]))
 
+samples' :: [FOF PermissionAtomic StringVar]
+samples' = unGen (sequence (concat [replicate 10 (liftM (simplify . close) $ resize n arbitrary) | n <- [1..100]]))
+	(mkQCGen 1283749136) 118923573
+
+
+callProver :: String -> PermissionsProver -> PermissionsProver
+callProver name f x = putStrLn name >> f x
+
 myProvers :: IO [PermissionsProver]
 myProvers = do
-        let timeout = 1000
-        epp <- makeEPProver "C:\\Users\\tyoung\\Local Documents\\eprover\\E\\PROVER\\eprover.exe" timeout
-        return [epp,
-                permCheckZ3 (Just timeout),
-                (timeoutSolver (timeout * 1000) permCheckBigInt),
-                (timeoutSolver (timeout * 1000) permCheckTree)]
+        let timeout = 10000
+        epp <- makeEPProver "C:\\cygwin64\\home\\Tom\\E\\PROVER\\eprover.exe" timeout
+        return [
+		-- callProver "*** E" epp --,
+                -- callProver "*** Z3" $ permCheckZ3 (Just timeout) --,
+                -- callProver "*** BigInt" $ (timeoutSolver (timeout * 1000) permCheckBigInt) --,
+                callProver "*** Tree" $ (timeoutSolver (timeout * 1000) permCheckTree)
+		]
 
 
 testSample :: [PermissionsProver] -> FOF PermissionAtomic StringVar -> IO String
@@ -236,9 +250,9 @@ testSample provers f = do
 
 
 main = do
-        ss <- samples
+        --ss <- samples
         ps <- myProvers
-        forM_ ss $ \s -> do
+        forM_ samples' $ \s -> do
                 r <- testSample ps s
-                appendFile "permTests.csv" $ r ++ "\n"
+                appendFile "permTestsTree.csv" $ r ++ "\n"
 
