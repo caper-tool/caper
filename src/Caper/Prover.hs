@@ -584,7 +584,7 @@ assertE c@(DisequalityCondition v1 v2) = do
                         assertions %= (c :)
 
 
--- |Assert that two exoressions are equal.
+-- |Assert that two expressions are equal.
 assertEqual :: (ProverExpression e, MonadState s m, AssertionLenses s,
         MonadLogger m) => e VariableID -> e VariableID -> m ()
 assertEqual e1 e2 = assert $ exprEquality (toExpr e1) (toExpr e2)

@@ -22,7 +22,7 @@ import qualified Caper.Utils.AliasingMap as AliasMap
 import Caper.Parser.AST.Code
 import Caper.Regions
 import Caper.RegionTypes
-
+import Caper.Exceptions
 
 -- default (ValueExpression VariableID, Integer, Double)
 
@@ -91,10 +91,14 @@ emptySymbState = SymbState emptyAssumptions Map.empty emptyLVars Map.empty Alias
 showPVarBindings :: PVarBindings -> String
 showPVarBindings = Map.foldWithKey showBinding ""
         where
-                showBinding pv var s = pv ++ " := " ++ show var ++ "\n" ++ s
+                showBinding pv vr s = pv ++ " := " ++ show vr ++ "\n" ++ s
 
 instance (Show p) => Show (SymbState p) where
-        show (SymbState p vs lvs preds regs) = "Pure facts:\n" ++ show p ++ "\nProgram variables:\n" ++ showPVarBindings vs ++ "Heap:\n" ++ (concat . intersperse "\n" . map showPredicate . toPredicateList) preds
+        show (SymbState p vs lvs prds regs) = "Pure facts:\n" ++ show p 
+                ++ "\nProgram variables:\n" ++ showPVarBindings vs 
+                ++ "Heap:\n" ++ 
+                (concat . intersperse "\n" . 
+                        map showPredicate . toPredicateList) prds
 
 
 instance AssumptionLenses p => AssumptionLenses (SymbState p) where
@@ -176,9 +180,11 @@ validatePredicate (n, exprs) = chkTypes exprs
                 chkTypes (_ : _) [] = error $ "The predicate '" ++ show n ++ "' is used with too many arguments."
                 chkTypes [] (_ : _) = error $ "The predicate '" ++ show n ++ "' is used with too few arguments."
 
+
+
 predicateAssumptions :: Predicate -> Predicates -> [Condition VariableID]
-predicateAssumptions (PCell, e1 : _) preds = toCondition (VALt (VEConst 0) e0) :
-                foldMap genCond (Map.findWithDefault MultiSet.empty PCell preds)
+predicateAssumptions (PCell, e1 : _) prds = toCondition (VALt (VEConst 0) e0) :
+                foldMap genCond (Map.findWithDefault MultiSet.empty PCell prds)
         where
                 genCond (e1' : _) = [negativeCondition $ VAEq (toValueExpr e1') e0]
                 e0 = toValueExpr e1
@@ -276,7 +282,11 @@ consumePred (PCell, [x, y]) = (do
 --
 -- TODO: This should not be used as-is; it should be changed so that validation
 -- failures raise exceptions and some kind of context is used for resolving the
--- number/type information for validation.  
+-- number/type information for validation.
+--
+-- TD-Y: I'm going to use this stuff as is; at some point the front-end will be
+-- redesigned to simplify the parser and provide an input validation/type-
+-- checking phase.
 consumePredicate :: (Monad m, MonadPlus m, MonadLogger m) =>
         Predicate -> MSCheck r m ()
 consumePredicate p = do
