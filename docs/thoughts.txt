@@ -1,0 +1,9 @@
+How should the proof search mechanism be designed?
+
+It needs to support backtracking search.
+It needs to support case analysis.
+It would be nice if it generated some sort of proof term/audit trail.
+It should minimize redundancy.  (i.e. don't reprove goals)
+
+Representation should be largely agnostic to search technique.
+
