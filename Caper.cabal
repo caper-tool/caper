@@ -60,7 +60,9 @@ executable Caper
                    Caper.DeclarationTyping,
                    Caper.Utils.Mix,
                    Caper.PermissionsSMT,
-                   Caper.Utils.Alternating
+                   Caper.Utils.Alternating,
+                   Caper.Proof,
+                   Caper.Utils.FastEq
 
 executable Interpreter
   build-depends:   
@@ -85,5 +87,7 @@ executable Interpreter
                    Caper.FreeVariables,
                    Caper.Utils.Mix,
                    Caper.PermissionsSMT,
-                   Caper.Utils.Alternating
+                   Caper.Utils.Alternating,
+                   Caper.Proof,
+                   Caper.Utils.FastEq
 
