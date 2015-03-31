@@ -2,14 +2,53 @@ module Main where
 import Paths_Caper (version)
 import Data.Version (showVersion)
 import Control.Exception
+import System.Environment
+import System.Console.ArgParser
+import System.Console.ArgParser.Params
+import System.Console.ArgParser.Parser
+import System.Console.ArgParser.Format
 
 import Caper.Assertions
 import Caper.ProverDatatypes
 import Caper.Provers
+import Caper.Parser.Parser
 
 
-main::IO()
-main = do
+data CommandLine =
+    CLVersion           -- Get version information; test configuration
+    | CLVerify {        -- Verify a file
+        verifyFile :: FilePath
+        }
+
+commandLineParser :: ParserSpec CommandLine
+commandLineParser = CLVerify
+    `parsedBy` reqPos "file" `Descr` "source file to verify"
+
+caperSpecialFlags :: [SpecialFlag CommandLine]
+caperSpecialFlags = 
+    [(flagparser Short "help" "show this help message and exit",
+        const . Left . showCmdLineAppUsage defaultFormat),
+     (flagparser Long "version" "show version information, test configuration options and exit",
+        \_ _ -> Right CLVersion)]
+    where
+        flagparser fmt key descr = liftParam $ FlagParam fmt key id `Descr` descr
+
+caperInterface :: String -> CmdLnInterface CommandLine
+caperInterface progName = CmdLnInterface
+    commandLineParser
+    caperSpecialFlags
+    progName
+    (Just $ showVersion version)
+    (Just "Caper: a verification tool for concurrent programs.")
+    (Just "Copyright (c) 2013-2015 Thomas Dinsdale-Young, Pedro da Rocha Pinto.")
+
+caperApp :: (CommandLine -> IO ()) -> IO ()
+caperApp app = do
+        pn <- getProgName
+        runApp (caperInterface pn) app
+
+caperCommand :: CommandLine -> IO ()
+caperCommand CLVersion = do
         putStrLn $ "Caper " ++ showVersion version
         (do 
         provers <- initProvers
@@ -32,4 +71,9 @@ main = do
                         _ -> putStrLn "*** ERROR: The permissions prover could not prove True."
                 ) `catch` (\e -> putStrLn $ "*** ERROR: Invoking the permissions prover resulted in the following error:\n" ++ show (e :: SomeException))
         ) `catch` (\e -> putStrLn $ "*** ERROR: Falied to initialise provers:\n" ++ show (e :: SomeException))
-        putStrLn "Proved."
+caperCommand (CLVerify file) = do
+        putStrLn file
+
+main::IO()
+main = caperApp caperCommand
+
