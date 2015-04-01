@@ -72,7 +72,8 @@ caperCommand CLVersion = do
                 ) `catch` (\e -> putStrLn $ "*** ERROR: Invoking the permissions prover resulted in the following error:\n" ++ show (e :: SomeException))
         ) `catch` (\e -> putStrLn $ "*** ERROR: Falied to initialise provers:\n" ++ show (e :: SomeException))
 caperCommand (CLVerify file) = do
-        putStrLn file
+        declrs <- parseFile file
+        print declrs
 
 main::IO()
 main = caperApp caperCommand

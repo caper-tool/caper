@@ -109,7 +109,7 @@ function =
      req  <- optionMaybe $ (do { reserved "requires"; a <- assertion; semi; return a})
      ens  <- optionMaybe $ (do { reserved "ensures"; a <- assertion; semi; return a})
      stmt <- braces sequenceOfStmt
-     return $ FunctionDeclr pos var Nothing Nothing args stmt
+     return $ FunctionDeclr pos var req ens args stmt
 
 region :: Parser Declr
 region =
