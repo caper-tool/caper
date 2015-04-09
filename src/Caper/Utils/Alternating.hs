@@ -9,6 +9,7 @@ import Debug.Trace
 import Caper.Utils.NondetClasses
 import Caper.Utils.MonadHoist
 
+{-
 
 data Alternating s m a = Alternating
 {--
@@ -23,3 +24,4 @@ instance Functor m => Functor s m where
 instance Monad m => Monad s m where
 
 abstract :: (s -> s -> Maybe s) -> Alternating s m a     
+-}

@@ -77,17 +77,12 @@ executable Interpreter
   main-is:         Interpreter.hs
   other-modules:   
                    Caper.ExceptionContext,
+                   Caper.FreeVariables,
                    Caper.Interpreter.Environment,
                    Caper.Interpreter.Interpreter,
                    Caper.Parser.AST,
                    Caper.Parser.AST.Annotation,
                    Caper.Parser.AST.Code,
                    Caper.Parser.AST.SourcePos,
-                   Caper.Parser.Parser,
-                   Caper.FreeVariables,
-                   Caper.Utils.Mix,
-                   Caper.PermissionsSMT,
-                   Caper.Utils.Alternating,
-                   Caper.Proof,
-                   Caper.Utils.FastEq
+                   Caper.Parser.Parser
 

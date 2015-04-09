@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RankNTypes, BangPatterns #-}
 module Caper.RegionTypes where
 import Control.Monad
 import Control.Monad.Reader.Class
@@ -15,8 +15,9 @@ import Caper.Utils.SimilarStrings
 import Caper.Guards
 import Caper.ProverDatatypes
 import Caper.Exceptions
+import Caper.Logger
 import qualified Caper.Parser.AST as AST
-
+import Caper.DeclarationTyping
 
 -- The internal representation of a region type identifier
 type RTId = Integer
@@ -39,7 +40,7 @@ data RegionType = RegionType
                 rtGuardType :: AST.TopLevelGuardDeclr,
                 rtStateSpace :: StateSpace,
                 rtTransitionSystem :: [TransitionRule],
-                rtInterpretation :: () -- TODO: replace with appropriate repr. of assertion
+                rtInterpretation :: [AST.StateInterpretation]
         }
 
 instance Show RegionType where
@@ -104,6 +105,10 @@ data RegionTypeContext = RegionTypeContext
                 rtcRegionTypes :: Map RTId RegionType
         }
 
+-- |The region type context with no region types.
+emptyRegionTypeContext :: RegionTypeContext
+emptyRegionTypeContext = (RegionTypeContext Map.empty Map.empty)
+
 class RTCGetter a where
         theRTContext :: Getter a RegionTypeContext
         resolveRTName :: Getter a (String -> Maybe RTId)
@@ -138,9 +143,35 @@ instance RTCGetter RegionTypeContext where
         theRTContext = to id
 
 createRegionTypeContext :: [RegionType] -> RegionTypeContext
-createRegionTypeContext = crtcs 0 (RegionTypeContext Map.empty Map.empty)
+createRegionTypeContext = crtcs 0 emptyRegionTypeContext
         where
                 crtcs nextRTId ac [] = ac
                 crtcs nextRTId ac (r : rs) = crtcs (nextRTId + 1)
                         (ac { rtcIds = Map.insert (rtRegionTypeName r) nextRTId (rtcIds ac), rtcRegionTypes = Map.insert nextRTId r (rtcRegionTypes ac) })
                         rs
+
+declrsToRegionTypeContext :: (Monad m, MonadRaise m, MonadLogger m) =>
+        -- | Declarations
+        [AST.Declr] -> m RegionTypeContext
+declrsToRegionTypeContext declrs = do
+            typings <- typeDeclarations declrs
+            accumulate typings 0 emptyRegionTypeContext declrs
+    where
+        accumulate typings nextRTId ac [] = return ac
+        accumulate typings nextRTId ac
+            (decl@(AST.RegionDeclr sp rtnam rtparams gddec interps acts):rs) =
+                do
+                    let !params = map toParam $ Map.findWithDefault
+                            (error "declrsToRegionTypeContext: region parameters not determined.")
+                            rtnam typings 
+                    let stateSpace = undefined
+                    let transitions = undefined
+                    let rt = RegionType rtnam params gddec stateSpace transitions interps
+                    accumulate typings (nextRTId + 1)
+                        (ac {
+                            rtcIds = Map.insert rtnam nextRTId (rtcIds ac),
+                            rtcRegionTypes = Map.insert nextRTId rt (rtcRegionTypes ac)
+                            }) rs
+        accumulate typings nextRTId ac (_:rs) =
+                        accumulate typings nextRTId ac rs
+        toParam (s, vt) = (RTDVar s, vt)
