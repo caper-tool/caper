@@ -1,10 +1,12 @@
 module Caper.RegionInterpretations where
 
-import Control.Monad.Reader
-import Control.Monad.State
-import qualified Data.Set as Set
+import Prelude hiding (mapM_)
+import Control.Monad.Reader hiding (mapM_,forM_)
+import Control.Monad.State hiding (mapM_,forM_)
+-- import qualified Data.Set as Set
 import qualified Data.Map as Map
 import Control.Lens
+import Data.Foldable
 
 import qualified Caper.Parser.AST.Annotation as AST
 import Caper.Parser.AST.Annotation (StateInterpretation(..))
@@ -108,3 +110,17 @@ checkStateInterpretations params (si : sis) = do
                 checkStateInterpretationSelfAmbiguity params si
                 mapM_ (checkStateInterpretationOtherAmbiguity params si) sis
                 checkStateInterpretations params sis
+
+checkRegionType :: 
+        (MonadRaise m, MonadIO m, MonadLogger m,
+        MonadReader r m, Provers r) =>
+        RegionType -> m ()
+checkRegionType rt = checkStateInterpretations (rtParamNames rt)
+                        (rtInterpretation rt)
+                
+checkRegionTypeContextInterpretations ::
+        (MonadRaise m, MonadIO m, MonadLogger m,
+        MonadReader r m, Provers r) =>
+        RegionTypeContext -> m ()
+checkRegionTypeContextInterpretations = 
+        mapM_ checkRegionType . rtcRegionTypes

@@ -2,16 +2,23 @@ module Main where
 import Paths_Caper (version)
 import Data.Version (showVersion)
 import Control.Exception
+import Control.Monad.Reader
 import System.Environment
 import System.Console.ArgParser
 import System.Console.ArgParser.Params
 import System.Console.ArgParser.Parser
 import System.Console.ArgParser.Format
 
+import Caper.Utils.MonadHoist
 import Caper.Assertions
+import Caper.Contexts
 import Caper.ProverDatatypes
 import Caper.Provers
 import Caper.Parser.Parser
+import Caper.Exceptions
+import Caper.Logger
+import Caper.RegionTypes
+import Caper.RegionInterpretations
 
 
 data CommandLine =
@@ -74,6 +81,12 @@ caperCommand CLVersion = do
 caperCommand (CLVerify file) = do
         declrs <- parseFile file
         print declrs
+        provers <- initProvers
+        result <- runErrLogger $ flip runReaderT [StringContext $ "File: \"" ++ file ++ "\"."] $ runRaiseT $ do
+            rtc <- declrsToRegionTypeContext declrs
+            hoist (withReaderT (ProcedureContext rtc provers)) $ do
+                checkRegionTypeContextInterpretations rtc
+        print result
 
 main::IO()
 main = caperApp caperCommand

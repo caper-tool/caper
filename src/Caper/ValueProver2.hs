@@ -77,7 +77,7 @@ valueCheck timeout f = evalZ3With Nothing opts $ do
                         _ -> Nothing
         where
                 opts = case timeout of
-                        (Just x) -> if x > 0 then opt "SOFT_TIMEOUT" x else stdOpts
+                        (Just x) -> if x > 0 then opt "timeout" x else stdOpts
                         _ -> stdOpts
 
 valueProverInfo :: IO String

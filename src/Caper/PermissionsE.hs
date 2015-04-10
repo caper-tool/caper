@@ -134,7 +134,7 @@ tptpBAPrelude = getDataFileName "ba_prelude.tptp" >>= readFile
 -}
 
 tptpBAPrelude :: String
-tptpBAPrelude = [literalFile|ba_prelude.tptp|]
+tptpBAPrelude = [literalFile|src/ba_prelude.tptp|]
 
 query :: Show v => BAFormula v -> String
 query f = "fof(query,question," ++ show f ++ ")."
@@ -163,6 +163,8 @@ timeoutSem n sem = unless (n <= 0) $
 -- TODO: Handle errors removing files more gracefully;
 --       Ensure termination of subprocesses on error;
 --       Handle errors in terminating subprocesses
+
+-- FIXME: seems to be a bug killing processes
 
 checkBothWays :: Show v => EPProver -> BAFormula v -> IO (Maybe Bool)
 checkBothWays epp formula = trace ("Calling E on:\n" ++ show formula) $ bracket

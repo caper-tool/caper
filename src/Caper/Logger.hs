@@ -87,7 +87,7 @@ instance (MonadIO m) => MonadLogger (HLoggerT m) where
         logEventContext (ec, e) = HLoggerT $ do
                 h <- ask
                 liftIO $ do
-                        hPutStrLn h $ show e  
+                        hPrint h e  
                         mapM_ (hPutStrLn h . ("  " ++) . show) ec
 
 runErrLogger :: HLoggerT m a -> m a

@@ -56,6 +56,10 @@ rtWeakGT = topLevelToWeakGuardType . rtGuardType
 rtParamVars :: RegionType -> Set RTDVar
 rtParamVars = Set.fromList . map fst . rtParameters
 
+rtParamNames :: RegionType -> [String]
+-- ^Get a the list of parameter names for the region type.
+rtParamNames = map (rtdvStr . fst) . rtParameters
+
 -- StateSpace
 
 -- ssLowerBound and ssUpperBound are the (inclusive) lower
@@ -151,8 +155,9 @@ createRegionTypeContext = crtcs 0 emptyRegionTypeContext
                         rs
 
 declrsToRegionTypeContext :: (Monad m, MonadRaise m, MonadLogger m) =>
-        -- | Declarations
-        [AST.Declr] -> m RegionTypeContext
+        [AST.Declr]
+        -- ^ Declarations
+        -> m RegionTypeContext
 declrsToRegionTypeContext declrs = do
             typings <- typeDeclarations declrs
             accumulate typings 0 emptyRegionTypeContext declrs
@@ -164,8 +169,8 @@ declrsToRegionTypeContext declrs = do
                     let !params = map toParam $ Map.findWithDefault
                             (error "declrsToRegionTypeContext: region parameters not determined.")
                             rtnam typings 
-                    let stateSpace = undefined
-                    let transitions = undefined
+                    let stateSpace = undefined  -- TODO
+                    let transitions = undefined -- TODO
                     let rt = RegionType rtnam params gddec stateSpace transitions interps
                     accumulate typings (nextRTId + 1)
                         (ac {
