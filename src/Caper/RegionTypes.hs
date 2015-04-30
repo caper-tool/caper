@@ -10,6 +10,7 @@ import Data.Foldable
 import Control.Lens
 import Data.Maybe
 import Data.List (intercalate)
+import Data.IntCast
 
 import Caper.Utils.SimilarStrings
 import Caper.Guards
@@ -154,22 +155,47 @@ createRegionTypeContext = crtcs 0 emptyRegionTypeContext
                         (ac { rtcIds = Map.insert (rtRegionTypeName r) nextRTId (rtcIds ac), rtcRegionTypes = Map.insert nextRTId r (rtcRegionTypes ac) })
                         rs
 
+-- |Determine the 'StateSpace' for a region by examining the given state
+-- interpretations.  Currently only finds bounds in the finite state case.
+--
+-- Precondition: the list of interpretations is non-empty
+computeStateSpace :: [AST.StateInterpretation] -> StateSpace
+computeStateSpace ss = case constStates ss Set.empty of
+            Nothing -> StateSpace Nothing Nothing
+            (Just s) -> StateSpace (Just $ Set.findMin s) (Just $ Set.findMax s)
+        where
+            constStates [] s = Just s
+            constStates (x:xs) s = case x of
+                 (AST.StateInterpretation _ _ (AST.ConstValExpr _ n) _) -> do
+                    n' <- intCastMaybe n
+                    constStates xs (Set.insert n' s)
+                 _ -> Nothing
+                 
+
 declrsToRegionTypeContext :: (Monad m, MonadRaise m, MonadLogger m) =>
         [AST.Declr]
         -- ^ Declarations
         -> m RegionTypeContext
 declrsToRegionTypeContext declrs = do
+            -- Determine the parameter types for (region) declarations
             typings <- typeDeclarations declrs
+            -- Build the region type context
             accumulate typings 0 emptyRegionTypeContext declrs
     where
         accumulate typings nextRTId ac [] = return ac
         accumulate typings nextRTId ac
             (decl@(AST.RegionDeclr sp rtnam rtparams gddec interps acts):rs) =
                 do
+                    -- Look up the parameter types.  This should not fail.                     
                     let !params = map toParam $ Map.findWithDefault
                             (error "declrsToRegionTypeContext: region parameters not determined.")
                             rtnam typings 
-                    let stateSpace = undefined  -- TODO
+                    -- Check that there is at least some state intepretation
+                    contextualise decl $ when (null interps) $
+                        raise MissingStateInterpretation
+                    -- Compute the state space (we have just checked the 
+                    -- precondition for this)
+                    let !stateSpace = computeStateSpace interps
                     let transitions = undefined -- TODO
                     let rt = RegionType rtnam params gddec stateSpace transitions interps
                     accumulate typings (nextRTId + 1)

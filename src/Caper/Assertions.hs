@@ -141,9 +141,9 @@ consumeRegionVariable (Variable _ vname) = do
 consumeRegionVariable (WildCard _) = chooseFrom =<< R.regionList
 
 generateValueExpr :: (Monad m, MonadRaise m) =>
-        (VarExpr -> m VariableID)       -- ^Variable handler
+        (VarExpr -> m v)       -- ^Variable handler
         -> ValExpr                      -- ^Syntactic value expression
-        -> m (ValueExpression VariableID)
+        -> m (ValueExpression v)
 -- Note: it might give a better error report if we try to bind the variable
 -- type here (although this would be redundant).  Likewise in producePermissionExpr.
 generateValueExpr genvar (VarValExpr _ ve) = liftM var $ genvar ve

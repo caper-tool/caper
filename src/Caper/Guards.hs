@@ -1,3 +1,4 @@
+-- TODO: Clean up and properly document
 {-# LANGUAGE RankNTypes, MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances, TypeSynonymInstances #-}
 {-# LANGUAGE DeriveDataTypeable, FlexibleContexts #-}
@@ -22,11 +23,13 @@ import Debug.Trace              -- TODO: get rid of this
 import Control.Lens hiding (op)
 
 import Caper.Parser.AST.Annotation (GuardDeclr(..), TopLevelGuardDeclr(..))
+import qualified Caper.Parser.AST as AST
 import Caper.Logger
 import Caper.ProverDatatypes
 import Caper.Prover
 import Caper.Utils.Choice
 import Caper.Utils.Mix
+import Caper.Exceptions
 
 
 data GuardTypeException =
@@ -147,6 +150,13 @@ instance ExpressionSub GuardParameters Expr where
 
 instance ExpressionSub Guard Expr where
         exprSub s (GD g) = GD $ Map.map (exprSub s) g
+
+{- TODO: this!
+astToGuard :: (MonadRaise m) => [AST.Guard] -> m (Guard v)
+astToGuard = tg Map.empty
+    where
+        tg g (AST 
+-}
 
 {-
 toGuard :: (Typeable v, Show v, Throws (GuardException v) l) => GuardAST v -> EM l (Guard v)

@@ -59,6 +59,9 @@ data CaperException =
         -- |'OverlappingStateInterpretation' indicates that there is some state
         -- whose interpretation is (potentially) ambiguous.
         | OverlappingStateInterpretation
+        -- |'MissingStateInterpretation' indicates that no state intepretations
+        -- are provided for a region.  (This could become a parse error.)
+        | MissingStateInterpretation
         deriving (Eq, Typeable)
 
 instance Show CaperException where
@@ -78,6 +81,8 @@ instance Show CaperException where
                 "There were incompatible occurrences of guards named '" ++ gname ++ "'."
         show (OverlappingStateInterpretation) =
                 "There are multiple possible interpretations for a single region state."
+        show (MissingStateInterpretation) =
+                "There are no state interpretations for the region."
 
 
 -- |The 'MonadRaise' class supports raising 'CaperException's and
