@@ -40,7 +40,7 @@ instance FreeVariables ValExpr VarExpr where
         foldrFree _ x (ConstValExpr _ _) = x
         foldrFree f x (UnaryValExpr _ _ ve) = foldrFree f x ve
         foldrFree f x (BinaryValExpr _ _ ve1 ve2) = foldrFree f (foldrFree f x ve2) ve1
-        foldrFree f x (SetValExpr _ ves) = foldrFree f x ves 
+        foldrFree f x (SetValExpr _ ves) = foldrFree f x ves
 
 -- |Unary value operator
 data ValUnOp = ValNegation -- ^Unary minus
@@ -157,7 +157,7 @@ instance Show CellAssrt where
 instance FreeVariables CellAssrt VarExpr where
         foldrFree f x (Cell _ ve1 ve2) = foldrFree f x [ve1, ve2]
         foldrFree f x (CellBlock _ ve1 ve2) = foldrFree f x [ve1, ve2]
-        
+
 
 
 data AnyExpr = AnyVar VarExpr | AnyVal ValExpr | AnyPerm PermExpr
@@ -269,6 +269,7 @@ makeSourcePos ''RegionAssrt
 makeSourcePos ''Predicate
 makeSourcePos ''Guard
 makeSourcePos ''Assrt
+makeSourcePos ''Action
 instance HasSourcePos AnyExpr where
         sourcePos (AnyVar e) = sourcePos e
         sourcePos (AnyVal e) = sourcePos e
@@ -306,3 +307,6 @@ instance Contextual CellAssrt where
                 "In a heap-cell assertion (... |-> ...)"
         toContext (CellBlock sp _ _) = DescriptiveContext sp
                 "In a heap-cell block assertion (... |-> #cells(...))"
+instance Contextual Action where
+        toContext act = DescriptiveContext (sourcePos act)
+                "In an action declaration"

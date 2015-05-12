@@ -23,13 +23,14 @@ import Debug.Trace              -- TODO: get rid of this
 import Control.Lens hiding (op)
 
 import Caper.Parser.AST.Annotation (GuardDeclr(..), TopLevelGuardDeclr(..))
-import qualified Caper.Parser.AST as AST
+--import qualified Caper.Parser.AST as AST
 import Caper.Logger
 import Caper.ProverDatatypes
 import Caper.Prover
 import Caper.Utils.Choice
 import Caper.Utils.Mix
-import Caper.Exceptions
+--import Caper.Exceptions
+-- import Caper.Assertions (generatePermissionExpr, generateValueExpr)
 
 
 data GuardTypeException =
@@ -151,12 +152,8 @@ instance ExpressionSub GuardParameters Expr where
 instance ExpressionSub Guard Expr where
         exprSub s (GD g) = GD $ Map.map (exprSub s) g
 
-{- TODO: this!
-astToGuard :: (MonadRaise m) => [AST.Guard] -> m (Guard v)
-astToGuard = tg Map.empty
-    where
-        tg g (AST 
--}
+-- Code for producing guards will now reside in Caper.Assertions
+
 
 {-
 toGuard :: (Typeable v, Show v, Throws (GuardException v) l) => GuardAST v -> EM l (Guard v)
@@ -204,7 +201,7 @@ fullGuard :: WeakGuardType -> Guard v
 fullGuard gt = GD $ Map.map gtToG (Set.findMin gt)
 
 fullGuards :: WeakGuardType -> [Guard v]
-fullGuards = Prelude.map (GD . Map.map gtToG) . Set.toList 
+fullGuards = Prelude.map (GD . Map.map gtToG) . Set.toList
 
 
 guardJoin :: Guard v -> Guard v -> Guard v
@@ -260,7 +257,7 @@ guardEquivalence (SumGD _ gta1 gta2) gd1 gd2 =
                         fgf (PermissionGD _ n) _ = GD $ Map.singleton n (PermissionGP PEFull)
                         fgf (ProductGD _ gt1 gt2) g = guardJoin (fgf gt1 g) (fgf gt2 g)
                         fgf (SumGD _ gt1 gt2) g = if ma gt2 g then fgf gt2 g else fgf gt1 g
-                        
+
 guardEquivalence _ _ _ = (GD Map.empty, GD Map.empty)
 
 
@@ -305,7 +302,7 @@ subtractGP :: (MonadPlus m, MonadState s m, AssertionLenses s, MonadLogger m) =>
         GuardParameters VariableID -> GuardParameters VariableID ->
                 m (Maybe (GuardParameters VariableID))
 subtractGP NoGP NoGP = return Nothing
-subtractGP (PermissionGP p1) (PermissionGP p2) = 
+subtractGP (PermissionGP p1) (PermissionGP p2) =
                 liftM (liftM PermissionGP) $ subtractPE p1 p2
 subtractGP _ _ = mzero
 
@@ -329,7 +326,7 @@ guardPrimitiveEntailmentM (GD g1) (GD g2) = if Map.null $ Map.differenceWith sam
 
 guardEntailment :: (MonadPlus m, MonadState s m, AssertionLenses s,
         MonadLogger m) =>
-                GuardDeclr -> Guard VariableID -> Guard VariableID -> 
+                GuardDeclr -> Guard VariableID -> Guard VariableID ->
                         m (Guard VariableID)
 guardEntailment gt g1 g2 = guardPrimitiveEntailmentM g1 g2 `mplus`
                         do
@@ -358,7 +355,7 @@ consumeGuard' gt gname gpara g = consumeGuardNoType gname gpara g `mplus`
                         let (gel, ger) = guardEquivalence gt g
                                 (GD $ Map.insert gname gpara Map.empty)
                         frame1 <- guardPrimitiveEntailmentM g gel
-                        consumeGuardNoType gname gpara (guardJoin frame1 ger)                
+                        consumeGuardNoType gname gpara (guardJoin frame1 ger)
 
 consumeGuard :: (MonadPlus m, MonadState s m, AssertionLenses s,
         MonadLogger m) =>
@@ -366,7 +363,7 @@ consumeGuard :: (MonadPlus m, MonadState s m, AssertionLenses s,
                 String -> GuardParameters VariableID ->
                 Guard VariableID -> m (Guard VariableID)
 consumeGuard ZeroGuardDeclr = \_ _ _ -> mzero -- Something has gone wrong...
-consumeGuard (SomeGuardDeclr gt) = consumeGuard' gt 
+consumeGuard (SomeGuardDeclr gt) = consumeGuard' gt
 
 {--
 

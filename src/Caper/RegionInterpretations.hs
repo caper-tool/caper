@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 module Caper.RegionInterpretations where
 
 import Prelude hiding (mapM_)

@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 {- Regions -}
 module Caper.Regions where
 import Prelude hiding (mapM_,mapM,concat)

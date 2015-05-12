@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE DeriveFunctor, FlexibleContexts #-}
+{-# LANGUAGE DeriveFunctor, FlexibleContexts, MultiParamTypeClasses #-}
 module Caper.SymbolicState where
 
 import Prelude hiding (sequence,foldl,foldr,mapM_,mapM,elem,notElem,concat,concatMap)

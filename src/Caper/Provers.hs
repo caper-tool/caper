@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, MultiParamTypeClasses #-}
 {-# LANGUAGE CPP #-}
 -- #define z3ffi
 module Caper.Provers where

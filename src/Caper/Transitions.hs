@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, MultiParamTypeClasses #-}
 module Caper.Transitions where
 import Prelude hiding (elem, foldr)
 import Control.Monad

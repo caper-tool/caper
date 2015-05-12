@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, ScopedTypeVariables, MultiParamTypeClasses #-}
 module Caper.Assertions where
 
 import Data.Foldable
@@ -27,7 +27,7 @@ import qualified Caper.Guards as G
         At some point, this whole module should probably be rewritten.
         In particular, some consideration of where variables are bound to
         types would be good.
-        
+
         At present types are NOT bound by
                 {produce,consume}{Value,Permission}Expr.
         This means that one should be careful to bind them correctly at point
@@ -93,7 +93,7 @@ producePure = producePure' False
 produceVariable :: (MonadState s m, AssumptionLenses s, SymbStateLenses s) =>
                 VarExpr -> m VariableID
 produceVariable (Variable _ vname) = do
-        v <- use (SS.logicalVars . at vname) 
+        v <- use (SS.logicalVars . at vname)
         case v of
                 Nothing -> do
                         fv <- freshNamedVar vname
@@ -168,9 +168,9 @@ consumeValueExpr :: (MonadState s m, AssertionLenses s, SymbStateLenses s,
 consumeValueExpr = generateValueExpr consumeVariable
 
 generatePermissionExpr :: (Monad m) =>
-        (VarExpr -> m VariableID)       -- ^Variable handler
+        (VarExpr -> m v)       -- ^Variable handler
         -> PermExpr                     -- ^Syntactic permission expression
-        -> m (PermissionExpression VariableID)
+        -> m (PermissionExpression v)
 generatePermissionExpr genvar (VarPermExpr _ ve) = liftM var $ genvar ve
 generatePermissionExpr genvar (ConstPermExpr _ FullPerm) = return PEFull
 generatePermissionExpr genvar (ConstPermExpr _ EmptyPerm) = return PEZero
@@ -255,9 +255,9 @@ consumeCell :: (MonadPlus m, MonadState s m, AssertionLenses s,
         CellAssrt -> m ()
 -- Note: it shouldn't be necessary to check the number and type of arguments
 -- after the call to generateCellPred.
-consumeCell p = generateCellPred consumeVariable p >>= SS.consumePred 
+consumeCell p = generateCellPred consumeVariable p >>= SS.consumePred
 
--- |Check that the list of parameters for a region is of the right length and 
+-- |Check that the list of parameters for a region is of the right length and
 -- that each parameter is of the appropriate type.
 checkRegionParams :: (MonadState s m, AssumptionLenses s,
                 MonadReader r m, RTCGetter r,
@@ -276,7 +276,7 @@ checkRegionParams rtid params = do
                                         "In argument " ++ show n) $
                                 checkExpressionAtTypeE e t
                         checkParams (n+1) ps ts
-                checkParams _ _ _ = return () 
+                checkParams _ _ _ = return ()
 
 -- |Produce a region assertion.
 produceRegion :: (MonadState s m, AssumptionLenses s, RegionLenses s,
@@ -314,7 +314,35 @@ consumeRegion regn@(Region sp rtn ridv lrps rse) = contextualise regn $
                 checkRegionParams rtid (zip params lrps)
                 st <- consumeValueExpr rse
                 bindVarsAsE st VTValue
-                R.consumeRegion rtid rid params st 
+                R.consumeRegion rtid rid params st
+
+-- |Convert a list of AST guards to the map-based internal representation of
+-- guards.
+--
+-- TODO: it might be nice if produceGuards and consumeGuards went via this.
+generateGuard :: forall m v. (MonadRaise m, Monad m) =>
+            (VarExpr -> m v) -> [Guard] -> m (G.Guard v)
+generateGuard handler = liftM G.GD . foldM tg' Map.empty
+    where
+        tg' g grd = contextualise grd $ tg g grd
+        tg :: Map.Map String (G.GuardParameters v) -> Guard -> m (Map.Map String (G.GuardParameters v))
+        tg g (NamedGuard _ gname) = if gname `Map.member` g then
+                    raise (IncompatibleGuardOccurrences gname)
+                else
+                    return $ Map.insert gname G.NoGP g
+        tg g (PermGuard _ gname pe) = case Map.lookup gname g of
+                        Nothing -> do
+                            pexp <- gpe pe
+                            return $ Map.insert gname (G.PermissionGP pexp) g
+                        (Just (G.PermissionGP pe0)) -> do
+                            pexp <- gpe pe
+                            return $ Map.insert gname
+                                        (G.PermissionGP (PESum pe0 pexp)) g
+                        _ -> raise $ IncompatibleGuardOccurrences gname
+        tg g (ParamGuard{}) = raise $ SyntaxNotImplemented "parametrised guards"
+        gpe :: PermExpr -> m (PermissionExpression v)
+        gpe = generatePermissionExpr handler
+
 
 -- |Produce a guard assertion.
 -- If the guards are not compatible with a guard type for the region,
@@ -348,7 +376,7 @@ produceGuards gg@(Guards sp ridv gds) = contextualise gg $
                                         Map.insert nm
                                                 (G.PermissionGP (PESum pe0 ppe))
                                                 g
-                                _ -> raise $ IncompatibleGuardOccurrences nm  
+                                _ -> raise $ IncompatibleGuardOccurrences nm
                 mkGuards g gd@(ParamGuard _ nm es) = contextualise gd $
                         raise $ SyntaxNotImplemented "parametrised guards"
 
@@ -361,7 +389,7 @@ guardToNameParam genv gd@(PermGuard _ nm pe) = contextualise gd $ do
                                 return (nm, G.PermissionGP ppe)
 guardToNameParam genv gd@(ParamGuard {}) = contextualise gd $
                         raise $ SyntaxNotImplemented "parametrised guards"
-                        
+
 
 -- |Consume a guard assertion.
 consumeGuards :: (MonadState s m, AssertionLenses s, RegionLenses s,
@@ -369,8 +397,8 @@ consumeGuards :: (MonadState s m, AssertionLenses s, RegionLenses s,
                 MonadReader r m, RTCGetter r,
                 MonadLogger m, MonadRaise m, MonadPlus m) =>
         Guards -> m ()
-consumeGuards gg@(Guards sp ridv gds) = contextualise gg $ 
-        do      
+consumeGuards gg@(Guards sp ridv gds) = contextualise gg $
+        do
                 rid <- addContext (StringContext $ "The region identifier '" ++ ridv ++ "'") $
                         consumeRegionVariable (Variable sp ridv)
                 region <- liftMaybe =<< preuse (R.regions . ix rid) -- Backtracks if no such region
@@ -395,7 +423,7 @@ consumePredicate :: (MonadState s m, AssertionLenses s, MonadRaise m) =>
         Predicate -> m ()
 consumePredicate pa = contextualise pa $
         raise $ SyntaxNotImplemented "predicates"
-        
+
 produceSpatial :: (MonadState s m, AssumptionLenses s, RegionLenses s,
                 SymbStateLenses s,
                 MonadReader r m, RTCGetter r,
@@ -420,7 +448,7 @@ produceAssrt ::  (MonadState s m, AssumptionLenses s, RegionLenses s,
                 SymbStateLenses s,
                 MonadReader r m, RTCGetter r,
                 MonadRaise m) =>
-        Bool -> 
+        Bool ->
         Assrt -> m ()
 produceAssrt _ (AssrtPure sp a) = producePure a
 produceAssrt dirty (AssrtSpatial sp a) = produceSpatial dirty a
@@ -428,7 +456,7 @@ produceAssrt dirty (AssrtConj sp a1 a2) = produceAssrt dirty a1 >>
                                         produceAssrt dirty a2
 produceAssrt _ (AssrtITE sp c a1 a2) = addContext (SourcePosContext sp) $
         raise $ SyntaxNotImplemented "... ? ... : ... (conditional assertions)"
-        
+
 consumeAssrt :: (MonadState s m, AssertionLenses s, RegionLenses s,
                 SymbStateLenses s, MonadReader r m, RTCGetter r,
                 MonadRaise m, MonadLogger m, MonadPlus m) =>

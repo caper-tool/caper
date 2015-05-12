@@ -278,7 +278,7 @@ literalToFOF (LNeg a) = FOFNot $ FOFAtom a
 class ExpressionCASub c e where
         exprCASub :: (Refreshable v, Eq v) => (v -> e v) -> c v -> c v
 
-instance forall a e. (ExpressionSub a e, Functor a, Foldable a, Functor e, Monad e) => ExpressionCASub (FOF a) e where
+instance (ExpressionSub a e, Functor a, Foldable a, Functor e, Monad e) => ExpressionCASub (FOF a) e where
         exprCASub s0 = unhelpSub . helpSub (fmap Right . s0) 
             where
                 -- helpSub :: (v -> e (Either v v)) -> FOF a v -> FOF a (Either v v)

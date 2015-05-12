@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, BangPatterns #-}
+{-# LANGUAGE RankNTypes, BangPatterns, MultiParamTypeClasses #-}
 module Caper.RegionTypes where
 import Control.Monad
 import Control.Monad.Reader.Class
@@ -18,6 +18,7 @@ import Caper.ProverDatatypes
 import Caper.Exceptions
 import Caper.Logger
 import qualified Caper.Parser.AST as AST
+import Caper.Parser.AST.Annotation ()
 import Caper.DeclarationTyping
 
 -- The internal representation of a region type identifier
@@ -73,7 +74,7 @@ data StateSpace = StateSpace {
 
 instance Show StateSpace where
         show (StateSpace a b) = "[" ++ maybe "?" show a ++ "-" ++ maybe "?" show b ++ "]"
-                
+
 isFinite :: StateSpace -> Bool
 isFinite (StateSpace (Just _) (Just _)) = True
 isFinite _ = False
@@ -104,6 +105,15 @@ instance Show TransitionRule where
         show (TransitionRule gd prd prec post) =
                 show gd ++ " : " ++ show prec ++ " ~> " ++ show post
 
+actionToTransitionRule :: (MonadRaise m, Monad m) => AST.Action -> m TransitionRule
+actionToTransitionRule act@(AST.Action _ conds gds prest postst) =
+        contextualise act $ do
+            unless (null conds) $ raise $ SyntaxNotImplemented "predicated transitions"
+            -- generateGuards 
+            return $ undefined TransitionRule
+            -- TODO: this
+
+
 data RegionTypeContext = RegionTypeContext
         {
                 rtcIds :: Map String RTId,
@@ -125,7 +135,7 @@ class RTCGetter a where
                 where
                         resError s = error $ "The region identifier " ++ show s ++ " could not be resolved."
 lookupRType :: (MonadReader r m, RTCGetter r) => RTId -> m RegionType
-lookupRType rtid = view resolveRType `ap` return rtid 
+lookupRType rtid = view resolveRType `ap` return rtid
 
 lookupRTName :: (RTCGetter a) => String -> Getter a (Maybe RTId)
 lookupRTName s = to $ \c -> Map.lookup s (rtcIds (c ^. theRTContext))
@@ -170,7 +180,8 @@ computeStateSpace ss = case constStates ss Set.empty of
                     n' <- intCastMaybe n
                     constStates xs (Set.insert n' s)
                  _ -> Nothing
-                 
+
+
 
 declrsToRegionTypeContext :: (Monad m, MonadRaise m, MonadLogger m) =>
         [AST.Declr]
@@ -186,14 +197,14 @@ declrsToRegionTypeContext declrs = do
         accumulate typings nextRTId ac
             (decl@(AST.RegionDeclr sp rtnam rtparams gddec interps acts):rs) =
                 do
-                    -- Look up the parameter types.  This should not fail.                     
+                    -- Look up the parameter types.  This should not fail.
                     let !params = map toParam $ Map.findWithDefault
                             (error "declrsToRegionTypeContext: region parameters not determined.")
-                            rtnam typings 
+                            rtnam typings
                     -- Check that there is at least some state intepretation
                     contextualise decl $ when (null interps) $
                         raise MissingStateInterpretation
-                    -- Compute the state space (we have just checked the 
+                    -- Compute the state space (we have just checked the
                     -- precondition for this)
                     let !stateSpace = computeStateSpace interps
                     let transitions = undefined -- TODO

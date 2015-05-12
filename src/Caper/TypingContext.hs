@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, DeriveDataTypeable #-}
+{-# LANGUAGE FlexibleContexts, DeriveDataTypeable, MultiParamTypeClasses #-}
 module Caper.TypingContext where
 import Prelude hiding (foldl, foldr, mapM_)
 import qualified Data.Map as Map

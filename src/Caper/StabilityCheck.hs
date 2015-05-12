@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 module Caper.StabilityCheck where
 
 import Control.Monad.IO.Class

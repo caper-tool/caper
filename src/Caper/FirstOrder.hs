@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Caper.FirstOrder where
 import Prelude hiding (foldl, foldr, elem, notElem)
 import Data.Foldable
