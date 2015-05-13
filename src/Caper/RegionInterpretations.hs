@@ -16,7 +16,8 @@ import Caper.RegionTypes
 import Caper.SymbolicState
 import Caper.Exceptions
 import Caper.Logger
-import Caper.Assertions
+import Caper.Assertions.Produce
+import Caper.Assertions.Consume
 import Caper.Prover
 
 {--

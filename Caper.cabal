@@ -46,7 +46,6 @@ executable Caper
     cpp-options:    -Dz3ffi
     other-modules:  Caper.ValueProver2
   other-modules:   
-                   Caper.Assertions,
                    Caper.Exceptions,
                    Caper.FirstOrder,
                    Caper.Guards,
@@ -86,7 +85,10 @@ executable Caper
                    Caper.PermissionsSMT,
                    Caper.Utils.Alternating,
                    Caper.Proof,
-                   Caper.Utils.FastEq
+                   Caper.Utils.FastEq,
+                   Caper.Assertions.Generate,
+                   Caper.Assertions.Produce,
+                   Caper.Assertions.Consume
 
 executable Interpreter
   build-depends:   
