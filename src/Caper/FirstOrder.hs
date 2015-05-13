@@ -1,5 +1,13 @@
 {-# LANGUAGE FlexibleContexts #-}
-module Caper.FirstOrder where
+module Caper.FirstOrder(
+    simplify,
+    rewriteFOF,
+    simplR,
+    pNormalise,
+    quantifierDepth,
+    sentence,
+    boundIn
+) where
 import Prelude hiding (foldl, foldr, elem, notElem)
 import Data.Foldable
 import qualified Data.Set as Set

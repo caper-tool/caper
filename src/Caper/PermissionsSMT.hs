@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Caper.PermissionsSMT where
+module Caper.PermissionsSMT (permCheckZ3) where
 
 import Numeric
 import Data.List
@@ -8,7 +8,7 @@ import Data.Bits
 import Data.Maybe
 import Z3.Monad
 import Control.Monad
-import Control.Monad.IO.Class
+-- import Control.Monad.IO.Class
 
 import Caper.ProverDatatypes
 
@@ -18,7 +18,7 @@ toBinary bitcount v = "#b" ++ (tail $ showIntAtBase 2 (head . show)
 
 toZ3BV :: Int -> Integer -> Z3 AST
 toZ3BV bitcount v = 
-                mkInt2bv (2^bitcount) =<< mkInt v
+                mkInt2bv (2^bitcount) =<< mkInteger v
 
 -- | Compute bit mask for a permission expression
 smtpe :: forall v. Eq v => [v] -> PermissionExpression v -> Integer
@@ -103,7 +103,7 @@ permCheckZ3 :: Eq v => Maybe Int -> FOF PermissionAtomic v -> IO (Maybe Bool)
 permCheckZ3 timeout f = evalZ3With Nothing opts $ do
                 f' <- z3ify [] f
                 --liftIO . putStrLn =<< astToString f'
-                assertCnstr =<< mkNot f'
+                assert =<< mkNot f'
                 r <- check
                 return $ case r of
                         Sat -> Just False
@@ -118,20 +118,22 @@ permCheckZ3 timeout f = evalZ3With Nothing opts $ do
 
 smtify :: Eq v => String -> [v] -> FOF PermissionAtomic v -> String
 smtify bits ctx (FOFForAll v f) = "(forall ((" ++ newbits ++ " (_ BitVec "
-                ++ show (2^(l+1)) ++ "))) (=> (= " ++ bits ++
-                " (bvor ((_ extract " ++ show (2^l - 1) ++ " 0) " ++ newbits
-                ++ ") ((_ extract " ++ show (2^(l+1) - 1) ++ " " ++ show (2^l)
+                ++ show (two^(l+1)) ++ "))) (=> (= " ++ bits ++
+                " (bvor ((_ extract " ++ show (two^l - 1) ++ " 0) " ++ newbits
+                ++ ") ((_ extract " ++ show (two^(l+1) - 1) ++ " " ++ show (two^l)
                 ++ ") " ++ newbits ++ "))) " ++ smtify newbits ctx' f ++ "))" 
         where
+                two = 2 :: Int
                 ctx' = v : ctx
                 l = length ctx
                 newbits = "bits" ++ (show (l + 1)) 
 smtify bits ctx (FOFExists v f) = "(exists ((" ++ newbits ++ " (_ BitVec "
-                ++ show (2^(l+1)) ++ "))) (and (= " ++ bits ++
-                " (bvor ((_ extract " ++ show (2^l - 1) ++ " 0) " ++ newbits
-                ++ ") ((_ extract " ++ show (2^(l+1) - 1) ++ " " ++ show (2^l)
+                ++ show (two^(l+1)) ++ "))) (and (= " ++ bits ++
+                " (bvor ((_ extract " ++ show (two^l - 1) ++ " 0) " ++ newbits
+                ++ ") ((_ extract " ++ show (two^(l+1) - 1) ++ " " ++ show (two^l)
                 ++ ") " ++ newbits ++ "))) " ++ smtify newbits ctx' f ++ "))" 
         where
+                two = 2 :: Int
                 ctx' = v : ctx
                 l = length ctx
                 newbits = "bits" ++ (show (l + 1))

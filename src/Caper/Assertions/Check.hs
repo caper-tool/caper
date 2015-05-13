@@ -1,3 +1,4 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 module Caper.Assertions.Check where
 
 import Control.Monad.State hiding (state)
