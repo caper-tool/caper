@@ -7,7 +7,8 @@ import Control.Monad.State
 import Control.Lens
 
 import Caper.Regions
-import Caper.Assertions
+import Caper.Assertions.Produce
+import Caper.Assertions.Consume
 import Caper.Parser.AST.Annotation
 import Caper.ProverDatatypes
 import Caper.Prover

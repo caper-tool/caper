@@ -10,7 +10,7 @@ import System.Console.ArgParser.Parser
 import System.Console.ArgParser.Format
 
 import Caper.Utils.MonadHoist
-import Caper.Assertions
+-- import Caper.Assertions
 import Caper.Contexts
 import Caper.ProverDatatypes
 import Caper.Provers
