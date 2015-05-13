@@ -1,12 +1,9 @@
 {-# LANGUAGE FlexibleContexts, ScopedTypeVariables, MultiParamTypeClasses #-}
 module Caper.Assertions.Consume where
 
-import Data.Foldable
 import Control.Monad.State hiding (state)
 import Control.Monad.Reader
---import Control.Monad.Exception
 import Control.Lens hiding (op)
-import qualified Data.Map as Map
 
 import Caper.Utils.Choice
 import Caper.Utils.AliasingMap ()
@@ -15,13 +12,14 @@ import Caper.Exceptions
 import Caper.ProverDatatypes
 import Caper.Prover
 import Caper.Parser.AST
-import Caper.Parser.AST.SourcePos
-import Caper.SymbolicState (SymbStateLenses, PredicateName(..))
+import Caper.SymbolicState (SymbStateLenses)
 import qualified Caper.SymbolicState as SS
 import Caper.Regions (RegionLenses)
 import qualified Caper.Regions as R
 import Caper.RegionTypes
 import qualified Caper.Guards as G
+import Caper.Assertions.Generate
+import Caper.Assertions.Check
 
 {-
         At some point, this whole module should probably be rewritten.

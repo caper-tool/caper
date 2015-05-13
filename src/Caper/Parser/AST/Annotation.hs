@@ -16,11 +16,21 @@ data VarExpr = Variable SourcePos String  -- ^A logical variable
 instance Show VarExpr where
         show (Variable _ s) = s
         show (WildCard _) = "_"
+instance Ord VarExpr where
+    compare (WildCard _) (WildCard _) = EQ
+    compare (WildCard _) _ = LT
+    compare (Variable _ _) (WildCard _) = GT
+    compare (Variable _ s1) (Variable _ s2) = compare s1 s2
+
 {-
 instance FreeVariables VarExpr (Maybe String) where
         foldrFree f x (Variable _ s) = f (Just s) x
         foldrFree f x (WildCard _) = f Nothing x
 -}
+
+unVarExpr :: VarExpr -> Maybe String
+unVarExpr (Variable _ s) = Just s
+unVarExpr _ = Nothing
 
 -- |Value Expressions
 data ValExpr = VarValExpr SourcePos VarExpr                     -- ^Variable
@@ -140,14 +150,13 @@ instance Show PureAssrt where
         show (BinaryValAssrt _ br e1 e2) = show e1 ++ show br ++ show e2
         show (BinaryPermAssrt _ br e1 e2) = show e1 ++ show br ++ show e2
 
-{-
 instance FreeVariables PureAssrt VarExpr where
         foldrFree _ x (ConstBAssrt _ _) = x
         foldrFree f x (NotBAssrt _ ve) = foldrFree f x ve
         foldrFree f x (BinaryVarAssrt _ _ ve1 ve2) = f ve1 (f ve2 x)
         foldrFree f x (BinaryValAssrt _ _ ve1 ve2) = foldrFree f (foldrFree f x ve2) ve1
         foldrFree f x (BinaryPermAssrt _ _ ve1 ve2) = foldrFree f (foldrFree f x ve2) ve1
--}
+
 -- |Basic heap assertions
 data CellAssrt = Cell SourcePos ValExpr ValExpr         -- ^ Single cell: @/x/ |-> /y/@
                | CellBlock SourcePos ValExpr ValExpr    -- ^ Block of cells: @/x/ |-> #cells(/y/)@
@@ -165,6 +174,11 @@ instance Show AnyExpr where
         show (AnyVar e) = show e -- ++ "::VAR"
         show (AnyVal e) = show e -- ++ "::VAL"
         show (AnyPerm e) = show e -- ++ "::PERM"
+instance FreeVariables AnyExpr VarExpr where
+    foldrFree f x (AnyVar var) = f var x
+    foldrFree f x (AnyVal ve) = foldrFree f x ve
+    foldrFree f x (AnyPerm pe) = foldrFree f x pe
+    
 
 -- |Region assertions
 data RegionAssrt = Region {
@@ -190,6 +204,11 @@ instance Show Guard where
         show (NamedGuard _ n) = n
         show (PermGuard _ n pe) = n ++ "[" ++ show pe ++ "]"
         show (ParamGuard _ n paras) = n ++ "(" ++ intercalate "," (map show paras) ++ ")"
+instance FreeVariables Guard VarExpr where
+    foldrFree f x (NamedGuard{}) = x
+    foldrFree f x (PermGuard _ _ pe) = foldrFree f x pe
+    foldrFree f x (ParamGuard _ _ params) = foldrFree f x params
+    
 
 -- |Guards associated with a region
 data Guards = Guards SourcePos String [Guard]
@@ -242,6 +261,11 @@ instance Show Action where
         show (Action _ [] g pre post) = intercalate " * " (map show g) ++ " : " ++ show pre ++ " ~> " ++ show post
         show (Action _ c g pre post) = intercalate ", " (map show c) ++ " | " ++ intercalate " * " (map show g) ++ " : " ++ show pre ++ " ~> " ++ show post
 
+instance FreeVariables Action VarExpr where
+        foldrFree f x a = foldrFree f (foldrFree f (foldrFree f (foldrFree f x $ actionPostState a)
+                                                                    $ actionPreState a)
+                                                                    $ actionGuard a)
+                                                                    $ actionConditions a
 
 -- |Guard declarations
 data TopLevelGuardDeclr = ZeroGuardDeclr | SomeGuardDeclr GuardDeclr

@@ -1,7 +1,11 @@
 {-# LANGUAGE RankNTypes, BangPatterns, MultiParamTypeClasses #-}
 module Caper.RegionTypes where
+
+import Prelude hiding (notElem)
 import Control.Monad
 import Control.Monad.Reader.Class
+import Control.Monad.State
+import Control.Arrow
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -13,6 +17,7 @@ import Data.List (intercalate)
 import Data.IntCast
 
 import Caper.Utils.SimilarStrings
+import Caper.FreeVariables
 import Caper.Guards
 import Caper.ProverDatatypes
 import Caper.Exceptions
@@ -20,6 +25,7 @@ import Caper.Logger
 import qualified Caper.Parser.AST as AST
 import Caper.Parser.AST.Annotation ()
 import Caper.DeclarationTyping
+import Caper.Assertions.Generate
 
 -- The internal representation of a region type identifier
 type RTId = Integer
@@ -105,24 +111,36 @@ instance Show TransitionRule where
         show (TransitionRule gd prd prec post) =
                 show gd ++ " : " ++ show prec ++ " ~> " ++ show post
 
-actionToTransitionRule :: (MonadRaise m, Monad m) => AST.Action -> m TransitionRule
-actionToTransitionRule act@(AST.Action _ conds gds prest postst) =
+actionToTransitionRule :: (MonadRaise m, Monad m) => [RTDVar] -> AST.Action -> m TransitionRule
+actionToTransitionRule params act@(AST.Action _ conds gds prest postst) =
         contextualise act $ do
             unless (null conds) $ raise $ SyntaxNotImplemented "predicated transitions"
-            -- generateGuards 
-            return $ undefined TransitionRule
-            -- TODO: this
-
+            (gg, prec, post) <- flip evalStateT freshVars $ do
+                gg <- generateGuard varExprToRTDVar gds
+                prec <- generateValueExpr varExprToRTDVar prest
+                post <- generateValueExpr varExprToRTDVar postst
+                return (gg,prec,post) 
+            return $ TransitionRule gg () prec post
+    where
+        theVars = params ++ (map RTDVar . mapMaybe AST.unVarExpr . Set.toList . freeVariables) act
+        freshVars = filter (`notElem` theVars) [RTDVar ("WILDCARD" ++ show x) | x <- [(0::Int)..]]
+        nextFresh = state (head &&& tail)
+        varExprToRTDVar (AST.Variable _ s) = return (RTDVar s)
+        varExprToRTDVar (AST.WildCard _) = nextFresh
 
 data RegionTypeContext = RegionTypeContext
         {
                 rtcIds :: Map String RTId,
                 rtcRegionTypes :: Map RTId RegionType
         }
+instance Show RegionTypeContext where
+    show (RegionTypeContext ids rts) = Map.foldWithKey showRegion "" ids
+        where
+            showRegion rname rid rest = rname ++ ": " ++ show (Map.lookup rid rts) ++ "\n"
 
 -- |The region type context with no region types.
 emptyRegionTypeContext :: RegionTypeContext
-emptyRegionTypeContext = (RegionTypeContext Map.empty Map.empty)
+emptyRegionTypeContext = RegionTypeContext Map.empty Map.empty
 
 class RTCGetter a where
         theRTContext :: Getter a RegionTypeContext
@@ -201,13 +219,13 @@ declrsToRegionTypeContext declrs = do
                     let !params = map toParam $ Map.findWithDefault
                             (error "declrsToRegionTypeContext: region parameters not determined.")
                             rtnam typings
-                    -- Check that there is at least some state intepretation
+                    -- Check that there is at least some state interpretation
                     contextualise decl $ when (null interps) $
                         raise MissingStateInterpretation
                     -- Compute the state space (we have just checked the
                     -- precondition for this)
                     let !stateSpace = computeStateSpace interps
-                    let transitions = undefined -- TODO
+                    transitions <- mapM (actionToTransitionRule (map fst params)) acts
                     let rt = RegionType rtnam params gddec stateSpace transitions interps
                     accumulate typings (nextRTId + 1)
                         (ac {
@@ -217,25 +235,4 @@ declrsToRegionTypeContext declrs = do
         accumulate typings nextRTId ac (_:rs) =
                         accumulate typings nextRTId ac rs
         toParam (s, vt) = (RTDVar s, vt)
-
--- |Check that the list of parameters for a region is of the right length and
--- that each parameter is of the appropriate type.
-checkRegionParams :: (MonadState s m, AssumptionLenses s,
-                MonadReader r m, RTCGetter r,
-                MonadRaise m) =>
-        RTId -> [(Expr VariableID, AnyExpr)] -> m ()
-checkRegionParams rtid params = do
-                        rt <- lookupRType rtid
-                        let types = map snd $ rtParameters rt
-                        if length types == length params then
-                                checkParams (2 :: Int) params types
-                            else
-                                raise $ ArgumentCountMismatch (2 + length types) (2 + length params)
-        where
-                checkParams n ((e, p) : ps) (t : ts) = do
-                        addContext (DescriptiveContext (sourcePos p) $
-                                        "In argument " ++ show n) $
-                                checkExpressionAtTypeE e t
-                        checkParams (n+1) ps ts
-                checkParams _ _ _ = return ()
 

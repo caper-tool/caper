@@ -42,7 +42,7 @@ executable Caper
   ghc-options:     -Wall -fno-warn-unused-matches -rtsopts
 
   if flag(z3ffi)
-    build-depends:  z3 >=0.3.0
+    build-depends:  z3 >=4.0.0
     cpp-options:    -Dz3ffi
     other-modules:  Caper.ValueProver2
   other-modules:   
@@ -88,7 +88,9 @@ executable Caper
                    Caper.Utils.FastEq,
                    Caper.Assertions.Generate,
                    Caper.Assertions.Produce,
-                   Caper.Assertions.Consume
+                   Caper.Assertions.Consume,
+                   Caper.Assertions.Check,
+                   Caper.Predicates
 
 executable Interpreter
   build-depends:   

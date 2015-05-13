@@ -2,24 +2,13 @@
 module Caper.Assertions.Generate where
 
 import Control.Monad.State hiding (state)
-import Control.Monad.Reader
---import Control.Monad.Exception
-import Control.Lens hiding (op)
 import qualified Data.Map as Map
 
-import Caper.Utils.Choice
 import Caper.Utils.AliasingMap ()
-import Caper.Logger
 import Caper.Exceptions
 import Caper.ProverDatatypes
-import Caper.Prover
 import Caper.Parser.AST
-import Caper.Parser.AST.SourcePos
--- import Caper.SymbolicState (SymbStateLenses, PredicateName(..))
--- import qualified Caper.SymbolicState as SS
--- import Caper.Regions (RegionLenses)
--- import qualified Caper.Regions as R
-import Caper.RegionTypes
+import Caper.Predicates as P
 import qualified Caper.Guards as G
 
 {-
@@ -104,7 +93,7 @@ generateAnyExpr genvar (AnyPerm e) = liftM PermissionExpr $ generatePermissionEx
 generateCellPred :: (Monad m, MonadRaise m) =>
         (VarExpr -> m VariableID)
         -> CellAssrt
-        -> m SS.Predicate
+        -> m P.Predicate
 generateCellPred genvar (Cell sp e1 e2) = do
                 ve1 <- generateValueExpr genvar e1
                 ve2 <- generateValueExpr genvar e2
@@ -152,5 +141,4 @@ guardToNameParam genv gd@(PermGuard _ nm pe) = contextualise gd $ do
                                 return (nm, G.PermissionGP ppe)
 guardToNameParam genv gd@(ParamGuard {}) = contextualise gd $
                         raise $ SyntaxNotImplemented "parametrised guards"
-
 

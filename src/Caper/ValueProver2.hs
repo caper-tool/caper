@@ -1,12 +1,12 @@
 module Caper.ValueProver2 where
 import Caper.ProverDatatypes
 import Z3.Monad
-import Control.Exception
+import Control.Exception hiding (assert)
 
 --v = evalZ3 getVersion
 
 convValueExpression :: (MonadZ3 z3) => (v -> z3 AST) -> ValueExpression v -> z3 AST
-convValueExpression s (VEConst i) = mkInt i
+convValueExpression s (VEConst i) = mkInteger i
 convValueExpression s (VEVar v) = s v
 convValueExpression s (VEPlus e1 e2) = do
                 c1 <- convValueExpression s e1
@@ -65,7 +65,7 @@ valueCheck timeout f = evalZ3With Nothing opts $ do
                 c <- convValueFOF intS (\v -> error $ "Unquantified variable " ++ show v ++ " in formula:\n" ++ show f) f
                 c' <- mkNot c
                 k <- astToString c'
-                assertCnstr c'
+                assert c'
                 r <- check
                 x <- withModel showModel
                 {-case x of
