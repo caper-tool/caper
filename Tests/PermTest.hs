@@ -21,8 +21,8 @@ fpf6 = FOFForAll "a" $ FOFForAll "b" $ FOFForAll "c" $ FOFForAll "d" $
                         (FOFAtom $ PAEq (PEVar "d") (PESum (PEVar "ad") (PEVar "bd"))))
 {--
 provers = do
-	prel <- tptpBAPrelude
-	return (TPProver (), EPProver prel "c:\\cygwin64\\home\\Thomas\\E\\PROVER\\eprover.exe")
+        prel <- tptpBAPrelude
+        return (TPProver (), EPProver prel "c:\\cygwin64\\home\\Thomas\\E\\PROVER\\eprover.exe")
 --}
 {--
 main = mapM_ doit [1000..1010]

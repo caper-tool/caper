@@ -24,6 +24,8 @@ data LogEvent
         | WarnUnconstrainedParameter String VariableType
         | ProverInvocation ProverType String
         | ProverResult (Maybe Bool)
+        | WarnMissingPrecondition String String
+        | WarnMissingPostcondition String String
 instance Show LogEvent where
         show (WarnAutoBind vars) = "WARNING: the variables " ++ show (Data.Set.toList vars) ++
                 " are being automatically bound as existentials."
@@ -37,6 +39,10 @@ instance Show LogEvent where
                         Just True -> "proved"
                         Just False -> "disproved"
                         Nothing -> "no answer"
+        show (WarnMissingPrecondition proc def) = "WARNING: the precondition of '" ++
+                proc ++ "' is unspecified. Defaulting to '" ++ def ++ "'."
+        show (WarnMissingPostcondition proc def) = "WARNING: the postcondition of '" ++
+                proc ++ "' is unspecified. Defaulting to '" ++ def ++ "'."
                 
 
 type Log = [([ExceptionContext], LogEvent)]

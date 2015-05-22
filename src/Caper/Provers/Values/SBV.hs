@@ -1,4 +1,4 @@
-module Caper.ValueProver where
+module Caper.Provers.Values.SBV where
 import Data.SBV
 import Prelude hiding (sequence,foldl,mapM_,mapM)
 import Data.Foldable

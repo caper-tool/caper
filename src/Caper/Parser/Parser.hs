@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
 module Caper.Parser.Parser(
         parseFile,
         parseString,
@@ -17,8 +18,7 @@ import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as Token
 import Caper.Parser.AST
-import qualified Control.Monad as Monad
-import Debug.Trace
+-- import qualified Control.Monad as Monad
 
 languageDef =
   emptyDef { Token.commentStart    = "/*"

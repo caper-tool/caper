@@ -245,8 +245,8 @@ data FOF a v =
         | FOFNot (FOF a v)
         | FOFFalse
         | FOFTrue
-        deriving (Eq, Ord, Functor, Foldable, Traversable, Show)
-{-        
+        deriving (Eq, Ord, Functor, Foldable, Traversable)
+        
 instance (Show (a v), Show v) => Show (FOF a v) where
         show FOFFalse = "_|_"
         show FOFTrue = "T"
@@ -257,7 +257,7 @@ instance (Show (a v), Show v) => Show (FOF a v) where
         show (FOFImpl f1 f2) = "(" ++ show f1 ++ " => " ++ show f2 ++ ")"
         show (FOFForAll v f1) = "![" ++ show v ++ "](" ++ show f1 ++ ")"
         show (FOFExists v f1) = "?[" ++ show v ++ "](" ++ show f1 ++ ")"
--}
+
 instance (Foldable a) => FreeVariables (FOF a b) b where
         foldrFree f = ff []
                 where

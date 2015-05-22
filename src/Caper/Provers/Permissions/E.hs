@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveFunctor, QuasiQuotes #-}
-module Caper.PermissionsE(makeEPProver,eproverVersion) where
+module Caper.Provers.Permissions.E(makeEPProver,eproverVersion) where
 import Control.Concurrent
 import Control.Monad
 import Data.List

@@ -220,7 +220,7 @@ samples = generate (sequence (concat [replicate 10 (liftM (simplify . close) $ r
 
 samples' :: [FOF PermissionAtomic StringVar]
 samples' = unGen (sequence (concat [replicate 10 (liftM (simplify . close) $ resize n arbitrary) | n <- [1..100]]))
-	(mkQCGen 1283749136) 118923573
+        (mkQCGen 1283749136) 118923573
 
 
 callProver :: String -> PermissionsProver -> PermissionsProver
@@ -231,11 +231,11 @@ myProvers = do
         let timeout = 10000
         epp <- makeEPProver "C:\\cygwin64\\home\\Tom\\E\\PROVER\\eprover.exe" timeout
         return [
-		-- callProver "*** E" epp --,
+                -- callProver "*** E" epp --,
                 -- callProver "*** Z3" $ permCheckZ3 (Just timeout) --,
                 -- callProver "*** BigInt" $ (timeoutSolver (timeout * 1000) permCheckBigInt) --,
                 callProver "*** Tree" $ (timeoutSolver (timeout * 1000) permCheckTree)
-		]
+                ]
 
 
 testSample :: [PermissionsProver] -> FOF PermissionAtomic StringVar -> IO String

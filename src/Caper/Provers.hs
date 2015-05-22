@@ -7,11 +7,12 @@ import Control.Monad.Error
 import Control.Monad.Reader
 
 import Caper.ProverDatatypes
-import Caper.PermissionsI
-import Caper.PermissionsE
-import qualified Caper.ValueProver as VP
+import Caper.Provers.Permissions.Internal
+import Caper.Provers.Permissions.E
+import qualified Caper.Provers.Values.SBV as VP
 #ifdef z3ffi
-import qualified Caper.ValueProver2 as VP2
+import qualified Caper.Provers.Values.Z3 as VP2
+import Caper.Provers.Permissions.SMT
 #endif
 import Caper.FirstOrder
 import Caper.Utils.MemoIO
@@ -34,6 +35,11 @@ proversFromConfig = do
                                 timeout <- get conf "EProver" "timeout"
                                 epp <- liftIO $ makeEPProver exec timeout
                                 return (epp . simplify, eproverVersion exec)
+#ifdef z3ffi
+                        "smt" -> do
+                                timeout <- get conf "Z3Prover" "timeout" -- TODO: Possibly make this separately configurable
+                                return (permCheckZ3 timeout, permCheckZ3Info)
+#endif
                         _ -> do
                                 mode <- get conf "InternalProver" "mode"
                                 let ipp = if mode == "bigint" then permCheckBigInt else permCheckTree

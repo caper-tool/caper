@@ -1,6 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Caper.PermissionsSMT (permCheckZ3) where
+module Caper.Provers.Permissions.SMT (permCheckZ3,permCheckZ3Info) where
 
 import Numeric
 import Data.List
@@ -8,9 +8,17 @@ import Data.Bits
 import Data.Maybe
 import Z3.Monad
 import Control.Monad
+import Control.Exception hiding (assert)
 -- import Control.Monad.IO.Class
 
 import Caper.ProverDatatypes
+
+permCheckZ3Info :: IO String
+permCheckZ3Info = (do
+        ver <- evalZ3 getVersion
+        return $ "Z3 library, version " ++ show ver) `catch`
+        (\e -> return $ "Failed to invoke Z3:\n" ++ show (e :: SomeException))
+
 
 toBinary :: Int -> Integer -> String
 toBinary bitcount v = "#b" ++ (tail $ showIntAtBase 2 (head . show)

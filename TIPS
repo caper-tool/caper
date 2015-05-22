@@ -1,0 +1,9 @@
+* E prover start up lag on cygwin
+
+It seems that cygwin processes have to check some credentials, which may cause a
+lag in starting.  (I was getting a lag of about 3 seconds, which was longer than
+the timeout!)
+
+Solution: Use cygserver running in the background (I installed it as a service)
+to cache credentials and improve performance.  (There may be better solutions.
+This worked for me.)

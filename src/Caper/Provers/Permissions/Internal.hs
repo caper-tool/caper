@@ -1,5 +1,5 @@
 
-module Caper.PermissionsI (permCheckBigInt, permCheckTree) where
+module Caper.Provers.Permissions.Internal (permCheckBigInt, permCheckTree) where
 import Data.List
 import Data.Maybe
 import Control.Parallel.Strategies

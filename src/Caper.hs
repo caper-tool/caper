@@ -19,6 +19,7 @@ import Caper.Exceptions
 import Caper.Logger
 import Caper.RegionTypes
 import Caper.RegionInterpretations
+import Caper.Procedures
 
 
 data CommandLine =
@@ -77,15 +78,16 @@ caperCommand CLVersion = do
                             Just True -> return ()
                             _ -> putStrLn "*** ERROR: The permissions prover could not prove True."
                     ) `catch` (\e -> putStrLn $ "*** ERROR: Invoking the permissions prover resulted in the following error:\n" ++ show (e :: SomeException))
-            ) `catch` (\e -> putStrLn $ "*** ERROR: Falied to initialise provers:\n" ++ show (e :: SomeException))
+            ) `catch` (\e -> putStrLn $ "*** ERROR: Failed to initialise provers:\n" ++ show (e :: SomeException))
 caperCommand (CLVerify file) = do
         declrs <- parseFile file
         print declrs
         provers <- initProvers
         result <- runErrLogger $ flip runReaderT [StringContext $ "File: \"" ++ file ++ "\"."] $ runRaiseT $ do
+            procSpecs <- declrsToProcedureSpecs declrs
             rtc <- declrsToRegionTypeContext declrs
             liftIO $ print rtc 
-            hoist (withReaderT (ProcedureContext rtc provers)) $ do
+            hoist (withReaderT (ProcedureContext procSpecs rtc provers)) $ do
                 checkRegionTypeContextInterpretations rtc
         print result
 

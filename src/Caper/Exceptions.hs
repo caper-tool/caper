@@ -62,6 +62,9 @@ data CaperException =
         -- |'MissingStateInterpretation' indicates that no state intepretations
         -- are provided for a region.  (This could become a parse error.)
         | MissingStateInterpretation
+        -- |'OverloadedProcedure' indicates that two procedures with the same
+        -- name have been declared.
+        | OverloadedProcedure String
         deriving (Eq, Typeable)
 
 instance Show CaperException where
@@ -83,6 +86,8 @@ instance Show CaperException where
                 "There are multiple possible interpretations for a single region state."
         show (MissingStateInterpretation) =
                 "There are no state interpretations for the region."
+        show (OverloadedProcedure pname) = 
+                "There are multiple procedures named '" ++ pname ++ "'."
 
 
 -- |The 'MonadRaise' class supports raising 'CaperException's and

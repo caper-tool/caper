@@ -39,12 +39,13 @@ executable Caper
                    argparser >=0.3.4,
                    int-cast
   hs-source-dirs:  src
-  ghc-options:     -Wall -fno-warn-unused-matches -rtsopts
+  -- -threaded is needed for use of the E theorem prover
+  ghc-options:     -Wall -fno-warn-unused-matches -rtsopts -threaded
 
   if flag(z3ffi)
     build-depends:  z3 >=4.0.0
     cpp-options:    -Dz3ffi
-    other-modules:  Caper.ValueProver2
+    other-modules:  Caper.Provers.Values.Z3, Caper.Provers.Permissions.SMT
   other-modules:   
                    Caper.Exceptions,
                    Caper.FirstOrder,
@@ -54,8 +55,6 @@ executable Caper
                    Caper.Parser.AST.Code,
                    Caper.Parser.AST.SourcePos,
                    Caper.Parser.Parser,
-                   Caper.PermissionsE,
-                   Caper.PermissionsI,
                    Caper.Prover,
                    Caper.ProverDatatypes,
                    Caper.Provers,
@@ -73,7 +72,6 @@ executable Caper
                    Caper.Utils.NondetClasses,
                    Caper.Utils.PMaybe,
                    Caper.Utils.SimilarStrings,
-                   Caper.ValueProver,
                    Caper.Logger,
                    Caper.ExceptionContext,
                    Caper.Contexts,
@@ -82,7 +80,6 @@ executable Caper
                    Caper.FreeVariables,
                    Caper.DeclarationTyping,
                    Caper.Utils.Mix,
-                   Caper.PermissionsSMT,
                    Caper.Utils.Alternating,
                    Caper.Proof,
                    Caper.Utils.FastEq,
@@ -90,7 +87,12 @@ executable Caper
                    Caper.Assertions.Produce,
                    Caper.Assertions.Consume,
                    Caper.Assertions.Check,
-                   Caper.Predicates
+                   Caper.Predicates,
+                   Caper.Procedures,
+                   Caper.Provers.Permissions.E,
+                   Caper.Provers.Permissions.Internal,
+                   Caper.Provers.Permissions.SMT,
+                   Caper.Provers.Values.SBV
 
 executable Interpreter
   build-depends:   

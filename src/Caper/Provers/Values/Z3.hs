@@ -1,4 +1,4 @@
-module Caper.ValueProver2 where
+module Caper.Provers.Values.Z3 where
 import Caper.ProverDatatypes
 import Z3.Monad
 import Control.Exception hiding (assert)
