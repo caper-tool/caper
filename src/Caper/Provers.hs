@@ -38,7 +38,7 @@ proversFromConfig = do
 #ifdef z3ffi
                         "smt" -> do
                                 timeout <- get conf "Z3Prover" "timeout" -- TODO: Possibly make this separately configurable
-                                return (permCheckZ3 timeout, permCheckZ3Info)
+                                return (permCheckZ3 (Just timeout), permCheckZ3Info)
 #endif
                         _ -> do
                                 mode <- get conf "InternalProver" "mode"

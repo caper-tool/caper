@@ -164,7 +164,6 @@ timeoutSem n sem = unless (n <= 0) $
 --       Ensure termination of subprocesses on error;
 --       Handle errors in terminating subprocesses
 
--- FIXME: seems to be a bug killing processes
 
 checkBothWays :: Show v => EPProver -> BAFormula v -> IO (Maybe Bool)
 checkBothWays epp formula = trace ("Calling E on:\n" ++ show formula) $ bracket
