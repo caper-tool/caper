@@ -13,6 +13,7 @@ import Text.Printf
 import System.CPUTime
 import Control.Monad.IO.Class
 import System.Timeout
+import System.Mem
 
 #define USEWIN32
 
@@ -28,9 +29,9 @@ import System.IO.Unsafe
 
 import Caper.ProverDatatypes
 --import PermissionsInterface
-import Caper.PermissionsI
-import Caper.PermissionsE
-import Caper.PermissionsSMT
+import Caper.Provers.Permissions.Internal
+import Caper.Provers.Permissions.E
+import Caper.Provers.Permissions.SMT
 import Caper.FirstOrder
 
 
@@ -219,22 +220,24 @@ samples :: IO [FOF PermissionAtomic StringVar]
 samples = generate (sequence (concat [replicate 10 (liftM (simplify . close) $ resize n arbitrary) | n <- [1..100]]))
 
 samples' :: [FOF PermissionAtomic StringVar]
-samples' = unGen (sequence (concat [replicate 10 (liftM (simplify . close) $ resize n arbitrary) | n <- [1..100]]))
+samples' = unGen (sequence (concat [replicate 20 (liftM (simplify . close) $ resize n arbitrary) | n <- [1..200]]))
         (mkQCGen 1283749136) 118923573
 
 
 callProver :: String -> PermissionsProver -> PermissionsProver
 callProver name f x = putStrLn name >> f x
 
+mySimpl = simplify . rewriteFOF simplR
+
 myProvers :: IO [PermissionsProver]
 myProvers = do
-        let timeout = 10000
+        let timeout = 2000
         epp <- makeEPProver "C:\\cygwin64\\home\\Tom\\E\\PROVER\\eprover.exe" timeout
         return [
-                -- callProver "*** E" epp --,
-                -- callProver "*** Z3" $ permCheckZ3 (Just timeout) --,
-                -- callProver "*** BigInt" $ (timeoutSolver (timeout * 1000) permCheckBigInt) --,
-                callProver "*** Tree" $ (timeoutSolver (timeout * 1000) permCheckTree)
+                callProver "*** E" epp ,
+                callProver "*** Z3" $ permCheckZ3 (Just timeout) ,
+                callProver "*** BigInt" $ (timeoutSolver (timeout * 1000) (permCheckBigInt . mySimpl)) -- ,
+                --callProver "*** Tree" $ (timeoutSolver (timeout * 1000) (permCheckTree . mySimpl))
                 ]
 
 
@@ -254,5 +257,9 @@ main = do
         ps <- myProvers
         forM_ samples' $ \s -> do
                 r <- testSample ps s
-                appendFile "permTestsTree.csv" $ r ++ "\n"
+                appendFile "permTests2EZ3BI.csv" $ r ++ "\n"
+	performMajorGC
+        forM_ samples' $ \s -> do
+                r <- testSample [timeoutSolver 2000000 (permCheckTree . mySimpl)] s
+                appendFile "permTests2Tree.csv" $ r ++ "\n"
 
