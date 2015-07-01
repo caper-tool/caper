@@ -1,5 +1,7 @@
 {-# LANGUAGE FlexibleContexts, MultiParamTypeClasses #-}
 {-# LANGUAGE CPP #-}
+{-| This module provides functions for generating prover instances based on the configuration file.
+-}
 -- #define z3ffi
 module Caper.Provers where
 import Data.ConfigFile
@@ -17,14 +19,17 @@ import Caper.Provers.Permissions.SMT
 import Caper.FirstOrder
 import Caper.Utils.MemoIO
 
+-- |The default configuration options.
 configDefaults :: MonadError CPError m => m ConfigParser
 configDefaults = readstring emptyCP "[Provers]\npermissions = internal\nvalues = z3\n[EProver]\ntimeout=1000\n[InternalProver]\nmode=tree\n[Z3Prover]\ntimeout=1000"
 
+-- |Configuration options read from the file "config.ini", backed by defaults
 configFile :: (MonadError CPError m, MonadIO m) => m ConfigParser
 configFile = do
                 def <- configDefaults
                 join $ liftIO $ readfile def "config.ini"
 
+-- |Initialise the provers using the configuration file
 proversFromConfig :: (MonadError CPError m, MonadIO m) => m ProverRecord
 proversFromConfig = do
                 conf <- configFile
@@ -57,6 +62,8 @@ proversFromConfig = do
                         _ -> (VP.valueCheck (if timeout <= 0 then Nothing else Just $ (timeout - 1) `div` 1000 + 1), VP.valueProverInfo)
                 return $ Provers pp vp ppi vi
                         
+-- |Initialise the provers from the configuration file.  Errors with the configuration
+-- file are raised as errors.
 initProvers :: IO ProverRecord
 initProvers = do
                 res <- runErrorT proversFromConfig
@@ -64,17 +71,8 @@ initProvers = do
                         (Left e) -> error $ "Failed parsing configuration file: " ++ show e
                         (Right r) -> return r
 
+
+-- | Run something that requires a 'ProverRecord'.  Will probably be removed in future.
 runWithProvers :: (MonadIO m) => ReaderT ProverRecord m a -> m a
 runWithProvers o = liftIO initProvers >>= runReaderT o
 
-{-
-getEZ3Provers :: IO ProverRecord
-getEZ3Provers = do
-        epp <- makeEPProver
-        let z3vp = valueCheck
-        return $ Provers (permCheck epp . simplify) z3vp
-
-getInternalZ3Provers :: IO ProverRecord
-getInternalZ3Provers =
-        return $ Provers (permCheck (TPProver ()) . simplify . (rewriteFOF simplR)) valueCheck
--}

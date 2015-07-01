@@ -3,7 +3,7 @@
 
 [Provers]
 # Choose the prover for permissions
-# options: internal | e
+# options: internal | e | smt
 # default: internal
 permissions = internal
 
