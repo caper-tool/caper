@@ -79,7 +79,7 @@ simplR (FOFOr FOFFalse x) = Just x
 simplR (FOFOr x FOFFalse) = Just x
 simplR (FOFImpl FOFTrue x) = Just x
 simplR (FOFImpl x FOFTrue) = Just FOFTrue
-simplR (FOFImpl FOFFalse x) = Just x
+simplR (FOFImpl FOFFalse x) = Just FOFTrue
 simplR (FOFImpl x FOFFalse) = Just (FOFNot x)
 simplR _ = Nothing
 
