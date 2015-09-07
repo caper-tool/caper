@@ -13,6 +13,7 @@ module Caper.Parser.Parser(
         regionAssertion
         ) where
 
+import Control.Monad (liftM)
 import Text.ParserCombinators.Parsec
 import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
@@ -82,11 +83,13 @@ comma      = Token.comma      lexer -- parses a comma
 whiteSpace = Token.whiteSpace lexer -- parses whitespace
 symbol     = Token.symbol     lexer
 
+rIdentifier :: Parser String
 rIdentifier =
   do s <- upper
      r <- identifier
      return $ s : r
 
+pIdentifier :: Parser String
 pIdentifier =
   do s <- lower
      r <- identifier
@@ -95,12 +98,14 @@ pIdentifier =
 parser :: Parser [Declr]
 parser = whiteSpace >> sequenceOfDeclr
 
+sequenceOfDeclr :: Parser [Declr]
 sequenceOfDeclr = sepBy declaration whiteSpace
 
-declaration =  function
-           <|> region
+declaration :: Parser Declr
+declaration =  liftM DeclrFun function
+           <|> liftM DeclrReg region
 
-function :: Parser Declr
+function :: Parser FunctionDeclr
 function =
   do pos  <- getPosition
      reserved "function"
@@ -111,7 +116,7 @@ function =
      stmt <- braces sequenceOfStmt
      return $ FunctionDeclr pos var req ens args stmt
 
-region :: Parser Declr
+region :: Parser RegionDeclr
 region =
   do pos <- getPosition
      reserved "region"

@@ -92,7 +92,8 @@ executable Caper
                    Caper.Provers.Permissions.E,
                    Caper.Provers.Permissions.Internal,
                    Caper.Provers.Permissions.SMT,
-                   Caper.Provers.Values.SBV
+                   Caper.Provers.Values.SBV,
+                   Caper.SymbolicExecution
 
 executable Interpreter
   build-depends:   

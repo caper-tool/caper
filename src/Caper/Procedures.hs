@@ -24,7 +24,7 @@ defaultPostcondition sp = AssrtPure sp $ ConstBAssrt sp True
 
 
 declrsToProcedureSpecs :: (Monad m, MonadRaise m, MonadLogger m) =>
-                [Declr] -> m (Map.Map String Specification)
+                [FunctionDeclr] -> m (Map.Map String Specification)
 declrsToProcedureSpecs = foldlM declrSpec Map.empty
         where
             declrSpec mp fdec@(FunctionDeclr sp fname pre post params _ ) = contextualise fdec $

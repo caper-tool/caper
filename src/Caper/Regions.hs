@@ -149,6 +149,47 @@ consumeRegion rtid rid params st = do
                         assertTrue . VAEq st . var
                 
 
+-- |Determine if two variables cannot be aliases for the same region.
+-- It may be possible that variables can be proved not to be aliases,
+-- but this routine may still treat them as if they could be.
+cannotAlias :: (MonadState s m, RegionLenses s) => VariableID -> VariableID -> m Bool
+cannotAlias r1 r2
+        | r1 == r2 = return False
+        | otherwise = do
+                regs <- use regions
+                return $ case (regs ^? ix r1 >>= regTypeInstance, regs ^? ix r2 >>= regTypeInstance) of
+                    (Just rt1, Just rt2) -> riType rt1 /= riType rt2
+                    _ -> False
+
+-- TODO: Put somewhere more appropriate?
+restoring :: (MonadState s m) => m a -> m a
+-- ^Run a stateful computation, restoring the state at the beginning.
+restoring f = do
+            s <- get
+            r <- f
+            put s
+            return r 
+                   
+-- |Determine if two variables cannot be aliases for the same region.
+-- It may be possible that variables can be proved not to be aliases,
+-- but this routine may still treat them as if they could be.
+-- This version gives fewer false negatives than cannotAlias, but requires
+-- calls to provers to see if a merge can take place.
+cannotAliasStrong :: (ProverM s r m, RegionLenses s, RTCGetter r) => VariableID -> VariableID -> m Bool
+cannotAliasStrong r1 r2
+        | r1 == r2 = return False
+        | otherwise = do
+                    -- Try merging the regions.  If the result is
+                    -- inconsistent then the regions are not aliases.
+                    regs <- use regions
+                    case (regs ^? ix r1, regs ^? ix r2) of
+                        (Just reg1, Just reg2) -> restoring $ do
+                                _ <- mergeRegions reg1 reg2
+                                c <- isConsistent
+                                return (c == Just False)
+                        _ -> return False
+                        
+
 -- Stabilise all regions
 stabiliseRegions :: (ProverM s r m, RegionLenses s, RTCGetter r) =>
                         m ()

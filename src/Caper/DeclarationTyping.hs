@@ -58,7 +58,8 @@ unifyR k1 k2 =
 -}
 typeDeclarations :: (MonadLogger m, MonadRaise m) =>
         [Declr] -> m (Map String [(String, VariableType)])
-typeDeclarations decs = do
+typeDeclarations decs0 = do
+                let decs = regionDeclrs decs0 
                 let decCounts = foldl decCount Map.empty decs
                 let tc0 = ifoldl initialDec TC.empty decCounts
                 tc <- flip execStateT tc0 $
@@ -67,7 +68,6 @@ typeDeclarations decs = do
         where
                 decCount m (RegionDeclr _ rtname rparas _ _ _) =
                         Map.insert rtname (length rparas) m
-                decCount m _ = m
                 tdm tc m dc@(RegionDeclr _ rtname rparas _ _ _) = 
                     contextualise dc $ do
                         pts <- iforM rparas $ \i nm ->
@@ -81,7 +81,6 @@ typeDeclarations decs = do
                                         ++ nm ++ "' of region type '"
                                         ++ rtname ++ "' has no type."
                         return $ Map.insert rtname pts m
-                tdm _ m _ = return m
                 initialDec i m v =
                         (either undefined id . bindE (Left (i,0)) VTRegionID) $ 
                         TC.declareAll [Left (i, n) | n <- [0..v - 1]]
@@ -91,7 +90,7 @@ typeDeclarations decs = do
 typeDeclaration :: (MonadState (TC.TContext (Either (String,Int) String) VariableType) m,
         MonadRaise m) =>
         Map String Int ->
-        Declr -> m ()
+        RegionDeclr -> m ()
 typeDeclaration decCounts dc@(RegionDeclr sp rtname rparas gdecs sis actions) =
           contextualise dc $ do
                 mapM_ (typeStateInterp decCounts resVar Left) sis
@@ -99,7 +98,6 @@ typeDeclaration decCounts dc@(RegionDeclr sp rtname rparas gdecs sis actions) =
         where
                 resVar s = maybe (Right s) (\x -> Left (rtname, x))
                         (elemIndex s rparas) 
-typeDeclaration _ _ = return ()
 
 typeStateInterp :: (MonadState (TC.TContext a VariableType) m,
         MonadRaise m, Ord a)

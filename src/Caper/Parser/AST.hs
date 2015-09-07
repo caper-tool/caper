@@ -6,16 +6,19 @@ module Caper.Parser.AST(
 
 import Data.List
 import Text.ParserCombinators.Parsec
+import Data.Maybe
 
 import Caper.Parser.AST.Code
 import Caper.Parser.AST.Annotation
 import Caper.ExceptionContext
 
--- |Declarations
-data Declr = FunctionDeclr SourcePos String (Maybe Assrt) (Maybe Assrt) [String] Stmt
-           | RegionDeclr SourcePos String [String] TopLevelGuardDeclr [StateInterpretation] [Action]
+data FunctionDeclr = FunctionDeclr SourcePos String (Maybe Assrt) (Maybe Assrt) [String] Stmt
+data RegionDeclr = RegionDeclr SourcePos String [String] TopLevelGuardDeclr [StateInterpretation] [Action]
 
-instance Show Declr where
+-- |Declarations
+data Declr = DeclrFun FunctionDeclr | DeclrReg RegionDeclr
+
+instance Show FunctionDeclr where
   show (FunctionDeclr _ n Nothing Nothing args s)       =
     "function " ++ n ++ "(" ++ intercalate ", " args ++ ") { " ++ show s ++ " }"
   show (FunctionDeclr _ n (Just ls) Nothing args s)     =
@@ -24,12 +27,35 @@ instance Show Declr where
     "function " ++ n ++ "(" ++ intercalate ", " args ++ ") ensures " ++ show ls ++  " { " ++ show s ++ " } "
   show (FunctionDeclr _ n (Just ls1) (Just ls2) args s) =
     "function " ++ n ++ "(" ++ intercalate ", " args ++ ") requires " ++ show ls1 ++ "; ensures " ++ show ls2 ++ " { " ++ show s ++ " }"
+
+instance Show RegionDeclr where
   show (RegionDeclr _ n args guards intrp actions) =
     "region " ++ n ++ "(" ++ intercalate ", " args ++ ") { guards " ++ show guards ++ "; interpretation { " ++ intercalate "; " (map show intrp) ++ "; } actions { " ++ intercalate "; " (map show actions) ++ "; } }"
+  
+instance Show Declr where
+    show (DeclrFun f) = show f
+    show (DeclrReg r) = show r
 
-instance Contextual Declr where
+instance Contextual FunctionDeclr where
   toContext (FunctionDeclr sp nm _ _ _ _) = DescriptiveContext sp $
         "In the function named '" ++ nm ++ "'"
+
+instance Contextual RegionDeclr where    
   toContext (RegionDeclr sp nm _ _ _ _) = DescriptiveContext sp $
         "In the declaration of region type '" ++ nm ++ "'"
-  
+
+instance Contextual Declr where
+  toContext (DeclrFun f) = toContext f
+  toContext (DeclrReg r) = toContext r
+
+functionDeclrs :: [Declr] -> [FunctionDeclr]
+functionDeclrs = mapMaybe funs
+    where
+        funs (DeclrFun f) = Just f
+        funs _ = Nothing
+
+regionDeclrs :: [Declr] -> [RegionDeclr]
+regionDeclrs = mapMaybe regs
+    where
+        regs (DeclrReg r) = Just r
+        regs _ = Nothing

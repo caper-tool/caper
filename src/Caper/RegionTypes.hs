@@ -209,7 +209,7 @@ declrsToRegionTypeContext declrs = do
             -- Determine the parameter types for (region) declarations
             typings <- typeDeclarations declrs
             -- Build the region type context
-            accumulate typings 0 emptyRegionTypeContext declrs
+            accumulate typings 0 emptyRegionTypeContext (AST.regionDeclrs declrs)
     where
         accumulate typings nextRTId ac [] = return ac
         accumulate typings nextRTId ac

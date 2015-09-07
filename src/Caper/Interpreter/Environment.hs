@@ -52,15 +52,15 @@ runIOThrowsFork action = runErrorT (trapErrorFork action) >>= return . extractVa
 
 type Heap = MVar [(Integer, Integer)]
 type Store = [(String, Integer)]
-type Env = IORef (Heap, Store, [Declr])
+type Env = IORef (Heap, Store, [FunctionDeclr])
 
-heapEnv :: (Heap, Store, [Declr]) -> Heap
+heapEnv :: (Heap, Store, [FunctionDeclr]) -> Heap
 heapEnv (h, _, _) = h
 
-storeEnv :: (Heap, Store, [Declr]) -> Store
+storeEnv :: (Heap, Store, [FunctionDeclr]) -> Store
 storeEnv (_, s, _) = s
 
-declrEnv :: (Heap, Store, [Declr]) -> [Declr]
+declrEnv :: (Heap, Store, [FunctionDeclr]) -> [FunctionDeclr]
 declrEnv (_, _, d) = d
 
 emptyEnv :: IO Env
@@ -132,7 +132,7 @@ writeStore envRef var n =
      when (isNothing $ lookup var (storeEnv env)) (liftIO $ writeIORef envRef (heapEnv env, (var, 0):(storeEnv env), declrEnv env))
      liftIO $ writeIORef envRef (heapEnv env, ((var, n) : filter (\a -> (fst a) /= var) (storeEnv env)), declrEnv env) >> return ()
 
-getDeclr :: Env -> String -> Integer -> IOThrowsError Declr
+getDeclr :: Env -> String -> Integer -> IOThrowsError FunctionDeclr
 getDeclr envRef name nargs =
   do env <- liftIO $ readIORef envRef
      let f = filter (\a -> isFunction a name nargs) (declrEnv env)
@@ -140,7 +140,7 @@ getDeclr envRef name nargs =
      return (head f)
   where isFunction (FunctionDeclr _ fname _ _ args _) n m = fname == n && toInteger (genericLength args) == m
 
-newDeclr :: Env -> [Declr] -> IO ()
+newDeclr :: Env -> [FunctionDeclr] -> IO ()
 newDeclr envRef declr =
   liftIO $ do env <- readIORef envRef
               writeIORef envRef (heapEnv env, storeEnv env, declr ++ (declrEnv env))

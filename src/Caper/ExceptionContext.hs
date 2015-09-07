@@ -20,6 +20,8 @@ class Contextual a where
         toContext :: a -> ExceptionContext
 instance Contextual ExceptionContext where
         toContext = id
+instance Contextual String where
+        toContext = StringContext
 class ECLenses c where
         exceptionContext :: Simple Lens c [ExceptionContext] 
 instance ECLenses [ExceptionContext] where

@@ -153,5 +153,5 @@ readPrompt prompt = flushStr prompt >> getLine
 runInterpreter :: IO ()
 runInterpreter = do env <- emptyEnv
                     declr <- liftIO $ parseFile "../examples/CASLock.t"
-                    liftIO $ newDeclr env declr
+                    liftIO $ newDeclr env (functionDeclrs declr)
                     (until_ (== "quit") (readPrompt "> ") . evalAndPrint) env

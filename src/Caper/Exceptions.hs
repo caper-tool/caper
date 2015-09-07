@@ -19,6 +19,7 @@ import Control.Lens
 import Text.ParserCombinators.Parsec
 import Data.List
 
+import Caper.Parser.AST
 import Caper.ExceptionContext
 import Caper.Utils.MonadHoist
 import Caper.TypingContext
@@ -65,6 +66,8 @@ data CaperException =
         -- |'OverloadedProcedure' indicates that two procedures with the same
         -- name have been declared.
         | OverloadedProcedure String
+        -- |'VerificationFailed' indicates that a given procedure could not be verified
+        | VerificationFailed String
         deriving (Eq, Typeable)
 
 instance Show CaperException where
@@ -88,6 +91,8 @@ instance Show CaperException where
                 "There are no state interpretations for the region."
         show (OverloadedProcedure pname) = 
                 "There are multiple procedures named '" ++ pname ++ "'."
+        show (VerificationFailed f) =
+                "Failed to verify: " ++ f
 
 
 -- |The 'MonadRaise' class supports raising 'CaperException's and

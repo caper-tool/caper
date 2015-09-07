@@ -15,6 +15,7 @@ import Caper.Contexts
 import Caper.ProverDatatypes
 import Caper.Provers
 import Caper.Parser.Parser
+import Caper.Parser.AST
 import Caper.Exceptions
 import Caper.Logger
 import Caper.RegionTypes
@@ -84,7 +85,7 @@ caperCommand (CLVerify file) = do
         print declrs
         provers <- initProvers
         result <- runErrLogger $ flip runReaderT [StringContext $ "File: \"" ++ file ++ "\"."] $ runRaiseT $ do
-            procSpecs <- declrsToProcedureSpecs declrs
+            procSpecs <- declrsToProcedureSpecs (functionDeclrs declrs)
             rtc <- declrsToRegionTypeContext declrs
             liftIO $ print rtc 
             hoist (withReaderT (ProcedureContext procSpecs rtc provers)) $ do
