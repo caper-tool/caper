@@ -19,7 +19,7 @@ import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as Token
 import Caper.Parser.AST
--- import qualified Control.Monad as Monad
+import Control.Applicative ((*>))
 
 languageDef =
   emptyDef { Token.commentStart    = "/*"
@@ -139,7 +139,7 @@ topLevelGuardDeclaration =  (do { char '0'; return ZeroGuardDeclr})
 
 guardDeclaration :: Parser GuardDeclr
 guardDeclaration = buildExpressionParser guardDeclarationOperators guardDeclarationTerm
- 
+
 guardDeclarationOperators = [ [Infix  (do { pos <- getPosition; reservedOp "*"; return (ProductGD pos)}) AssocLeft]
                           , [Infix  (do { pos <- getPosition; reservedOp "+"; return (SumGD pos    )}) AssocLeft]
                           ]
@@ -217,18 +217,20 @@ whileStatement =
   do pos  <- getPosition
      reserved "while"
      cond <- parens bExpression
+     inv <- optionMaybe $ reserved "invariant" *> assertion
      stmt <- braces sequenceOfStmt
-     return $ WhileStmt pos Nothing cond stmt
+     return $ WhileStmt pos inv cond stmt
 
 doWhileStatement :: Parser Stmt
 doWhileStatement =
   do pos  <- getPosition
      reserved "do"
+     inv <- optionMaybe $ reserved "invariant" *> assertion
      stmt <- braces sequenceOfStmt
      reserved "while"
      cond <- parens bExpression
      semi
-     return $ DoWhileStmt pos Nothing stmt cond
+     return $ DoWhileStmt pos inv stmt cond
 
 forkStatement :: Parser Stmt
 forkStatement =
@@ -237,7 +239,7 @@ forkStatement =
      fun  <- identifier
      args <- parens $ sepBy aExpression comma
      semi
-     return $ ForkStmt pos fun args  
+     return $ ForkStmt pos fun args
 
 assignStatement :: Parser Stmt
 assignStatement =
@@ -291,7 +293,7 @@ returnStatement =
      return $ ReturnStmt pos expr
 
 skipStatement :: Parser Stmt
-skipStatement = 
+skipStatement =
   do pos <- getPosition
      reserved "skip"
      semi
@@ -315,7 +317,7 @@ aOperators = [ [Prefix (do { pos <- getPosition; reservedOp "-"; return (NegAExp
              , [Infix  (do { pos <- getPosition; reservedOp "*"; return (BinaryAExpr pos Multiply)}) AssocLeft, Infix  (do { pos <- getPosition; reservedOp "/"; return (BinaryAExpr pos Divide  )}) AssocLeft]
              , [Infix  (do { pos <- getPosition; reservedOp "+"; return (BinaryAExpr pos Add     )}) AssocLeft, Infix  (do { pos <- getPosition; reservedOp "-"; return (BinaryAExpr pos Subtract)}) AssocLeft]
              ]
- 
+
 bOperators = [ [Prefix (do { pos <- getPosition; reservedOp "not"; return (NotBExpr pos            )})          ]
              , [Infix  (do { pos <- getPosition; reservedOp "and"; return (BinaryBExpr pos And     )}) AssocLeft]
              , [Infix  (do { pos <- getPosition; reservedOp "or" ; return (BinaryBExpr pos Or      )}) AssocLeft]
@@ -346,7 +348,7 @@ rExpression =
      op  <- relation
      a2  <- aExpression
      return $ RBinaryBExpr pos op a1 a2
- 
+
 relation =  (reservedOp "=" >> return Equal)
         <|> (reservedOp "!=" >> return NotEqual)
         <|> (reservedOp ">" >> return Greater)
@@ -416,7 +418,7 @@ valueRelation =  (do { vo <- equalityRelation; return (ValEquality vo) })
 
 valueExpression :: Parser ValExpr
 valueExpression = buildExpressionParser valueOperators valueTerm
- 
+
 valueOperators = [ [Prefix (do { pos <- getPosition; reservedOp "-"; return (UnaryValExpr pos ValNegation )})]
                  , [Infix  (do { pos <- getPosition; reservedOp "*"; return (BinaryValExpr pos ValMultiply)}) AssocLeft, Infix  (do { pos <- getPosition; reservedOp "/"; return (BinaryValExpr pos ValDivide  )}) AssocLeft]
                  , [Infix  (do { pos <- getPosition; reservedOp "+"; return (BinaryValExpr pos ValAdd     )}) AssocLeft, Infix  (do { pos <- getPosition; reservedOp "-"; return (BinaryValExpr pos ValSubtract)}) AssocLeft]
@@ -463,7 +465,7 @@ permissionRelation =  (do { pe <- equalityRelation; return (PermEquality pe) })
 
 permissionExpression :: Parser PermExpr
 permissionExpression = buildExpressionParser permissionOperators permissionTerm
- 
+
 permissionOperators = [ [Prefix (do { pos <- getPosition; reservedOp "~"; return (UnaryPermExpr pos Complement )})]
                       , [Infix  (do { pos <- getPosition; reservedOp "$"; return (BinaryPermExpr pos Composition)}) AssocLeft]
                       ]
@@ -505,7 +507,7 @@ regionAssertion =
                 s <- valueExpression
                 symbol ")"
                 return ([],s))
-                
+
 
 predicate :: Parser SpatialAssrt
 predicate =
@@ -527,7 +529,7 @@ cellAssertion =
                      return $ SACell (CellBlock pos e1 e2)
 
 guards :: Parser SpatialAssrt
-guards = 
+guards =
   do pos   <- getPosition
      ident <- identifier
      reservedOp "@"
@@ -597,7 +599,7 @@ parseString str =
   case parse parser "" str of
     Left e  -> error $ show e
     Right r -> r
- 
+
 parseFile :: String -> IO [Declr]
 parseFile file =
   do program  <- readFile file
