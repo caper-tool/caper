@@ -7,7 +7,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.MultiSet (MultiSet)
 import qualified Data.MultiSet as MultiSet
-import Control.Lens
+import Control.Lens hiding (op)
 import Control.Monad.State hiding (mapM_,mapM,msum)
 import Control.Monad.RWS hiding (mapM_,mapM,msum)
 import Data.Foldable
@@ -90,9 +90,9 @@ instance Show InformedRegion where
 
 showSymbState :: (MonadState (SymbState p) m, Show p, MonadReader r m, RTCGetter r) => m String
 showSymbState = do
-                state <- get
-                iregs <- mapM inform (_ssRegions state)
-                return $ show state ++ "\nRegions:\n" ++ show iregs
+                stte <- get
+                iregs <- mapM inform (_ssRegions stte)
+                return $ show stte ++ "\nRegions:\n" ++ show iregs
         where
                 inform reg = case regTypeInstance reg of
                         (Just (RegionInstance rtid _)) -> do
@@ -182,13 +182,13 @@ takingEachPredInstance pname = do
 type MSCheck r = RWST r () (SymbState Assertions)
 
 wrapStateT :: (Monad m) => (t -> s) -> (s -> t) -> StateT s m a -> StateT t m a
-wrapStateT init fin op = StateT $ \s0 -> do
-                        (r, t1) <- runStateT op (init s0)
+wrapStateT initial fin op = StateT $ \s0 -> do
+                        (r, t1) <- runStateT op (initial s0)
                         return (r, fin t1)
 
 wrapRWST :: (Monad m) => (t -> s) -> (s -> t) -> RWST r w s m a -> RWST r w t m a
-wrapRWST init fin op = RWST $ \rd s0 -> do
-                        (r, t1, w) <- runRWST op rd (init s0)
+wrapRWST initial fin op = RWST $ \rd s0 -> do
+                        (r, t1, w) <- runRWST op rd (initial s0)
                         return (r, fin t1, w)
 
 
@@ -248,41 +248,67 @@ consumePredicate p = do
 
 
 
-aexprToExpr :: (MonadState s m, SymbStateLenses s) => AExpr -> m (Expr VariableID)
--- Generate an expression that represents the
+aexprToVExpr :: (MonadState s m, SymbStateLenses s, MonadLogger m, MonadRaise m) => AExpr -> m (ValueExpression VariableID)
+-- | Generate an expression that represents the
 -- value of an arithmetic expression in the current
 -- symbolic state
 -- Requires: symbolic state contains mappings for all program variables in the expression
 -- TODO: If expression evaluation can cause a fault, we ought to assert that the fault cannot occur; division is thus not implemented yet
-aexprToExpr (VarAExpr s x) = do
+aexprToVExpr (VarAExpr s x) = do
                         bnds <- use progVars
-                        return $! Map.findWithDefault (error $ show s ++ " The variable '" ++ x ++ "' has no symbolic value.") x bnds
-aexprToExpr (ConstAExpr s n) = return $! integerExpr n
-aexprToExpr (NegAExpr s e) = do
-                        e' <- aexprToExpr e
-                        return $! toExpr $ VEMinus (VEConst 0) (toValueExpr e')
-aexprToExpr (BinaryAExpr s op e1 e2) = do
-                        e1' <- aexprToExpr e1
-                        e2' <- aexprToExpr e2
-                        return $! toExpr $ opi op (toValueExpr e1') (toValueExpr e2')
+                        case Map.lookup x bnds of
+                            Nothing -> do
+                                addSPContext s $ logEvent $ WarnUninitialisedVariable x
+                                xv <- newAvar x
+                                progVars %= Map.insert x (var xv)  
+                                return $ var xv
+                            Just xv -> return xv
+aexprToVExpr (ConstAExpr s n) = return $! VEConst n
+aexprToVExpr (NegAExpr s e) = do
+                        e' <- aexprToVExpr e
+                        return $! VEMinus (VEConst 0) (toValueExpr e')
+aexprToVExpr (BinaryAExpr s op e1 e2) = do
+                        e1' <- aexprToVExpr e1
+                        e2' <- aexprToVExpr e2
+                        theOp <- opi op
+                        return $! theOp (toValueExpr e1') (toValueExpr e2')
                 where
-                        opi Add = VEPlus
-                        opi Subtract = VEMinus
-                        opi Multiply = VETimes
-                        opi Divide = error $ show s ++ " The division operator is not yet supported."
+                        opi Add = return VEPlus
+                        opi Subtract = return VEMinus
+                        opi Multiply = return VETimes
+                        opi Divide = raise $ SyntaxNotImplemented "division (/)"
+
+aexprToExpr :: (MonadState s m, SymbStateLenses s, MonadLogger m, MonadRaise m) => AExpr -> m (Expr VariableID)
+aexprToExpr ae = liftM toExpr (aexprToVExpr ae)
 
 
+bexprToValueCondition :: (MonadState s m, SymbStateLenses s, MonadLogger m, MonadRaise m) =>
+            BExpr -> m (FOF ValueAtomic VariableID)
+bexprToValueCondition (ConstBExpr _ b) = return $ if b then FOFTrue else FOFFalse
+bexprToValueCondition (NotBExpr _ e) = liftM FOFNot (bexprToValueCondition e)
+bexprToValueCondition (BinaryBExpr _ op e1 e2) = liftM2 (theOp op) (bexprToValueCondition e1) (bexprToValueCondition e2)
+                where
+                    theOp And = FOFAnd
+                    theOp Or = FOFOr
+bexprToValueCondition (RBinaryBExpr _ rel e1 e2) = liftM2 (theRel rel) (aexprToVExpr e1) (aexprToVExpr e2)
+                where
+                    theRel Equal x y = FOFAtom $ VAEq x y
+                    theRel NotEqual x y = FOFNot $ FOFAtom $ VAEq x y
+                    theRel Greater x y = FOFAtom $ VALt y x
+                    theRel GreaterOrEqual x y = FOFNot $ FOFAtom $ VALt x y
+                    theRel Less x y = FOFAtom $ VALt x y
+                    theRel LessOrEqual x y = FOFNot $ FOFAtom $ VALt y x
 
 
 --------------------------------------------
 -- Symbolic execution of basic statements --
 --------------------------------------------
-symExLocalAssign :: (Monad m, MonadPlus m, Provers p) => String -> AExpr -> MSState p m ()
+symExLocalAssign :: (Monad m, MonadPlus m, Provers p, MonadLogger m, MonadRaise m) => String -> AExpr -> MSState p m ()
 symExLocalAssign target expr = do
-                newval <- aexprToExpr expr
+                newval <- aexprToVExpr expr
                 progVars %= Map.insert target newval
 
-symExAllocate :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m) =>
+symExAllocate :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m, MonadRaise m) =>
         String -> AExpr -> MSState p m ()
 symExAllocate target lenExpr = do
                 lenval <- aexprToExpr lenExpr
@@ -293,7 +319,7 @@ symExAllocate target lenExpr = do
                 producePredicate (PCells, [var loc, lenval])
                 progVars %= Map.insert target (var loc)
 
-symExWrite :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m) =>
+symExWrite :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m, MonadRaise m) =>
         AExpr -> AExpr -> MSState p m ()
 symExWrite target expr = do
                 loc <- aexprToExpr target
@@ -303,7 +329,7 @@ symExWrite target expr = do
                 newval <- aexprToExpr expr
                 addPredicate (PCell, [loc, newval])
 
-symExRead :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m) =>
+symExRead :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m, MonadRaise m) =>
         String -> AExpr -> MSState p m ()
 symExRead target eloc = do
                 loc <- aexprToExpr eloc

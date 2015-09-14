@@ -27,7 +27,7 @@ predicateTypes = Map.fromList [(PCell, [VTValue, VTValue]), -- A #cell has two v
 
 -- |PVarBindings map program variables (modelled a 'String's) to
 -- expressions
-type PVarBindings = Map String (Expr VariableID)
+type PVarBindings = Map String (ValueExpression VariableID)
 
 -- |LVarBindings map syntactic logical variables ('String's) to their internal
 -- representations ('VariableID's)
