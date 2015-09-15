@@ -37,6 +37,9 @@ module Caper.Prover(
         Assertions,
         AssertionLenses(..),
         emptyAssertions,
+        WithAssertions,
+        withAssrBase,
+        emptyWithAssertions,
         -- ** Display
         showAssertions,
         printAssertions,
@@ -430,8 +433,21 @@ instance AssertionLenses Assertions where
         existentials = assrEVars
         assertions = assrAssertions
 
+data WithAssertions b = WithAssertions {
+        _withAssrBase :: b,
+        _withAssrEVars :: Set VariableID,
+        _withAssrAssertions :: [Condition VariableID]
+    }
+makeLenses ''WithAssertions
 
+instance AssumptionLenses b => AssumptionLenses (WithAssertions b) where
+    theAssumptions = withAssrBase . theAssumptions
+    bindings = withAssrBase . bindings
+    assumptions = withAssrBase . assumptions
 
+instance AssumptionLenses b => AssertionLenses (WithAssertions b) where
+    existentials = withAssrEVars
+    assertions = withAssrAssertions 
 
 showAssertions :: (AssertionLenses a) => a -> String
 showAssertions asts = "Assumptions: !["
@@ -449,7 +465,8 @@ instance Show Assertions where
 emptyAssertions :: Assumptions -> Assertions
 emptyAssertions asmts = Assertions asmts Set.empty []
 
-
+emptyWithAssertions :: (AssumptionLenses a) => a -> WithAssertions a
+emptyWithAssertions x = WithAssertions x Set.empty []
 
 printAssertions :: (MonadIO m, MonadState s m, AssertionLenses s) => m ()
 printAssertions = get >>= liftIO . putStrLn . showAssertions

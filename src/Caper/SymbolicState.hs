@@ -73,6 +73,11 @@ instance AssumptionLenses p => SymbStateLenses (SymbState p) where
 instance RegionLenses (SymbState p) where
         regions = ssRegions
 
+instance SymbStateLenses s => SymbStateLenses (WithAssertions s) where
+        progVars = withAssrBase . progVars
+        logicalVars = withAssrBase . logicalVars
+        preds = withAssrBase . preds
+
 emptySymbStateWithVars :: [String] -> SymbState Assumptions
 emptySymbStateWithVars vs = execState (do
                 bindVarsAs (map VIDNamed vs) VTValue
@@ -191,15 +196,27 @@ wrapRWST initial fin op = RWST $ \rd s0 -> do
                         (r, t1, w) <- runRWST op rd (initial s0)
                         return (r, fin t1, w)
 
-
+{-
 admitChecks :: (Monad m) => MSCheck r m a -> MSState r m a
 -- Admit the assumptions as assertions
 admitChecks = wrapRWST (fmap emptyAssertions) (fmap admitAssertions)
+-}
+
+admitChecks :: (MonadState s m, AssumptionLenses s) => StateT (WithAssertions s) m a -> m a
+admitChecks o = do
+                initial <- get
+                (r, s') <- runStateT o (emptyWithAssertions initial)
+                put $ (s' & theAssumptions .~ admitAssertions s') ^. withAssrBase
+                return r
 
 
-
+{-
 check :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m) =>
         MSCheck p m a -> MSState p m a
+        -}
+check :: (AssumptionLenses s, MonadLogger m, Provers p, MonadReader p m,
+            MonadIO m, MonadState s m, MonadPlus m) =>
+           StateT (WithAssertions s) m a -> m a
 check c = admitChecks $ do
                 r <- c
                 justCheck
@@ -240,8 +257,13 @@ consumePred (PCell, [x, y]) = (do
 -- TD-Y: I'm going to use this stuff as is; at some point the front-end will be
 -- redesigned to simplify the parser and provide an input validation/type-
 -- checking phase.
-consumePredicate :: (Monad m, MonadPlus m, MonadLogger m) =>
+{-consumePredicate :: (Monad m, MonadPlus m, MonadLogger m) =>
         Predicate -> MSCheck r m ()
+        -}
+consumePredicate :: 
+                      (SymbStateLenses s, AssertionLenses s, MonadLogger m,
+                       MonadState s m, MonadPlus m) =>
+                      Predicate -> m ()
 consumePredicate p = do
                 validatePredicate p
                 consumePred p
@@ -303,13 +325,19 @@ bexprToValueCondition (RBinaryBExpr _ rel e1 e2) = liftM2 (theRel rel) (aexprToV
 --------------------------------------------
 -- Symbolic execution of basic statements --
 --------------------------------------------
-symExLocalAssign :: (Monad m, MonadPlus m, Provers p, MonadLogger m, MonadRaise m) => String -> AExpr -> MSState p m ()
+--symExLocalAssign :: (Monad m, MonadPlus m, Provers p, MonadLogger m, MonadRaise m) => String -> AExpr -> MSState p m ()
+symExLocalAssign :: 
+                      (SymbStateLenses s, MonadRaise m, MonadLogger m, MonadState s m) =>
+                      String -> AExpr -> m ()
 symExLocalAssign target expr = do
                 newval <- aexprToVExpr expr
                 progVars %= Map.insert target newval
 
-symExAllocate :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m, MonadRaise m) =>
-        String -> AExpr -> MSState p m ()
+-- symExAllocate :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m, MonadRaise m) =>
+--         String -> AExpr -> MSState p m ()
+symExAllocate :: 
+                   (MonadRaise m, MonadLogger m, Provers p, MonadReader p m, SymbStateLenses s, MonadState s m, MonadIO m, MonadPlus m) =>
+                   String -> AExpr -> m ()
 symExAllocate target lenExpr = do
                 lenval <- aexprToExpr lenExpr
                 check $

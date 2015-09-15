@@ -26,23 +26,6 @@ import Caper.Assertions.Consume
     Symbolic execution.
 -}
 
-{- |Record the current state; execute the first computation; revert to the saved state;
-    execute the second computation.  
--} 
-branch :: (MonadState s m, MonadCut m) => m a -> m b -> m (a, b)
-branch b1 b2 = do
-                s <- get
-                r1 <- b1
-                put s
-                cut_
-                r2 <- b2
-                put $ error "State is invalid after a branch"
-                return (r1, r2)
-
-{- |Like 'branch', but throws away the results of the computations.
--}
-branch_ :: (MonadState s m, MonadCut m) => m a -> m b -> m ()
-branch_ b1 b2 = branch b1 b2 >> return ()
 
 
 
@@ -77,6 +60,9 @@ symbolicExecute stmt cont = do
                     (do -- else branch
                         assumeFalseE bc
                         se selse)
+        se (WhileStmt _ _ _ _) = undefined
+        se (DoWhileStmt _ _ _ _) = undefined
+        se (LocalAssignStmt _ trgt src) = symExLocalAssign trgt src 
 
 checkProcedure ::
     (MonadRaise m, MonadIO m, MonadLogger m,

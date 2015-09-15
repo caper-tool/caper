@@ -42,6 +42,9 @@ class RegionLenses a where
 instance RegionLenses Regions where
         regions = lens _regions (\_ y -> Regions y)
 
+instance RegionLenses s => RegionLenses (WithAssertions s) where
+        regions = withAssrBase . regions
+
 regionList :: (MonadState s m, RegionLenses s) => m [VariableID]
 regionList = liftM AM.distinctKeys $ use regions
 
