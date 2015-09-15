@@ -347,8 +347,11 @@ symExAllocate target lenExpr = do
                 producePredicate (PCells, [var loc, lenval])
                 progVars %= Map.insert target (var loc)
 
-symExWrite :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m, MonadRaise m) =>
-        AExpr -> AExpr -> MSState p m ()
+--symExWrite :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m, MonadRaise m) =>
+--        AExpr -> AExpr -> MSState p m ()
+symExWrite :: (SymbStateLenses s, MonadLogger m, MonadRaise m, Provers p,
+                     MonadReader p m, MonadIO m, MonadState s m, MonadPlus m) =>
+                    AExpr -> AExpr -> m ()
 symExWrite target expr = do
                 loc <- aexprToExpr target
                 check $ do
@@ -357,8 +360,11 @@ symExWrite target expr = do
                 newval <- aexprToExpr expr
                 addPredicate (PCell, [loc, newval])
 
-symExRead :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m, MonadRaise m) =>
-        String -> AExpr -> MSState p m ()
+--symExRead :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m, MonadRaise m) =>
+--        String -> AExpr -> MSState p m ()
+symExRead :: (SymbStateLenses s, MonadRaise m, MonadLogger m, Provers p,
+                MonadReader p m, MonadIO m, MonadState s m, MonadPlus m) =>
+               String -> AExpr -> m ()
 symExRead target eloc = do
                 loc <- aexprToExpr eloc
                 oldval <- check $ do

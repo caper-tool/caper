@@ -26,10 +26,12 @@ import Caper.Assertions.Consume
     Symbolic execution.
 -}
 
+-- TODO: this should handle regions
+atomicSymEx :: m () -> m ()
+atomicSymEx ase = ase
 
 
-
-data ExitMode = EMReturn (Maybe ValExpr) | EMContinuation
+data ExitMode = EMReturn (Maybe (ValueExpression VariableID)) | EMContinuation
 
 updateContinuation :: (Monad m) => (ExitMode -> m ()) -> m () -> (ExitMode -> m ())
 updateContinuation cont newc EMContinuation = newc
@@ -63,6 +65,16 @@ symbolicExecute stmt cont = do
         se (WhileStmt _ _ _ _) = undefined
         se (DoWhileStmt _ _ _ _) = undefined
         se (LocalAssignStmt _ trgt src) = symExLocalAssign trgt src 
+        se (DerefStmt _ trgt src) = atomicSymEx $ symExRead trgt src
+        se (AssignStmt _ trgt src) = atomicSymEx $ symExWrite trgt src
+        se (CallStmt _ rvar pname args) = undefined
+        se (ReturnStmt _ (Just rexp)) = do
+                        re <- aexprToVExpr rexp
+                        cont $ EMReturn (Just re)
+        se (ReturnStmt _ Nothing) = cont $ EMReturn Nothing
+        se (SkipStmt _) = cont EMContinuation
+        se (ForkStmt _ pname args) = undefined
+        se (AssertStmt _ assrt) = undefined
 
 checkProcedure ::
     (MonadRaise m, MonadIO m, MonadLogger m,
