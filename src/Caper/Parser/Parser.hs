@@ -175,9 +175,9 @@ conditions =  try (do { d <- sepBy pureAssertion comma; reservedOp "|"; return d
 action :: Parser Action
 action =
   do pos  <- getPosition
-     c    <- conditions
      g    <- sepBy guard (reservedOp "*")
      reservedOp ":"
+     c    <- conditions
      pre  <- valueExpression
      reservedOp "~>"
      post <- valueExpression
@@ -390,7 +390,7 @@ pureTerm =  parens pureAssertion
         <|> (do { pos <- getPosition; reserved "true"; return (ConstBAssrt pos True)})
         <|> (do { pos <- getPosition; reserved "false"; return (ConstBAssrt pos False)})
         <|> try (binaryVariableAssertion)
-        <|> binaryPermissionAssertion
+        <|> try (binaryPermissionAssertion)
         <|> binaryValueAssertion
 
 binaryVariableAssertion =

@@ -1,0 +1,62 @@
+
+MAC OS X Installation Notes
+===========================
+
+Requirements
+------------
+
+### Z3
+
+Z3 can be downloaded from: https://github.com/Z3Prover/z3/releases/download/z3-4.4.0/z3-4.4.0-x64-osx-10.10.3.zip
+
+Extract the arquive to a directory with path $Z3PATH.
+
+The instructions are located in the README file, in short, go to the directory $Z3PATH and perform the following commands:
+
+```
+   python scripts/mk_make.py
+   cd build
+   make
+   sudo make install
+```
+
+Add the bin directory to your PATH, as following
+
+```
+export PATH="$Z3PATH/bin:$PATH"
+```
+
+### Caper
+
+Make sure you have GHC 7.8.3.
+It can be downloaded from: https://www.haskell.org/platform/download/2014.2.0.0/Haskell%20Platform%202014.2.0.0%2064bit.signed.pkg
+
+Go to the Caper directory you just downloaded.
+
+First create a sandbox using the command:
+
+```
+cabal sandbox init
+```
+
+Install the z3 Haskell bindings as following:
+
+```
+export DYLD_LIBRARY_PATH=$Z3PATH/bin
+cabal install z3-4.0.0 --extra-include-dirs=$Z3PATH/include --extra-lib-dirs=$Z3PATH/bin
+
+```
+
+Finally install the rest of the dependencies
+
+```
+cabal install sbv-3.1.0.0
+cabal install
+```
+
+You can now build the whole project using
+```
+cabal build
+```
+
+You are ready to go!
