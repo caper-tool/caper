@@ -175,9 +175,9 @@ conditions =  try (do { d <- sepBy pureAssertion comma; reservedOp "|"; return d
 action :: Parser Action
 action =
   do pos  <- getPosition
+     c    <- conditions
      g    <- sepBy guard (reservedOp "*")
      reservedOp ":"
-     c    <- conditions
      pre  <- valueExpression
      reservedOp "~>"
      post <- valueExpression
