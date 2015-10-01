@@ -34,15 +34,16 @@ makeSPEq nm = do
         case inf of
                 TyConI (DataD _ _ _ cs _) -> do
                         spcs <- mapM makeClause cs
-                        let spcs' = spcs ++ [Clause [WildP, WildP] (NormalB $ (ConE 'False)) []]
+                        let spcs' = spcs ++ [Clause [WildP, WildP] (NormalB (ConE 'False)) []]
                         return [InstanceD [] (AppT (ConT ''Eq) (ConT nm)) [FunD '(==) spcs']]
                 _ -> fail "makeSPEq: Expected the name of a data type"
         where
                 makeClause (NormalC n sts) = do
-                        let patterns = [ConP n [VarP $ mkName $ x : show i |
+                        let patterns = [ConP n [VarP $ mkName $ '_' : x : show i |
                                                  i <- [1..length sts]]
                                              | x <- "ab"]
-                        let conjs = [InfixE (Just $ VarE $ mkName $ 'a' : show i) (VarE '(==)) (Just $ VarE $ mkName $ 'b' : show i)
+                        let conjs = [InfixE (Just $ VarE $ mkName $ "_a" ++ show i) (VarE '(==)) (Just $ VarE $ mkName $ "_b" ++ show i)
                                 | ((_,t), i) <- zip sts [(1::Int)..],
                                         t /= ConT ''SourcePos]
                         return $ Clause patterns (NormalB $ AppE (VarE 'and) (ListE conjs)) []
+                makeClause _ = fail "makeSPEq: Only normal constructors are supported"

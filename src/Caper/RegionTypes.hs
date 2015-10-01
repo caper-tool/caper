@@ -232,7 +232,5 @@ declrsToRegionTypeContext declrs = do
                             rtcIds = Map.insert rtnam nextRTId (rtcIds ac),
                             rtcRegionTypes = Map.insert nextRTId rt (rtcRegionTypes ac)
                             }) rs
-        accumulate typings nextRTId ac (_:rs) =
-                        accumulate typings nextRTId ac rs
         toParam (s, vt) = (RTDVar s, vt)
 

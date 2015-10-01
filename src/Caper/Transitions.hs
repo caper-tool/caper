@@ -7,9 +7,10 @@ import Control.Monad.IO.Class
 import Data.Foldable
 
 import Caper.ProverDatatypes
--- import Caper.Prover
+import Caper.Prover
 import Caper.Utils.FloydWarshall
 import Caper.RegionTypes
+import Caper.Logger
 -- import Caper.Provers -- TODO: remove (used for testing)
 
 data ClosureVariable v = Context v | Local String deriving (Eq, Ord)
@@ -79,7 +80,7 @@ instance (Eq b, Eq (a b)) => Floydable (FOF a b) where
 -- Given a GuardedTransition and a pair of states, computes the condition
 -- for that transition firing.  In particular, it checks if the condition
 -- can never happen, or always happens.
-computeCondition :: (MonadIO m, MonadReader r m, Provers r, Eq v, StringVariable v) =>
+computeCondition :: (MonadIO m, MonadReader r m, Provers r, Eq v, StringVariable v, MonadLogger m) =>
         Int -> Int -> GuardedTransition v -> m (FOF ValueAtomic v)
 computeCondition i j t = do
         let cond = foldr FOFExists (FOFAnd (gtGuard t) (FOFAnd (gtPreState t $=$ VEConst (toInteger i)) (gtPostState t $=$ VEConst (toInteger j)))) (gtBoundVars t)
@@ -94,7 +95,7 @@ computeCondition i j t = do
 
 -- Uses computeCondition to determine how to instantiate the matrix.
 -- Reflexive transitions are always allowed.
-computeConditions :: (MonadIO m, MonadReader r m, Provers r, Eq v, StringVariable v) =>
+computeConditions :: (MonadIO m, MonadReader r m, Provers r, Eq v, StringVariable v, MonadLogger m) =>
         [GuardedTransition v] -> Int -> Int -> m (FOF ValueAtomic v)
 computeConditions gts i j = if i == j then return FOFTrue else
                                 foldM cc FOFFalse gts
@@ -106,7 +107,7 @@ computeConditions gts i j = if i == j then return FOFTrue else
 translateIn :: Int -> (Int -> Int -> a) -> Int -> Int -> a
 translateIn offset f x y = f (x + offset) (y + offset)
 
-computeInitialMatrix :: (MonadIO m, MonadReader r m, Provers r, Eq v, StringVariable v) =>
+computeInitialMatrix :: (MonadIO m, MonadReader r m, Provers r, Eq v, StringVariable v, MonadLogger m) =>
         Int -> Int -> [GuardedTransition v] -> m (Matrix (FOF ValueAtomic v))
 computeInitialMatrix lower upper gts = floydInitM (upper - lower + 1) (translateIn lower $ computeConditions gts)
 
@@ -119,7 +120,7 @@ matrixToReflRelation mx lower pre post = fmin (pre $=$ post) $ fst $ foldl' op1 
                         op2 i (f, j) e | i == j = (f, j + 1)
                                        | otherwise = (fmin f (fadd e (FOFAnd (VEConst i $=$ pre) (VEConst j $=$ post))), j + 1)
 
-computeClosureRelation :: (MonadIO m, MonadReader r m, Provers r, Eq v, StringVariable v) =>
+computeClosureRelation :: (MonadIO m, MonadReader r m, Provers r, Eq v, StringVariable v, MonadLogger m) =>
         StateSpace -> [GuardedTransition v] -> m (ValueExpression v -> ValueExpression v -> FOF ValueAtomic v)
 -- Best case scenario: no actions!
 computeClosureRelation _ [] = return (\x y -> FOFAtom $ VAEq x y)
@@ -133,9 +134,10 @@ computeClosureRelation (StateSpace (Just lower) (Just upper)) gts = do
 computeClosureRelation _ _ = return (\x y -> FOFTrue)
 
 
-
+{-
 testgts = [ GuardedTransition [VIDNamed "x"]
         (FOFAnd (VEConst 7 $<$ (VEVar $ VIDNamed "a"))
                 (VEVar (VIDNamed "x") $=$ VEConst 1))
         (VEVar $ VIDNamed "x")
         (VEConst 1 $-$ VEVar (VIDNamed "x")) ]
+-}

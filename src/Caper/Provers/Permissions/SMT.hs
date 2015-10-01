@@ -1,4 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# OPTIONS_GHC -fno-warn-unused-binds #-}
 
 module Caper.Provers.Permissions.SMT (permCheckZ3,permCheckZ3Info) where
 
@@ -19,10 +20,6 @@ permCheckZ3Info = (do
         return $ "Z3 library, version " ++ show ver) `catch`
         (\e -> return $ "Failed to invoke Z3:\n" ++ show (e :: SomeException))
 
-
-toBinary :: Int -> Integer -> String
-toBinary bitcount v = "#b" ++ (tail $ showIntAtBase 2 (head . show)
-                ((v .&. (2 ^ (2 ^ bitcount) - 1)) + 2 ^ (2 ^ bitcount)) "")
 
 toZ3BV :: Int -> Integer -> Z3 AST
 toZ3BV bitcount v = 
@@ -121,7 +118,14 @@ permCheckZ3 timeout f = evalZ3With Nothing opts $ do
                 opts = case timeout of
                         (Just x) -> if x > 0 then opt "TIMEOUT" x else stdOpts
                         _ -> stdOpts
-                 
+
+-- The following functions construct string-based queries for an SMT solver.
+-- Since this module uses the library interface to Z3, this is not used, but I'm leaving it here in case it
+-- is ever useful.
+
+toBinary :: Int -> Integer -> String
+toBinary bitcount v = "#b" ++ (tail $ showIntAtBase 2 (head . show)
+                ((v .&. (2 ^ ((2::Integer) ^ bitcount) - 1)) + 2 ^ ((2::Integer) ^ bitcount)) "")
 
 
 smtify :: Eq v => String -> [v] -> FOF PermissionAtomic v -> String

@@ -3,7 +3,7 @@ module Caper.Provers.Permissions.Internal (permCheckBigInt, permCheckTree) where
 import Data.List
 import Data.Maybe
 import Control.Parallel.Strategies
-import Data.Bits
+import Data.Bits hiding (bit)
 
 import qualified Caper.ProverDatatypes as PD
 
@@ -62,7 +62,8 @@ instance PermModel EvalTree where
 
 data IntegerTree = ITree !Integer !Int deriving (Eq, Ord, Show)
 
-mask 0 depth = 2 ^ (2 ^ (depth - 1)) - 1
+mask :: (Integral a, Integral b) => a -> b -> Integer
+mask 0 depth = 2 ^ ((2 :: Integer) ^ (depth - 1)) - 1
 mask n depth = let m = mask (n - 1) (depth - 1) in m .|. shiftL m (2 ^ (depth - 1))
 
 

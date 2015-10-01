@@ -135,6 +135,9 @@ instance Show v => Show (Guard v) where
                         showone (s, NoGP) = s
                         showone (s, PermissionGP perm) = s ++ "[" ++ show perm ++ "]"
 
+guardLift :: (Map.Map String (GuardParameters t)
+               -> Map.Map String (GuardParameters v))
+               -> Guard t -> Guard v
 guardLift f (GD x) = GD (f x)
 
 instance ExpressionSub GuardParameters PermissionExpression where
@@ -314,14 +317,14 @@ guardPrimitiveEntailmentM (GD g1) (GD g2) = if Map.null $ Map.differenceWith sam
                 rest = Map.difference g1 g2
                 doGPEM = do
                         let k = Map.intersectionWith (,) g1 g2
-                        r <- mapM subtract k
+                        r <- mapM subtrct k
                         return $ Map.union (Map.mapMaybe id r) rest
-                subtract :: (MonadPlus m, MonadState s m, AssertionLenses s,
+                subtrct :: (MonadPlus m, MonadState s m, AssertionLenses s,
                         MonadLogger m) =>
                         (GuardParameters VariableID, GuardParameters VariableID) -> m (Maybe (GuardParameters VariableID))
-                subtract (NoGP, NoGP) = return Nothing
-                subtract (PermissionGP pe1, PermissionGP pe2) = liftM (fmap PermissionGP) $ subtractPE pe1 pe2
-                subtract _ = mzero -- Should be impossible
+                subtrct (NoGP, NoGP) = return Nothing
+                subtrct (PermissionGP pe1, PermissionGP pe2) = liftM (fmap PermissionGP) $ subtractPE pe1 pe2
+                subtrct _ = mzero -- Should be impossible
 
 
 guardEntailment :: (MonadPlus m, MonadState s m, AssertionLenses s,

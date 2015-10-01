@@ -1,9 +1,6 @@
 module Caper.Provers.Values.SBV where
 import Data.SBV
 import Prelude hiding (sequence,foldl,mapM_,mapM)
-import Data.Foldable
-import Data.Traversable
-import Control.Monad hiding (mapM, mapM_)
 
 import Caper.ProverDatatypes
 import Caper.FirstOrder
@@ -39,8 +36,7 @@ toPredicate s0 = toPredicate' s0 . pNormalise
                 toPredicate' s f = return $ toSBool s f  
 
 valueCheck :: (Eq v, Show v, Refreshable v) => Maybe Int -> FOF ValueAtomic v -> IO (Maybe Bool)
-valueCheck timeout f = do
-        putStrLn (show f) 
+valueCheck timeout f = 
         isTheorem timeout $ toPredicate (\v -> error $ "Unquantified variable " ++ show v ++ " in formula:\n" ++ show f) f
 
 valueProverInfo :: IO String

@@ -19,7 +19,6 @@ import Control.Lens
 import Text.ParserCombinators.Parsec
 import Data.List
 
-import Caper.Parser.AST
 import Caper.ExceptionContext
 import Caper.Utils.MonadHoist
 import Caper.TypingContext

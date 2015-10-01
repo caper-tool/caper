@@ -245,7 +245,7 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
         where
                 bndVars tr = Set.difference (trVariables tr) (rtParamVars rt)
                 params = Map.fromList $ zip (map fst $ rtParameters rt) ps
-                checkTrans tr@(TransitionRule trgd pred pre post) = do
+                checkTrans tr@(TransitionRule trgd prd prec post) = do
                         -- Compute a binding for fresh variables
                         bvmap <- freshInternals rtdvStr (bndVars tr)
                         let bvars = Map.elems bvmap
@@ -263,7 +263,7 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
                                     else
                                         return $ Just False
                         return $ if guardCompat == Just False then [] else
-                                [GuardedTransition bvars FOFTrue (exprSub s pre) (exprSub s post)]
+                                [GuardedTransition bvars FOFTrue (exprSub s prec) (exprSub s post)]
 
 
 subVars' :: (Traversable t, ExpressionSub t e, Expression e) =>

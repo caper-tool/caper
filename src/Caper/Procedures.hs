@@ -27,7 +27,7 @@ declrsToProcedureSpecs :: (Monad m, MonadRaise m, MonadLogger m) =>
                 [FunctionDeclr] -> m (Map.Map String Specification)
 declrsToProcedureSpecs = foldlM declrSpec Map.empty
         where
-            declrSpec mp fdec@(FunctionDeclr sp fname pre post params _ ) = contextualise fdec $
+            declrSpec mp fdec@(FunctionDeclr sp fname pre post params _) = contextualise fdec $
                                         case Map.lookup fname mp of
                                             (Just _) -> raise $ OverloadedProcedure fname
                                             Nothing -> do
@@ -44,5 +44,4 @@ declrsToProcedureSpecs = foldlM declrSpec Map.empty
                                                         logEvent $ WarnMissingPostcondition fname (show def)
                                                         return def
                                                 return $ Map.insert fname (Specification params pre' post') mp
-            declrSpec mp _ = return mp
 
