@@ -163,7 +163,7 @@ instance Num (ValueExpression v) where
 -}
 
 class StringVariable v where
-        -- Convert a variable to a string, for passing to a prover
+        -- |Convert a variable to a string, for passing to a prover
         -- Each variable should have a unique string representation:
         -- if two variables have the same representation, they are
         -- considered to be the same variable.

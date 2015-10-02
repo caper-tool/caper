@@ -193,7 +193,7 @@ cannotAliasStrong r1 r2
                         _ -> return False
                         
 
--- Stabilise all regions
+-- |Stabilise all regions
 stabiliseRegions :: (ProverM s r m, RegionLenses s, RTCGetter r) =>
                         m ()
 stabiliseRegions = do

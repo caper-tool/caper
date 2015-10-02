@@ -276,17 +276,6 @@ subtractPE l PEFull = do
                         assertTrue $ PAEq l PEFull
                         return Nothing
 subtractPE _ PEZero = mzero     -- Having a permission guard at all should imply that it's non-zero, therefore this path can simply fail
-{--subtractPE l ex@(PEVar (EVExistential _ s)) = trace ("binding: " ++ s ++ " === " ++ show l) (do
-                        bindEvar s l -- TODO: frame some permission off?
-                        return Nothing) `mplus`
-                (do
-                        ev <- freshEvar
-                        let eve = (PEVar $ EVExistential () ev)
-                        trace ("binding: " ++ s ++ " + " ++ ev ++ " === " ++ show l) $ addConstraint $ LNeg $ PAEq ex PEZero
-                        addConstraint $ LNeg $ PAEq eve PEZero
-                        addConstraint $ LPos $ PAEq (fmap EVNormal l) (PESum ex eve)
-                        return (Just eve))
---}
 subtractPE l s = (do -- TODO: frame some permission
                 assertTrue $ PAEq l s
                 return Nothing) `mplus`
@@ -368,28 +357,3 @@ consumeGuard :: (MonadPlus m, MonadState s m, AssertionLenses s,
 consumeGuard ZeroGuardDeclr = \_ _ _ -> mzero -- Something has gone wrong...
 consumeGuard (SomeGuardDeclr gt) = consumeGuard' gt
 
-{--
-
-
-guardPrimitiveEntailment :: (MonadIO m, Monad m) => p -> Guard VariableID -> Guard EVariable -> ProverT (MaybeT m) (Guard EVariable, EvarSubstitution)
--- Checks if first guard entails second without rewrites
--- Returns the frame and substitution if so, Nothing otherwise
-guardPrimitiveEntailment prover g1@(GD g1a) g2@(GD g2a) = if Map.null $ g2a `Map.difference` g1a then dogpe else fail "Non sequitur"
-        where
-                dogpe = do
-                        (frame, subs) <- mapProver firstChoiceT $ checkWith prover $ guardPrimitiveEntailmentM g1 g2
-                        return (frame, subs)
-                        --return (exprSub subs frame, subs)
---
-
-eGuardSubs :: Guard EVariable -> EvarSubstitution -> Guard VariableID
-eGuardSubs g subs = exprSub (fromJust . subs) g
-
-guardGeneralEntailment :: (MonadIO m, Monad m, PermissionsProver p) => p -> GuardDeclr -> Guard VariableID -> Guard EVariable -> ProverT (MaybeT m) (Guard EVariable, EvarSubstitution)
-guardGeneralEntailment p gt g1 g2 = guardPrimitiveEntailment p g1 g2 `mplus`
-                (do
-                        let (gel, ger) = guardEquivalence gt g1 g2
-                        (frame0, s0) <- guardPrimitiveEntailment p g1 gel
-                        guardPrimitiveEntailment p (guardJoin (eGuardSubs frame0 s0) ger) g2)
-
---}

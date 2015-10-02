@@ -79,9 +79,10 @@ instance SymbStateLenses s => SymbStateLenses (WithAssertions s) where
         preds = withAssrBase . preds
 
 emptySymbStateWithVars :: [String] -> SymbState Assumptions
-emptySymbStateWithVars vs = execState (do
+emptySymbStateWithVars vs = flip execState emptySymbState $ do
                 bindVarsAs (map VIDNamed vs) VTValue
-                ssProgVars .= Map.fromList [(x, var (VIDNamed x)) | x <- vs]) emptySymbState
+                ssProgVars .= Map.fromList [(x, var (VIDNamed x)) | x <- vs]
+                ssLogicalVars .= Map.fromList [(x, VIDNamed x) | x <- vs]
 
 newtype InformedRegion = InformedRegion (Region, Maybe RegionType)
 

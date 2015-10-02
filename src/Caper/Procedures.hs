@@ -2,7 +2,7 @@ module Caper.Procedures where
 
 import qualified Data.Map as Map
 import Data.Foldable
-import Data.Maybe
+import Control.Lens
 
 import Caper.Exceptions
 import Caper.Logger
@@ -16,12 +16,17 @@ data Specification = Specification {
         specPostcondition :: Assrt
         }
 
+class SpecificationContext c where
+    specifications :: Getter c (Map.Map String Specification)
+
+
 defaultPrecondition :: SourcePos -> Assrt
 defaultPrecondition sp = AssrtPure sp $ ConstBAssrt sp False
 
 defaultPostcondition :: SourcePos -> Assrt
 defaultPostcondition sp = AssrtPure sp $ ConstBAssrt sp True
 
+-- TODO: Somewhere we should check that procedures don't have multiple arguments of the same name 
 
 declrsToProcedureSpecs :: (Monad m, MonadRaise m, MonadLogger m) =>
                 [FunctionDeclr] -> m (Map.Map String Specification)
