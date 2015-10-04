@@ -5,6 +5,7 @@
 module Caper.Logger where
 import Data.Set (Set)
 import qualified Data.Set
+import Control.Applicative
 import Control.Monad.Writer
 import Control.Monad.Reader
 import System.IO
@@ -89,7 +90,7 @@ instance (MonadLogger m) => MonadLogger (ReaderT [ExceptionContext] m) where
                 lift $ logEventContext (ec ++ ctx, e)
 
 newtype HLoggerT m a = HLoggerT (ReaderT Handle m a)
-        deriving (Monad,MonadIO,MonadHoist,Functor,MonadPlus)
+        deriving (Applicative,Monad,MonadIO,MonadHoist,Functor,Alternative,MonadPlus)
 
 instance (MonadIO m) => MonadLogger (HLoggerT m) where
         logEventContext (ec, e) = HLoggerT $ do

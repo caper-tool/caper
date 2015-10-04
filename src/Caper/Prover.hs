@@ -61,6 +61,9 @@ module Caper.Prover(
         {- -- ** Variable type bindings
         universalBindings,
         existentialBindings -}
+        -- * Checking first-order formulae
+        valueCheck,
+        permissionCheck,
         -- * Variables
         freshInternal,
         freshInternals,
@@ -145,8 +148,8 @@ emptyAssumptions :: Assumptions
 emptyAssumptions = Assumptions TC.empty []
 
 -- |A convenience type class synonym.
-class (MonadIO m, MonadState s m, AssumptionLenses s, MonadReader r m, Provers r) => ProverM s r m
-instance (MonadIO m, MonadState s m, AssumptionLenses s, MonadReader r m, Provers r) => ProverM s r m
+class (MonadIO m, MonadState s m, AssumptionLenses s, MonadReader r m, Provers r, MonadLogger m) => ProverM s r m
+instance (MonadIO m, MonadState s m, AssumptionLenses s, MonadReader r m, Provers r, MonadLogger m) => ProverM s r m
 
 
 boundVars :: (AssumptionLenses a) => Getter a (Set VariableID)
@@ -242,7 +245,7 @@ assume :: (MonadState s m, AssumptionLenses s) => Condition VariableID -> m ()
 -- ^Add a condition to the list of assumptions, binding its
 -- variables at the appropriate type.  This can raise an
 -- error if a variable is not used with a consistent type.
-assume c@(PermissionCondition pass) = do
+assume c@(PermissionCondition pss) = do
                         bindVarsAs (freeVariables c) VTPermission
                         addAssumption c
 assume c@(ValueCondition cass) = do
@@ -273,7 +276,7 @@ assumeE :: (MonadState s m, AssumptionLenses s, MonadRaise m) =>
 -- ^Add a condition to the list of assumptions, binding its
 -- variables at the appropriate type.  This can raise an
 -- exception if a variable is not used with a consistent type.
-assumeE c@(PermissionCondition pass) = do
+assumeE c@(PermissionCondition pss) = do
                         bindVarsAsE (freeVariables c) VTPermission
                         addAssumption c
 assumeE c@(ValueCondition cass) = do
@@ -654,6 +657,29 @@ permissionAvars = filterAvars (== Just VTPermission)
 valueAvars :: (AssertionLenses a) => Getter a [VariableID]
 valueAvars = filterAvars (\x -> (x == Just VTValue) || isNothing x)
 
+-- |Check a first-order value formula (generating the appropriate logging events)
+valueCheck :: (MonadIO m, MonadReader r m, Provers r, StringVariable v, MonadLogger m) =>
+        FOF ValueAtomic v -> m (Maybe Bool)
+valueCheck f = do
+                let sf = varToString <$> f
+                logEvent $ ProverInvocation ValueProverType (show sf)
+                p <- ask
+                r <- liftIO $ valueProver p sf
+                logEvent $ ProverResult r
+                return r
+
+-- |Check a first-order permissions formula (generating the appropriate logging events)
+permissionCheck :: (MonadIO m, MonadReader r m, Provers r, StringVariable v, MonadLogger m) =>
+        FOF PermissionAtomic v -> m (Maybe Bool)
+permissionCheck f = do
+                let sf = varToString <$> f
+                logEvent $ ProverInvocation PermissionProverType (show sf)
+                p <- ask
+                r <- liftIO $ permissionsProver p sf
+                logEvent $ ProverResult r
+                return r
+
+
 -- |Check that the assertions follow from the assumptions.
 checkAssertions :: (MonadIO m, MonadState s m, AssertionLenses s,
         MonadLogger m, MonadReader p m, Provers p) => m Bool
@@ -668,9 +694,7 @@ checkAssertions = do
         pevs <- use permissionEvars
         pavs <- use permissionAvars
         let passt = foldr FOFExists (foldr FOFAnd FOFTrue permissionAssertions) pevs
-        liftIO $ print $ varToString <$> assumptionContext pavs lpermissionAssumptions passt
-        ps <- ask
-        rp <- liftIO $ permissionsProver ps $ varToString <$> assumptionContext pavs lpermissionAssumptions passt
+        rp <- permissionCheck $ assumptionContext pavs lpermissionAssumptions passt
         if rp /= Just True then
                 return False
             else do
@@ -680,9 +704,7 @@ checkAssertions = do
                 vevs <- use valueEvars
                 vavs <- use valueAvars
                 let vasst = foldr FOFExists (foldr FOFAnd FOFTrue valueAssertions) vevs
-                rv <- liftIO $ valueProver ps $ varToString <$> assumptionContext vavs lvalueAssumptions vasst
-                liftIO $ print $ varToString <$> assumptionContext vavs lvalueAssumptions vasst
-                liftIO $ print rv
+                rv <- valueCheck $ assumptionContext vavs lvalueAssumptions vasst
                 return (rv == Just True)
 
 justCheck :: (MonadIO m, MonadPlus m, MonadState s m, AssertionLenses s,
@@ -694,12 +716,12 @@ justCheck = do
         unless res mzero
 
 
-hypothetical :: ProverM s r m => RWST r () Assertions IO a -> m a
+hypothetical :: ProverM s r m => RWST r () Assertions (LoggerT IO) a -> m a
 -- ^Evaluate hypothetically, given the current assumptions.
 hypothetical mn = do
                 rr <- ask
                 assms <- use theAssumptions
-                (ans, _, _) <- liftIO $ runRWST mn rr (emptyAssertions assms)
+                (ans, _, _) <- liftLoggerT liftIO $ runRWST mn rr (emptyAssertions assms)
                 return ans
 
 hypotheticalCheck :: (ProverM s r m, MonadLogger m) => --(MonadIO m, MonadState s m, AssumptionLenses s, MonadReader r m, Provers r) => 

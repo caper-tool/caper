@@ -10,11 +10,13 @@ import Control.Lens hiding (pre)
 import Caper.Utils.Choice
 import Caper.Utils.NondetClasses
 
+import Caper.Constants
 import Caper.ProverDatatypes
 import Caper.Exceptions
 import Caper.Logger
 import Caper.Parser.AST
 import Caper.Procedures
+import Caper.Predicates
 import Caper.RegionTypes
 import Caper.Regions
 import Caper.SymbolicState
@@ -33,14 +35,15 @@ atomicSymEx ase = ase
 
 data ExitMode = EMReturn (Maybe (ValueExpression VariableID)) | EMContinuation
 
-updateContinuation :: (Monad m) => (ExitMode -> m ()) -> m () -> (ExitMode -> m ())
+updateContinuation :: (Monad m) => (ExitMode -> m a) -> m a -> (ExitMode -> m a)
 updateContinuation cont newc EMContinuation = newc
 updateContinuation cont newc r = cont r
 
+
 symbolicExecute ::
     (MonadRaise m, MonadIO m, MonadLogger m,
-        MonadReader r m, Provers r, RTCGetter r,
-        MonadPlus m, MonadState s m, SymbStateLenses s,
+        MonadReader r m, Provers r, RTCGetter r, SpecificationContext r,
+        MonadPlus m, MonadState s m, SymbStateLenses s, AssertionLenses s,
         RegionLenses s, MonadCut m) =>
             Stmt -> (ExitMode -> m ()) -> m ()
 symbolicExecute stmt cont = do
@@ -52,6 +55,7 @@ symbolicExecute stmt cont = do
     where
         ses [] = cont EMContinuation
         ses (s:ss) = symbolicExecute s (updateContinuation cont (ses ss))
+        -- se symbolically executes a statement; in the end, we should always call cont.
         se (SeqStmt _ ss) = ses ss
         se (IfElseStmt sp cond sthen selse) = do
                 bc <- bexprToValueCondition cond
@@ -64,13 +68,51 @@ symbolicExecute stmt cont = do
                         se selse)
         se (WhileStmt _ _ _ _) = undefined
         se (DoWhileStmt _ _ _ _) = undefined
-        se (LocalAssignStmt _ trgt src) = symExLocalAssign trgt src 
-        se (DerefStmt _ trgt src) = atomicSymEx $ symExRead trgt src
-        se (AssignStmt _ trgt src) = atomicSymEx $ symExWrite trgt src
-        se (CallStmt _ rvar pname args) = undefined
+        se (LocalAssignStmt _ trgt src) = symExLocalAssign trgt src >> cont EMContinuation
+        se (DerefStmt _ trgt src) = atomicSymEx $ symExRead trgt src >> cont EMContinuation
+        se (AssignStmt _ trgt src) = atomicSymEx $ symExWrite trgt src >> cont EMContinuation
+        se smt@(CallStmt _ rvar "CAS" args) = undefined
+        se smt@(CallStmt sp rvar pname args) = do
+                        spec <- view (specifications . at pname)
+                        contextualise (DescriptiveContext sp ("In a call to function '" ++ pname ++ "'")) $ case spec of
+                            Nothing -> raise $ UndeclaredFunctionCall pname
+                            Just (Specification params sprec spost) -> do
+                                -- Check that there are the right number of arguments
+                                unless (length params == length args) $
+                                        raise $ ArgumentCountMismatch (length params) (length args)
+                                -- 'push' the logical variables
+                                savedLVars <- use logicalVars
+                                logicalVars .= emptyLVars
+                                -- Initialise logical variables for the arguments
+                                forM_ (zip params args) $ \(param, arg) -> do
+                                        paramVar <- newAvar param
+                                        argVExpr <- aexprToVExpr arg
+                                        -- XXX: Possibly shift this to a more delicate variableForVExpr (or such) 
+                                        assertEqual (var paramVar) argVExpr
+                                        logicalVars %= Map.insert param paramVar
+                                -- Consume the precondition
+                                -- TODO: Eventually it might be good to be lazier about stabilising regions
+                                when stabiliseBeforeConsumePrecondition $
+                                    stabiliseRegions
+                                contextualise "Consuming precondition" $
+                                    consumeAssrt sprec
+                                -- Set up variable for the return result
+                                retVar <- case rvar of
+                                    Nothing -> newAvar returnVariableName
+                                    Just retv -> do
+                                        retVar <- newAvar retv
+                                        progVars %= Map.insert retv (var retVar)
+                                        return retVar                                        
+                                logicalVars %= Map.insert returnVariableName retVar
+                                contextualise "Producing postcondition" $
+                                        produceAssrt stabiliseAfterProducePostcondition spost
+                                -- 'pop' the logical variables
+                                logicalVars .= savedLVars
+                                -- continue
+                                cont EMContinuation
         se (ReturnStmt _ (Just rexp)) = do
-                        re <- aexprToVExpr rexp
-                        cont $ EMReturn (Just re)
+                        rtn <- aexprToVExpr rexp
+                        cont $ EMReturn (Just rtn)
         se (ReturnStmt _ Nothing) = cont $ EMReturn Nothing
         se (SkipStmt _) = cont EMContinuation
         se (ForkStmt _ pname args) = undefined
@@ -87,7 +129,7 @@ checkProcedure fd@(FunctionDeclr sp n opre opost args s) =
                 -- For now, we won't assume that it is necessarily stable
                 -- TODO: make this configurable
                 contextualise "Producing precondition" $ produceAssrt
-                    True -- Treat regions as dirty
+                    stabiliseAfterProducePrecondition
                     pre
                 undefined
             case verRes of

@@ -7,7 +7,6 @@ import Data.Maybe
 import Control.Concurrent
 import Control.Monad.Trans
 import Control.Monad.Error
-import System.IO
 import Text.ParserCombinators.Parsec
 
 data EnvError = NotFunction String
@@ -45,7 +44,7 @@ liftThrows (Right val) = return val
 runIOThrows :: IOThrowsError String -> IO String
 runIOThrows action = runErrorT (trapError action) >>= return . extractValue
 
-trapErrorFork action = catchError action (\a -> return ())
+trapErrorFork action = catchError action (\_a -> return ())
 
 runIOThrowsFork :: IOThrowsError () -> IO ()
 runIOThrowsFork action = runErrorT (trapErrorFork action) >>= return . extractValue
@@ -89,26 +88,26 @@ readHeap envRef n =
   do env   <- liftIO $ readIORef envRef
      heap  <- liftIO $ takeMVar $ heapEnv env
      case lookup n heap of
-       Just v  -> liftIO $ putMVar (heapEnv env) heap >> return v
-       Nothing -> (liftIO $ putMVar (heapEnv env) heap) >> throwError (NotAllocated "read" n)
+       Just v  -> liftIO (putMVar (heapEnv env) heap) >> return v
+       Nothing -> liftIO (putMVar (heapEnv env) heap) >> throwError (NotAllocated "read" n)
 
 writeHeap :: Env -> Integer -> Integer -> IOThrowsError ()
 writeHeap envRef n m =
   do env   <- liftIO $ readIORef envRef
      heap  <- liftIO $ takeMVar $ heapEnv env
      case lookup n heap of
-       Just v  -> liftIO $ putMVar (heapEnv env) ((n, m) : filter (\a -> (fst a) /= n) heap) >> return ()
-       Nothing -> (liftIO $ putMVar (heapEnv env) heap) >> throwError (NotAllocated "wrote" n)
+       Just _v -> liftIO (putMVar (heapEnv env) ((n, m) : filter (\a -> fst a /= n) heap)) >> return ()
+       Nothing -> liftIO (putMVar (heapEnv env) heap) >> throwError (NotAllocated "wrote" n)
 
 casHeap :: Env -> Integer -> Integer -> Integer -> IOThrowsError Bool
 casHeap envRef n m p =
   do env   <- liftIO $ readIORef envRef
      heap  <- liftIO $ takeMVar $ heapEnv env
      case lookup n heap of
-       Just v  -> liftIO $ if elem (n, m) heap
-                             then putMVar (heapEnv env) ((n, p) : filter (\a -> (fst a) /= n) heap) >> return True
+       Just _v -> liftIO $ if (n, m) `elem` heap
+                             then putMVar (heapEnv env) ((n, p) : filter (\a -> fst a /= n) heap) >> return True
                              else putMVar (heapEnv env) heap >> return False
-       Nothing -> (liftIO $ putMVar (heapEnv env) heap) >> throwError (NotAllocated "CAS" n)
+       Nothing -> liftIO (putMVar (heapEnv env) heap) >> throwError (NotAllocated "CAS" n)
 
 allocHeap :: Env -> Integer -> IOThrowsError Integer
 allocHeap envRef n =
@@ -129,18 +128,18 @@ readStore envRef var =
 writeStore :: Env -> String -> Integer -> IOThrowsError ()
 writeStore envRef var n =
   do env    <- liftIO $ readIORef envRef
-     when (isNothing $ lookup var (storeEnv env)) (liftIO $ writeIORef envRef (heapEnv env, (var, 0):(storeEnv env), declrEnv env))
-     liftIO $ writeIORef envRef (heapEnv env, ((var, n) : filter (\a -> (fst a) /= var) (storeEnv env)), declrEnv env) >> return ()
+     when (isNothing $ lookup var (storeEnv env)) (liftIO $ writeIORef envRef (heapEnv env, (var, 0) : storeEnv env, declrEnv env))
+     liftIO $ writeIORef envRef (heapEnv env, (var, n) : filter (\ a -> fst a /= var) (storeEnv env), declrEnv env) >> return ()
 
 getDeclr :: Env -> String -> Integer -> IOThrowsError FunctionDeclr
 getDeclr envRef name nargs =
   do env <- liftIO $ readIORef envRef
      let f = filter (\a -> isFunction a name nargs) (declrEnv env)
-     when (length f == 0) (throwError $ NotFunction name)
+     when (null f) (throwError $ NotFunction name)
      return (head f)
   where isFunction (FunctionDeclr _ fname _ _ args _) n m = fname == n && toInteger (genericLength args) == m
 
 newDeclr :: Env -> [FunctionDeclr] -> IO ()
 newDeclr envRef declr =
   liftIO $ do env <- readIORef envRef
-              writeIORef envRef (heapEnv env, storeEnv env, declr ++ (declrEnv env))
+              writeIORef envRef (heapEnv env, storeEnv env, declr ++ declrEnv env)

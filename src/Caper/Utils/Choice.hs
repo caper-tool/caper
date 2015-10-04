@@ -6,6 +6,7 @@
 
 module Caper.Utils.Choice where
 
+import Control.Applicative
 import Control.Monad hiding (sequence)
 import Control.Monad.Trans
 import Control.Monad.Trans.Maybe
@@ -41,6 +42,7 @@ instance Functor m => Functor (ChoiceM m) where
         fmap f (OrElse x y z) = OrElse x y (fmap f . z)
         fmap f (Cut x) = Cut (fmap f x)
 
+
 -- |'Monad' instance for 'ChoiceM'.
 -- Binding composes non-deterministic computations
 instance Monad m => Monad (ChoiceM m) where
@@ -54,11 +56,19 @@ instance Monad m => Monad (ChoiceM m) where
                         (Cut x) -> Cut (x >>= b)
         fail s = trace s NoChoice
 
+instance (Applicative m, Monad m) => Applicative (ChoiceM m) where
+        pure = Result
+        (<*>) = ap
+
 -- | 'MonadPlus' instance for 'ChoiceM'.
 -- 'mplus' is a choice of two alternative computations
 instance Monad m => MonadPlus (ChoiceM m) where
         mzero = NoChoice
         mplus = Choice
+
+instance (Applicative m, Monad m) => Alternative (ChoiceM m) where
+        empty = mzero
+        (<|>) = mplus
 
 -- | 'MonadOrElse' instance for 'ChoiceM'.
 instance Monad m => MonadOrElse (ChoiceM m) where

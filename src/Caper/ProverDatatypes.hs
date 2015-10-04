@@ -8,14 +8,11 @@ module Caper.ProverDatatypes (
         module Caper.FreeVariables,
         module Caper.ProverDatatypes) where
 import Prelude hiding (sequence,foldl,foldr,elem,mapM_,mapM)
--- import qualified Data.Map as Map
---import qualified Data.Set as Set
+import Control.Applicative
 import Control.Monad.State hiding (mapM_,mapM)
 import Data.Foldable
 import Data.Traversable
 import Data.Typeable
--- import Control.Monad hiding (mapM_,mapM)
-import Control.Monad.Reader.Class
 import Data.Functor.Identity
 import Caper.FreeVariables
 
@@ -39,7 +36,7 @@ data PermissionExpression v = PEFull
                         | PEVar v
                         | PESum (PermissionExpression v) (PermissionExpression v)
                         | PECompl (PermissionExpression v)
-                        deriving (Eq,Ord,Functor, Foldable, Traversable, Show)
+                        deriving (Eq,Ord,Functor,Foldable,Traversable,Show)
 {-
 instance Show v => Show (PermissionExpression v) where
         show PEFull = "1"
@@ -48,6 +45,7 @@ instance Show v => Show (PermissionExpression v) where
         show (PECompl e) = "(1 - " ++ show e ++ ")"
         show (PEVar v) = show v
 -}
+
 instance Monad PermissionExpression where
         return = PEVar
         (PEVar v) >>= b = b v
@@ -55,6 +53,10 @@ instance Monad PermissionExpression where
         PECompl e >>= b = PECompl (e >>= b)
         PEFull >>= _ = PEFull
         PEZero >>= _ = PEZero
+
+instance Applicative PermissionExpression where
+        pure = return
+        (<*>) = ap
 
 -- Note: could probably get rid of Expression and use Monad instead: return takes place of var
 class Expression e where
@@ -110,6 +112,10 @@ instance Monad ValueExpression where
         VEMinus e1 e2 >>= b = VEMinus (e1 >>= b) (e2 >>= b)
         VETimes e1 e2 >>= b = VETimes (e1 >>= b) (e2 >>= b)
 
+instance Applicative ValueExpression where
+        pure = return
+        (<*>) = ap
+
 instance Show a => Show (ValueExpression a) where
         show (VEConst n) = show n
         show (VEVar v) = show v
@@ -157,7 +163,7 @@ instance Num (ValueExpression v) where
 -}
 
 class StringVariable v where
-        -- Convert a variable to a string, for passing to a prover
+        -- |Convert a variable to a string, for passing to a prover
         -- Each variable should have a unique string representation:
         -- if two variables have the same representation, they are
         -- considered to be the same variable.
@@ -187,18 +193,6 @@ data ProverRecord = Provers {
                 _permissionsInfo :: IO String,
                 _valueInfo :: IO String
                 }
-
-valueCheck :: (MonadIO m, MonadReader r m, Provers r, StringVariable v) =>
-        FOF ValueAtomic v -> m (Maybe Bool)
-valueCheck f = do
-                p <- ask
-                let sf = fmap varToString f
-                liftIO $ do
-                        -- putStrLn $ "Checking: " ++ show sf
-                        r <- valueProver p sf
-                        -- print r
-                        return r
-
 
 instance Provers ProverRecord where
         permissionsProver = _permissionsProver
@@ -341,6 +335,7 @@ instance ConditionProp Condition where
         negativeCondition (DisequalityCondition e1 e2) = EqualityCondition e1 e2
 
 -- |The inconsistent condition.
+condFalse :: forall v. Condition v
 condFalse = ValueCondition FOFFalse
 
 
@@ -420,6 +415,12 @@ instance ExpressionSub ValueExpression Expr where
 instance Expression Expr where
         var = VariableExpr
 
+instance Applicative Expr where
+        pure = VariableExpr
+        (PermissionExpr f) <*> a = PermissionExpr $ exprSub (`fmap` a) f
+        (ValueExpr f) <*> a = ValueExpr $ exprSub (`fmap` a) f
+        (VariableExpr f) <*> a = fmap f a
+          
 -- Note, I'm slightly concerned that this might not satisfy
 -- all the monad laws in some undefined cases.
 instance Monad Expr where
@@ -448,6 +449,7 @@ instance ProverExpression Expr where
         toExpr = id
 
 -- |Cast an 'Integer' as an 'Expr'.
+integerExpr :: forall v. Integer -> Expr v
 integerExpr = ValueExpr . VEConst
 
 instance FreeVariables (Condition v) v where

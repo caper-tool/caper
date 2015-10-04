@@ -7,7 +7,6 @@ import System.IO
 import System.Process
 import qualified Control.Concurrent.MSem as MSem
 import Control.Concurrent.MSem (MSem)
-import Control.Concurrent.MVar
 import System.Exit
 import Debug.Trace
 import System.Directory
@@ -104,34 +103,10 @@ toBAFormula (FOFExists v f) = BAExists [NewString v] (toBAFormula f)
 
 data EPProver = EPProver { tptpPrelude :: String, proverPath :: String, eTimeout :: Int }
 
-{--
-var :: String -> BAExpression NewString
-var = BAVariable . NewString
-
-bindVars :: [String] -> [NewString]
-bindVars = map NewString
-
-crossSplit :: BAFormula NewString
-crossSplit = BAForAll [v "f", v "a", v "b", v "c", v "d"] $
-        BAImpl (BAAnd (BAComp (var "a") (var "b") (var "f")) (BAComp (var "c") (var "d") (var "f"))) $
-        BAExists [v "ac", v "ad", v "bc", v "bd"] $
-        BAAnd (BAAnd (BAComp (var "ac") (var "ad") (var "a")) (BAComp (var "bc") (var "bd") (var "b")))
-        (BAAnd (BAComp (var "ac") (var "bc") (var "c")) (BAComp (var "ad") (var "bd") (var "d")))
-        where v = NewString
-
-test1 = BAExists (bindVars ["x"]) $ BAForAll (bindVars ["y"]) (BADisj (var "x") (var "y"))
---}
-
-
 eproverVersion :: String -> IO String
 eproverVersion proverpath = 
         liftM ("EProver version: " ++) (readProcess proverpath ["--version"] "")
                 `catch` (\e -> return $ "Failed to invoke EProver:\n" ++ show (e :: SomeException))
-
-{-
-tptpBAPrelude :: IO String
-tptpBAPrelude = getDataFileName "ba_prelude.tptp" >>= readFile
--}
 
 tptpBAPrelude :: String
 tptpBAPrelude = [literalFile|src/ba_prelude.tptp|]
@@ -209,15 +184,3 @@ makeEPProver ::
 makeEPProver execpath timeout = do
         let prel = tptpBAPrelude
         return $ checkBothWays (EPProver prel execpath (timeout * 1000)) . toBAFormula
-        -- "c:\\cygwin64\\home\\Thomas\\E\\PROVER\\eprover.exe"
-
-
-
-{--
-main :: IO ()
-main = do
-        prel <- tptpBAPrelude
-        r <- checkBothWays prel test1
-        putStrLn (show r)
---}
-
