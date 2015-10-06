@@ -4,3 +4,7 @@ dist
 .cabal-sandbox/
 cabal.sandbox.config
 config.ini
+.DS_Store
+docs/design.aux
+docs/design.log
+docs/design.pdf
