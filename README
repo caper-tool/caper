@@ -50,7 +50,7 @@ cabal install z3-4.0.0 --extra-include-dirs=$Z3PATH/include --extra-lib-dirs=$Z3
 Finally install the rest of the dependencies
 
 ```
-cabal install sbv-3.1.0.0
+cabal install sbv-4.4
 cabal install
 ```
 
