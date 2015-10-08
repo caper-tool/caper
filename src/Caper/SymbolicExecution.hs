@@ -97,20 +97,22 @@ symbolicExecute stmt cont = do
                                 -- 'push' the logical variables
                                 savedLVars <- use logicalVars
                                 logicalVars .= emptyLVars
-                                check $ do
-                                    -- Initialise logical variables for the arguments
-                                    forM_ (zip params args) $ \(param, arg) -> do
-                                            paramVar <- newAvar param
-                                            argVExpr <- aexprToVExpr arg
-                                            -- XXX: Possibly shift this to a more delicate variableForVExpr (or such) 
-                                            assertEqual (var paramVar) argVExpr
-                                            logicalVars %= Map.insert param paramVar
-                                    -- Consume the precondition
-                                    -- TODO: Eventually it might be good to be lazier about stabilising regions
-                                    when stabiliseBeforeConsumePrecondition $
-                                        stabiliseRegions
-                                    contextualise "Consuming precondition" $
-                                        consumeAssrt sprec
+                                -- Initialise logical variables for the arguments
+                                forM_ (zip params args) $ \(param, arg) -> do
+                                        paramVar <- newAvar param
+                                        argVExpr <- aexprToVExpr arg
+                                        -- XXX: Possibly shift this to a more delicate variableForVExpr (or such)
+                                        --liftIO $ putStrLn $ (show paramVar) ++ " ==== " ++ show argVExpr 
+                                        assumeTrue $ VAEq (var paramVar) argVExpr
+                                        logicalVars %= Map.insert param paramVar
+                                -- Consume the precondition
+                                -- TODO: Eventually it might be good to be lazier about stabilising regions
+                                when stabiliseBeforeConsumePrecondition $
+                                    stabiliseRegions
+                                --use logicalVars >>= (liftIO . print)
+                                --use progVars >>= (liftIO . print)
+                                contextualise "Consuming precondition" $
+                                        check $ consumeAssrt sprec
                                 -- Set up variable for the return result
                                 retVar <- case rvar of
                                     Nothing -> newAvar returnVariableName
@@ -153,6 +155,7 @@ checkProcedure fd@(FunctionDeclr sp n opre opost args s) =
         pre = fromMaybe (defaultPrecondition sp) opre
         post = fromMaybe (defaultPostcondition sp) opost
         postcheck' res = contextualise ("Consuming postcondition: " ++ show post) $ do
+                        --printSymbState
                         retVar <- newAvar returnVariableName
                         case res of
                             Just rv -> assumeTrue (VAEq (var retVar) rv)
