@@ -8,7 +8,9 @@ module Caper.Constants(
     stabiliseAfterProduceInvariant,
     stabiliseAfterProducePostcondition,
     stabiliseAfterProducePrecondition,
-    returnVariableName
+    returnVariableName,
+    defaultPreconditionBool,
+    defaultPostconditionBool
 )
  where
 
@@ -57,3 +59,13 @@ stabiliseAfterProduceInvariant = stabiliseAfterProduce
 -- refers to the value returned by the function.
 returnVariableName :: String
 returnVariableName = "ret"
+
+-- |This determines whether the default precondition for a procedure
+-- (when not otherwise specified) is True or False.
+defaultPreconditionBool :: Bool
+defaultPreconditionBool = False
+
+-- |This determines whether the default postcondition for a procedure
+-- (when not otherwise specified) is True or False.
+defaultPostconditionBool :: Bool
+defaultPostconditionBool = False

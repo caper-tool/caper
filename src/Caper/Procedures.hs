@@ -4,6 +4,7 @@ import qualified Data.Map as Map
 import Data.Foldable
 import Control.Lens
 
+import Caper.Constants
 import Caper.Exceptions
 import Caper.Logger
 import Caper.Parser.AST
@@ -21,10 +22,10 @@ class SpecificationContext c where
 
 
 defaultPrecondition :: SourcePos -> Assrt
-defaultPrecondition sp = AssrtPure sp $ ConstBAssrt sp False
+defaultPrecondition sp = AssrtPure sp $ ConstBAssrt sp defaultPreconditionBool
 
 defaultPostcondition :: SourcePos -> Assrt
-defaultPostcondition sp = AssrtPure sp $ ConstBAssrt sp True
+defaultPostcondition sp = AssrtPure sp $ ConstBAssrt sp defaultPostconditionBool
 
 -- TODO: Somewhere we should check that procedures don't have multiple arguments of the same name 
 

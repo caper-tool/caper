@@ -15,6 +15,7 @@ import Data.List (intersperse)
 import Data.Traversable
 
 import Caper.Utils.Choice
+import Caper.Utils.NondetClasses
 import Caper.Logger
 import Caper.ProverDatatypes
 import Caper.Prover
@@ -339,6 +340,33 @@ symExRead target eloc = do
                 addPredicate (PCell, [loc, var oldval])
                 progVars %= Map.insert target (var oldval)
 
-                
-                
+symExCAS :: (SymbStateLenses s, MonadRaise m, MonadLogger m, Provers p,
+                MonadReader p m, MonadIO m, MonadState s m, MonadPlus m,
+                MonadCut m) =>
+                Maybe String -> AExpr -> AExpr -> AExpr -> m ()
+symExCAS rtn target old new = do
+                loc <- aexprToVExpr target
+                oldv <- aexprToVExpr old
+                newv <- aexprToVExpr new
+                curv <- check $ do
+                        curv <- newEvar "cas_val"
+                        consumePredicate (PCell, [toExpr loc, var curv])
+                        return curv
+                branch_
+                    (do -- success branch
+                        assumeTrue $ VAEq (var curv) oldv
+                        addPredicate (PCell, [toExpr loc, toExpr newv])
+                        case rtn of
+                            Nothing -> return ()
+                            Just rtn' -> progVars %= Map.insert rtn' (VEConst 1)
+                    )
+                    (do -- failure branch
+                        assumeFalse $ VAEq (var curv) oldv
+                        addPredicate (PCell, [toExpr loc, var curv])
+                        case rtn of 
+                            Nothing -> return ()
+                            Just rtn' -> progVars %= Map.insert rtn' (VEConst 0)
+                    )
+
+
 --}

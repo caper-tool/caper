@@ -21,7 +21,7 @@ import Caper.Logger
 import Caper.RegionTypes
 import Caper.RegionInterpretations
 import Caper.Procedures
-
+import Caper.SymbolicExecution
 
 data CommandLine =
     CLVersion           -- Get version information; test configuration
@@ -83,14 +83,22 @@ caperCommand CLVersion = do
 caperCommand (CLVerify file) = do
         declrs <- parseFile file
         print declrs
+        let funDecs = functionDeclrs declrs
         provers <- initProvers
         result <- runErrLogger $ flip runReaderT [StringContext $ "File: \"" ++ file ++ "\"."] $ runRaiseT $ do
-            procSpecs <- declrsToProcedureSpecs (functionDeclrs declrs)
+            procSpecs <- declrsToProcedureSpecs funDecs
             rtc <- declrsToRegionTypeContext declrs
             liftIO $ print rtc 
             hoist (withReaderT (ProcedureContext procSpecs rtc provers)) $ do
                 checkRegionTypeContextInterpretations rtc
-        print result
+                verifyProcedures funDecs
+        case result of
+            Right () -> putStrLn "ACCEPTED"
+            Left (context, exception) -> do
+                    mapM_ print context
+                    print exception
+                    putStrLn "REJECTED"
+                     
 
 main::IO()
 main = caperApp caperCommand
