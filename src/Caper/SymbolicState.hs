@@ -8,11 +8,12 @@ import qualified Data.Map as Map
 -- import Data.MultiSet (MultiSet)
 import qualified Data.MultiSet as MultiSet
 import Control.Lens hiding (op)
-import Control.Monad.State hiding (mapM_,mapM,msum)
-import Control.Monad.RWS hiding (mapM_,mapM,msum)
+import Control.Monad.State hiding (mapM_,mapM,msum,forM_)
+import Control.Monad.RWS hiding (mapM_,mapM,msum,forM_)
 import Data.Foldable
 import Data.List (intersperse)
 import Data.Traversable
+import Data.Maybe
 
 import Caper.Utils.Choice
 import Caper.Utils.NondetClasses
@@ -307,15 +308,15 @@ symExLocalAssign target expr = do
 symExAllocate :: 
                    (MonadRaise m, MonadLogger m, Provers p, MonadReader p m,
                    SymbStateLenses s, MonadState s m, MonadIO m, MonadPlus m) =>
-                   String -> AExpr -> m ()
+                   Maybe String -> AExpr -> m ()
 symExAllocate target lenExpr = do
                 lenval <- aexprToExpr lenExpr
                 check $
                         -- Check that the length is positive
                         assertTrue $ VEConst 0 $<$ lenval
-                loc <- newAvar target
+                loc <- newAvar $ fromMaybe "alloc" target
                 producePredicate (PCells, [var loc, lenval])
-                progVars %= Map.insert target (var loc)
+                forM_ target $ \tvar -> progVars %= Map.insert tvar (var loc)
 
 symExWrite :: (SymbStateLenses s, MonadLogger m, MonadRaise m, Provers p,
                      MonadReader p m, MonadIO m, MonadState s m, MonadPlus m) =>

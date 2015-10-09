@@ -85,7 +85,10 @@ symbolicExecute stmt cont = do
                 case args of
                     [target, oldv, newv] -> atomicSymEx $ symExCAS rvar target oldv newv >> cont EMContinuation
                     _ -> raise $ ArgumentCountMismatch 3 (length args)
-        
+        se smt@(CallStmt sp rvar "alloc" args) = contextualise (DescriptiveContext sp "In an alloc") $ do
+                case args of
+                    [l] -> symExAllocate rvar l >> cont EMContinuation
+                    _ -> raise $ ArgumentCountMismatch 1 (length args)
         se smt@(CallStmt sp rvar pname args) = do
                         spec <- view (specifications . at pname)
                         contextualise (DescriptiveContext sp ("In a call to function '" ++ pname ++ "'")) $ case spec of
