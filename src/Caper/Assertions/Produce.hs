@@ -1,24 +1,24 @@
 {-# LANGUAGE FlexibleContexts, ScopedTypeVariables, MultiParamTypeClasses #-}
 module Caper.Assertions.Produce where
 
-import Control.Monad.State hiding (state)
-import Control.Monad.Reader
-import Control.Lens hiding (op)
+import           Control.Monad.State hiding (state)
+import           Control.Monad.Reader
+import           Control.Lens hiding (op)
 
-import Caper.Utils.AliasingMap ()
-import Caper.Exceptions
-import Caper.ProverDatatypes
-import Caper.Prover
-import Caper.Parser.AST
-import Caper.SymbolicState (SymbStateLenses)
-import qualified Caper.SymbolicState as SS
-import Caper.Regions (RegionLenses)
-import qualified Caper.Regions as R
-import Caper.RegionTypes
+import           Caper.Assertions.Check
+import           Caper.Assertions.Generate
+import           Caper.Exceptions
 import qualified Caper.Guards as G
-import Caper.Assertions.Generate
-import Caper.Assertions.Check
-
+import           Caper.Parser.AST
+import           Caper.Prover
+import           Caper.ProverDatatypes
+import           Caper.RegionTypes
+import           Caper.Regions (RegionLenses)
+import qualified Caper.Regions as R
+import           Caper.SymbolicState (SymbStateLenses)
+import qualified Caper.SymbolicState as SS
+import           Caper.Utils.AliasingMap ()
+import           Caper.Utils.NondetClasses
 {-
         At some point, this whole module should probably be rewritten.
         In particular, some consideration of where variables are bound to
@@ -171,13 +171,13 @@ produceSpatial _ (SAGuards a) = produceGuards a
 produceAssrt ::  (MonadState s m, AssumptionLenses s, RegionLenses s,
                 SymbStateLenses s,
                 MonadReader r m, RTCGetter r,
-                MonadRaise m) =>
+                MonadRaise m, MonadCut m) =>
         Bool ->
         Assrt -> m ()
 produceAssrt _ (AssrtPure sp a) = producePure a
 produceAssrt dirty (AssrtSpatial sp a) = produceSpatial dirty a
 produceAssrt dirty (AssrtConj sp a1 a2) = produceAssrt dirty a1 >>
                                         produceAssrt dirty a2
-produceAssrt _ (AssrtITE sp c a1 a2) = addContext (SourcePosContext sp) $
-        raise $ SyntaxNotImplemented "... ? ... : ... (conditional assertions)"
-
+produceAssrt dirty (AssrtITE sp c a1 a2) =
+  branch_ (producePure c >> produceAssrt dirty a1)
+          (producePure (NotBAssrt sp c) >> produceAssrt dirty a2)

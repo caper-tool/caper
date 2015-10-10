@@ -3,7 +3,7 @@ module Caper.Utils.FloydWarshall where
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as VM
-import Data.Foldable (forM_, foldl', foldMap)
+import Data.Foldable (forM_, foldl')
 
 
 class Floydable a where

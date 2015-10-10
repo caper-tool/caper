@@ -83,7 +83,7 @@ instance Show ABinOp where
   show Divide   = " / "
 
 instance Show Stmt where
-  show (SeqStmt _ seq)               = unwords $ map show seq 
+  show (SeqStmt _ sq)                = unwords $ map show sq 
   show (IfElseStmt _ e s1 s2)        = "if (" ++ show e ++ ") {" ++ show s1 ++ "} else {" ++ show s2 ++ "}"
   show (WhileStmt _ Nothing e s)     = "while (" ++ show e ++ ") {" ++ show s ++ "}"
   show (WhileStmt _ (Just ls) e s)   = "while (" ++ show e ++ ") invariant " ++ show ls ++ "; {" ++ show s ++ "}"

@@ -1,7 +1,10 @@
+{-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 module Caper.Utils.NondetClasses where
 
 import Control.Monad
 import Control.Monad.State
+
+import Caper.Utils.MonadHoist
 
 class MonadPlus m => MonadOrElse m where
         -- orElse: never execute the second argument
@@ -20,6 +23,10 @@ class MonadPlus m => MonadCut m where
         -- This is useful if the non-deterministic choices made so far cannot affect the future.
         cut_ :: m ()
         cut_ = cut (return ())
+
+instance (MonadPlus m, MonadCut m) => MonadCut (StateT s m) where
+        cut = hoist cut
+
 
 {- |Record the current state; execute the first computation; revert to the saved state;
     execute the second computation.  

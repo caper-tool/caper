@@ -3,25 +3,27 @@
 region BCounter(r,x) {
   guards %INCREMENT;
   interpretation {
-    n : x |-> n;
+    0 : x |-> 0;
+    1 : x |-> 1;
+    2 : x |-> 2;
   }
   actions {
-    INCREMENT[_] : n < 2 | n ~~> n + 1;
-    INCREMENT[_] : 2 ~~> 0;
+    n < 2 | INCREMENT[_] : n ~> n + 1;
+    INCREMENT[_] : 2 ~> 0;
   }
 }
 
 function makeCounter()
-  requires emp;
-  ensures BCounter(r,ret,0) * r@INCREMENT[1]; {
+  requires true;
+  ensures BCounter(r,ret,0) &*& r@(INCREMENT[1p]); {
     v := alloc(1);
     [v] := 0;
     return v;
 }
 
 function incr(x)
-  requires BCounter(r,x,v0) * r@INCREMENT[p];
-  ensures BCounter(r,x,v1) * r@INCREMENT[p] * (p != 1 or ret = v0 and ((v0 < 2 and v1 = v0 + 1) or (v0 = 2 and v1 = 0)));  {
+  requires BCounter(r,x,v0) &*& r@(INCREMENT[p]);
+  ensures BCounter(r,x,v1) &*& r@(INCREMENT[p]) &*& (p = 1p ? ret = v0 &*& (v0 < 2 ? v1 = (v0 + 1) : v1 = 0) : true); {
     do {
         v := [x];
         b := CAS(x, v, v + 1);
@@ -30,8 +32,8 @@ function incr(x)
 }
 
 function read(x)
-  requires BCounter(r,x,v0) * r@INCREMENT[p];
-  ensures BCounter(r,x,v1) * r@INCREMENT[p] * (p != 1 or ret = v0 and v0 = v1);  {
+  requires BCounter(r,x,v0) &*& r@(INCREMENT[p]);
+  ensures BCounter(r,x,v1) &*& r@(INCREMENT[p]) &*& (p != 1p ? ret = v0 : true) &*& (p != 1p ? v0 = v1 : true); {
     v := [x];
     return v;
 }

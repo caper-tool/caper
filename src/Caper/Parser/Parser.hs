@@ -1,4 +1,4 @@
-{-# OPTIONS_GHC -fno-warn-unused-do-bind #-}
+{-# OPTIONS_GHC -fno-warn-unused-do-bind -fno-warn-missing-signatures #-}
 module Caper.Parser.Parser(
         parseFile,
         parseString,
@@ -20,6 +20,7 @@ import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as Token
 import Caper.Parser.AST
 import Control.Applicative ((*>))
+
 
 languageDef =
   emptyDef { Token.commentStart    = "/*"
@@ -175,9 +176,9 @@ conditions =  try (do { d <- sepBy pureAssertion comma; reservedOp "|"; return d
 action :: Parser Action
 action =
   do pos  <- getPosition
+     c    <- conditions
      g    <- sepBy guard (reservedOp "*")
      reservedOp ":"
-     c    <- conditions
      pre  <- valueExpression
      reservedOp "~>"
      post <- valueExpression
@@ -209,7 +210,8 @@ ifElseStatement =
      e     <- optionMaybe $ reserved "else"
      case e of
        Nothing -> return $ IfElseStmt pos cond stmt1 (SkipStmt pos)
-       Just l -> do stmt2 <- braces sequenceOfStmt
+       Just _l -> do
+                    stmt2 <- braces sequenceOfStmt
                     return $ IfElseStmt pos cond stmt1 stmt2
 
 whileStatement :: Parser Stmt
@@ -276,7 +278,7 @@ callStatement pos var =
                           case args of
                             Nothing -> return $ LocalAssignStmt pos var $ VarAExpr pos n
                             Just l  -> return $ CallStmt pos (Just var) n l
-       otherwise    -> semi >> return (LocalAssignStmt pos var expr)
+       _otherwise   -> semi >> return (LocalAssignStmt pos var expr)
 
 localAssignStatement :: SourcePos -> String -> Parser Stmt
 localAssignStatement pos var =

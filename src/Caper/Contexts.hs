@@ -17,6 +17,8 @@ data ProcedureContext = ProcedureContext {
         }
 makeLenses ''ProcedureContext
 
+instance SpecificationContext ProcedureContext where
+        specifications = pcSpecificationContext
 
 instance Provers ProcedureContext where
         permissionsProver = permissionsProver . _pcProverContext

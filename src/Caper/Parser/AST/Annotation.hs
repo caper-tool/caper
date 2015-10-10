@@ -205,7 +205,7 @@ instance Show Guard where
         show (PermGuard _ n pe) = n ++ "[" ++ show pe ++ "]"
         show (ParamGuard _ n paras) = n ++ "(" ++ intercalate "," (map show paras) ++ ")"
 instance FreeVariables Guard VarExpr where
-    foldrFree f x (NamedGuard{}) = x
+    foldrFree _ x (NamedGuard{}) = x
     foldrFree f x (PermGuard _ _ pe) = foldrFree f x pe
     foldrFree f x (ParamGuard _ _ params) = foldrFree f x params
     

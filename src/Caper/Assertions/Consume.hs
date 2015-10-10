@@ -6,6 +6,7 @@ import Control.Monad.Reader
 import Control.Lens hiding (op)
 
 import Caper.Utils.Choice
+import Caper.Utils.NondetClasses
 import Caper.Utils.AliasingMap ()
 import Caper.Logger
 import Caper.Exceptions
@@ -172,10 +173,11 @@ consumeSpatial (SAGuards a) = consumeGuards a
 
 consumeAssrt :: (MonadState s m, AssertionLenses s, RegionLenses s,
                 SymbStateLenses s, MonadReader r m, RTCGetter r,
-                MonadRaise m, MonadLogger m, MonadPlus m) =>
+                MonadRaise m, MonadLogger m, MonadPlus m, MonadCut m) =>
         Assrt -> m ()
 consumeAssrt (AssrtPure sp a) = consumePure a
 consumeAssrt (AssrtSpatial sp a) = consumeSpatial a
 consumeAssrt (AssrtConj sp a1 a2) = consumeAssrt a1 >> consumeAssrt a2
-consumeAssrt (AssrtITE sp c a1 a2) = addContext (SourcePosContext sp) $
-        raise $ SyntaxNotImplemented "... ? ... : ... (conditional assertions)"
+consumeAssrt (AssrtITE sp c a1 a2) =
+  branch_ (consumePure c >> consumeAssrt a1)
+          (consumePure (NotBAssrt sp c) >> consumeAssrt a2)

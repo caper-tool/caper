@@ -3,18 +3,20 @@
 module Caper.SymbolicState where
 
 import Prelude hiding (sequence,foldl,foldr,mapM_,mapM,elem,notElem,concat,concatMap)
-import Data.Map (Map)
+-- import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.MultiSet (MultiSet)
+-- import Data.MultiSet (MultiSet)
 import qualified Data.MultiSet as MultiSet
 import Control.Lens hiding (op)
-import Control.Monad.State hiding (mapM_,mapM,msum)
-import Control.Monad.RWS hiding (mapM_,mapM,msum)
+import Control.Monad.State hiding (mapM_,mapM,msum,forM_)
+import Control.Monad.RWS hiding (mapM_,mapM,msum,forM_)
 import Data.Foldable
 import Data.List (intersperse)
 import Data.Traversable
+import Data.Maybe
 
 import Caper.Utils.Choice
+import Caper.Utils.NondetClasses
 import Caper.Logger
 import Caper.ProverDatatypes
 import Caper.Prover
@@ -79,9 +81,10 @@ instance SymbStateLenses s => SymbStateLenses (WithAssertions s) where
         preds = withAssrBase . preds
 
 emptySymbStateWithVars :: [String] -> SymbState Assumptions
-emptySymbStateWithVars vs = execState (do
+emptySymbStateWithVars vs = flip execState emptySymbState $ do
                 bindVarsAs (map VIDNamed vs) VTValue
-                ssProgVars .= Map.fromList [(x, var (VIDNamed x)) | x <- vs]) emptySymbState
+                ssProgVars .= Map.fromList [(x, var (VIDNamed x)) | x <- vs]
+                ssLogicalVars .= Map.fromList [(x, VIDNamed x) | x <- vs]
 
 newtype InformedRegion = InformedRegion (Region, Maybe RegionType)
 
@@ -107,26 +110,6 @@ showSymbState = do
 
 printSymbState :: (MonadState (SymbState p) m, Show p, MonadReader r m, RTCGetter r, MonadIO m) => m ()
 printSymbState = showSymbState >>= liftIO . putStrLn
-
-
--- Symbolic state monad transformer
-type MSState r = RWST r () (SymbState Assumptions)
-
-
-{-- Convert a ProverT to an MSState
-proverToSState :: (Monad m) => ProverT m a -> MSState m a
-proverToSState pt = do
-                pfs <- use pureFacts
-                (r, pfs') <- lift $ runStateT pt pfs
-                pureFacts .= pfs'
-                return r
---}
-
-
--- Add a pure assumption
---syAssume :: (Monad m) => Condition VariableID -> MSState m ()
---syAssume = proverToSState . assume
-
 
 validatePredicate :: (MonadState s m, SymbStateLenses s) => Predicate -> m ()
 -- ^Check that a predicate has the correct number and type of parameters.
@@ -183,8 +166,7 @@ takingEachPredInstance pname = do
                 preds %= Map.adjust (MultiSet.delete p) pname
                 return p
 
--- Deal with having assertions
-type MSCheck r = RWST r () (SymbState Assertions)
+{-
 
 wrapStateT :: (Monad m) => (t -> s) -> (s -> t) -> StateT s m a -> StateT t m a
 wrapStateT initial fin op = StateT $ \s0 -> do
@@ -195,13 +177,9 @@ wrapRWST :: (Monad m) => (t -> s) -> (s -> t) -> RWST r w s m a -> RWST r w t m 
 wrapRWST initial fin op = RWST $ \rd s0 -> do
                         (r, t1, w) <- runRWST op rd (initial s0)
                         return (r, fin t1, w)
-
-{-
-admitChecks :: (Monad m) => MSCheck r m a -> MSState r m a
--- Admit the assumptions as assertions
-admitChecks = wrapRWST (fmap emptyAssertions) (fmap admitAssertions)
 -}
 
+-- |Admit the assumptions as assertions
 admitChecks :: (MonadState s m, AssumptionLenses s) => StateT (WithAssertions s) m a -> m a
 admitChecks o = do
                 initial <- get
@@ -209,11 +187,6 @@ admitChecks o = do
                 put $ (s' & theAssumptions .~ admitAssertions s') ^. withAssrBase
                 return r
 
-
-{-
-check :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m) =>
-        MSCheck p m a -> MSState p m a
-        -}
 check :: (AssumptionLenses s, MonadLogger m, Provers p, MonadReader p m,
             MonadIO m, MonadState s m, MonadPlus m) =>
            StateT (WithAssertions s) m a -> m a
@@ -325,7 +298,6 @@ bexprToValueCondition (RBinaryBExpr _ rel e1 e2) = liftM2 (theRel rel) (aexprToV
 --------------------------------------------
 -- Symbolic execution of basic statements --
 --------------------------------------------
---symExLocalAssign :: (Monad m, MonadPlus m, Provers p, MonadLogger m, MonadRaise m) => String -> AExpr -> MSState p m ()
 symExLocalAssign :: 
                       (SymbStateLenses s, MonadRaise m, MonadLogger m, MonadState s m) =>
                       String -> AExpr -> m ()
@@ -333,22 +305,19 @@ symExLocalAssign target expr = do
                 newval <- aexprToVExpr expr
                 progVars %= Map.insert target newval
 
--- symExAllocate :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m, MonadRaise m) =>
---         String -> AExpr -> MSState p m ()
 symExAllocate :: 
-                   (MonadRaise m, MonadLogger m, Provers p, MonadReader p m, SymbStateLenses s, MonadState s m, MonadIO m, MonadPlus m) =>
-                   String -> AExpr -> m ()
+                   (MonadRaise m, MonadLogger m, Provers p, MonadReader p m,
+                   SymbStateLenses s, MonadState s m, MonadIO m, MonadPlus m) =>
+                   Maybe String -> AExpr -> m ()
 symExAllocate target lenExpr = do
                 lenval <- aexprToExpr lenExpr
                 check $
                         -- Check that the length is positive
                         assertTrue $ VEConst 0 $<$ lenval
-                loc <- newAvar target
+                loc <- newAvar $ fromMaybe "alloc" target
                 producePredicate (PCells, [var loc, lenval])
-                progVars %= Map.insert target (var loc)
+                forM_ target $ \tvar -> progVars %= Map.insert tvar (var loc)
 
---symExWrite :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m, MonadRaise m) =>
---        AExpr -> AExpr -> MSState p m ()
 symExWrite :: (SymbStateLenses s, MonadLogger m, MonadRaise m, Provers p,
                      MonadReader p m, MonadIO m, MonadState s m, MonadPlus m) =>
                     AExpr -> AExpr -> m ()
@@ -360,8 +329,6 @@ symExWrite target expr = do
                 newval <- aexprToExpr expr
                 addPredicate (PCell, [loc, newval])
 
---symExRead :: (MonadIO m, MonadPlus m, Provers p, MonadLogger m, MonadRaise m) =>
---        String -> AExpr -> MSState p m ()
 symExRead :: (SymbStateLenses s, MonadRaise m, MonadLogger m, Provers p,
                 MonadReader p m, MonadIO m, MonadState s m, MonadPlus m) =>
                String -> AExpr -> m ()
@@ -374,6 +341,33 @@ symExRead target eloc = do
                 addPredicate (PCell, [loc, var oldval])
                 progVars %= Map.insert target (var oldval)
 
-                
-                
+symExCAS :: (SymbStateLenses s, MonadRaise m, MonadLogger m, Provers p,
+                MonadReader p m, MonadIO m, MonadState s m, MonadPlus m,
+                MonadCut m) =>
+                Maybe String -> AExpr -> AExpr -> AExpr -> m ()
+symExCAS rtn target old new = do
+                loc <- aexprToVExpr target
+                oldv <- aexprToVExpr old
+                newv <- aexprToVExpr new
+                curv <- check $ do
+                        curv <- newEvar "cas_val"
+                        consumePredicate (PCell, [toExpr loc, var curv])
+                        return curv
+                branch_
+                    (do -- success branch
+                        assumeTrue $ VAEq (var curv) oldv
+                        addPredicate (PCell, [toExpr loc, toExpr newv])
+                        case rtn of
+                            Nothing -> return ()
+                            Just rtn' -> progVars %= Map.insert rtn' (VEConst 1)
+                    )
+                    (do -- failure branch
+                        assumeFalse $ VAEq (var curv) oldv
+                        addPredicate (PCell, [toExpr loc, var curv])
+                        case rtn of 
+                            Nothing -> return ()
+                            Just rtn' -> progVars %= Map.insert rtn' (VEConst 0)
+                    )
+
+
 --}
