@@ -75,7 +75,6 @@ executable Caper
                    Caper.Logger,
                    Caper.ExceptionContext,
                    Caper.Contexts,
-                   Caper.StabilityCheck,
                    Caper.RegionInterpretations,
                    Caper.FreeVariables,
                    Caper.DeclarationTyping,
