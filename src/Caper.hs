@@ -95,7 +95,7 @@ caperCommand (CLVerify file) = do
         case result of
             Right () -> putStrLn "ACCEPTED"
             Left (context, exception) -> do
-                    mapM_ print context
+                    mapM_ print (reverse context)
                     print exception
                     putStrLn "REJECTED"
                      
