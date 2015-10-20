@@ -13,13 +13,15 @@ import Caper.Parser.AST.SourcePos
 
 -- |Check that the list of parameters for a region is of the right length and
 -- that each parameter is of the appropriate type.
+-- For this, the region identifier is not treated as a parameter, and the
+-- state is not considered to be a parameter.
 checkRegionParams :: (MonadState s m, AssumptionLenses s,
                 MonadReader r m, RTCGetter r,
                 MonadRaise m) =>
         RTId -> [(Expr VariableID, AnyExpr)] -> m ()
 checkRegionParams rtid params = do
                         rt <- lookupRType rtid
-                        let types = map snd $ rtParameters rt
+                        let types = map snd $ tail $ rtParameters rt
                         if length types == length params then
                                 checkParams (2 :: Int) params types
                             else
