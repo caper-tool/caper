@@ -647,7 +647,7 @@ filterEvars f = to $ Map.keys . Map.filter f . TC.toMap . (^.existentialBindings
 permissionEvars :: (AssertionLenses a) => Getter a [VariableID]
 permissionEvars = filterEvars (== Just VTPermission)
 valueEvars :: (AssertionLenses a) => Getter a [VariableID]
-valueEvars = filterEvars (\x -> (x == Just VTValue) || isNothing x)
+valueEvars = filterEvars treatAsValueJ --(\x -> (x == Just VTValue) || isNothing x)
 
 filterAvars :: (AssertionLenses a) => (Maybe VariableType -> Bool) -> Getter a [VariableID]
 filterAvars f = to $ Map.keys . Map.filter f . TC.toMap . (^.universalBindings)
@@ -655,7 +655,7 @@ filterAvars f = to $ Map.keys . Map.filter f . TC.toMap . (^.universalBindings)
 permissionAvars :: (AssertionLenses a) => Getter a [VariableID]
 permissionAvars = filterAvars (== Just VTPermission)
 valueAvars :: (AssertionLenses a) => Getter a [VariableID]
-valueAvars = filterAvars (\x -> (x == Just VTValue) || isNothing x)
+valueAvars = filterAvars treatAsValueJ --(\x -> (x == Just VTValue) || isNothing x)
 
 -- |Check a first-order value formula (generating the appropriate logging events)
 valueCheck :: (MonadIO m, MonadReader r m, Provers r, StringVariable v, MonadLogger m) =>
