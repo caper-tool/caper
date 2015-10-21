@@ -1,7 +1,7 @@
 " Vim syntax file
 " Language: Caper
 " Maintainer: Thomas Dinsdale-Young
-" Latest Revision: 10th July 2013
+" Latest Revision: 21st October 2015
 
 if exists("b:current_syntax")
   finish
@@ -20,14 +20,22 @@ syn keyword caperOperator and or not
 
 syn match caperNumber '\d\+' contained display
 
-syn region caperAnnotation start=' ' end=';' contained
+
+
+syn keyword caperRegAn guards 
+syn keyword caperRegAn interpretation 
+syn keyword caperRegAn actions
+
+syn region caperAnnotation start='\s' end=';' contained
 syn keyword caperAnnotationDeclaration requires ensures nextgroup=caperAnnotation
-syn keyword caperAnnotationDeclaration region predicate
+syn keyword caperToplevelDeclaration region
+syn keyword caperToplevelDeclaration predicate
 
 syn match caperSquareError '\]'
-syn region caperDereference start='\[' end='\]' contains=caperOperator,caperNumber transparent keepend
+syn region caperDereference start='\[' end='\]' contains=caperOperator,caperNumber,caperComment transparent keepend
 
-syn region caperCommment start="//" skip="\\$" end="$" keepend
+syn region caperComment start="//" skip="\\$" end="$" keepend
+syn region caperComment start="/\*" end="\*/" keepend
 
 syn match caperCurlyError "}"
 syn region caperFunctionBody start='{' end='}' contains=ALLBUT,caperKeyword,caperCurlyError,caperAnnotation fold
@@ -39,10 +47,13 @@ hi def link caperSquareError    Error
 hi def link caperCurlyError     Error
 hi def link caperKeyword        Statement
 hi def link caperStatement      Statement
-hi def link caperCommment       Comment
+hi def link caperComment        Comment
 hi def link caperRepeat         Repeat
 hi def link caperNumber         Constant
 hi def link caperConstant       Constant
 hi def link caperDereference    Operator
 hi caperAnnotationDeclaration   gui=bold term=bold guifg=Red
+hi caperRegAn                   gui=bold term=bold guifg=Red
+hi def link caperToplevelDeclaration Statement
 hi def link caperAnnotation     Preproc
+
