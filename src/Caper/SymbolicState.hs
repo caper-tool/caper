@@ -36,12 +36,13 @@ data SymbState p = SymbState {
         _ssProgVars :: PVarBindings,
         _ssLogicalVars :: LVarBindings,
         _ssPreds :: Predicates,
-        _ssRegions :: Regions -- AliasMap.AliasMap VariableID Region
+        _ssRegions :: AliasMap.AliasMap VariableID Region,
+        _ssOpenRegions :: [VariableID]
         } deriving (Functor)
 makeLenses ''SymbState
 
 emptySymbState :: SymbState Assumptions
-emptySymbState = SymbState emptyAssumptions Map.empty emptyLVars Map.empty emptyRegions
+emptySymbState = SymbState emptyAssumptions Map.empty emptyLVars Map.empty AliasMap.empty []
 
 showPVarBindings :: PVarBindings -> String
 showPVarBindings = Map.foldWithKey showBinding ""
@@ -49,7 +50,7 @@ showPVarBindings = Map.foldWithKey showBinding ""
                 showBinding pv vr s = pv ++ " := " ++ show vr ++ "\n" ++ s
 
 instance (Show p) => Show (SymbState p) where
-        show (SymbState p vs lvs prds regs) = "Pure facts:\n" ++ show p 
+        show (SymbState p vs lvs prds regs oregs) = "Pure facts:\n" ++ show p 
                 ++ "\nProgram variables:\n" ++ showPVarBindings vs 
                 ++ "Heap:\n" ++ 
                 (concat . intersperse "\n" . 
@@ -73,7 +74,8 @@ instance AssumptionLenses p => SymbStateLenses (SymbState p) where
         preds = ssPreds
 
 instance RegionLenses (SymbState p) where
-        theRegions = ssRegions
+        regions = ssRegions
+        openRegions = ssOpenRegions
 
 instance SymbStateLenses s => SymbStateLenses (WithAssertions s) where
         progVars = withAssrBase . progVars

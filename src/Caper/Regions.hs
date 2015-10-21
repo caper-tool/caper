@@ -34,26 +34,14 @@ data Region = Region {
         regGuards :: Guard VariableID
 }
 
-data Regions = Regions {
-        _regions :: AliasMap VariableID Region,
-        _openRegions :: [VariableID]
-        }
-
 class RegionLenses a where
-        theRegions :: Simple Lens a Regions
         regions :: Simple Lens a (AliasMap VariableID Region)
-        regions = theRegions . (lens _regions (\o y -> o {_regions = y}))
         openRegions :: Simple Lens a [VariableID]
-        openRegions = theRegions . (lens _openRegions (\o y -> o {_openRegions = y}))
         
-instance RegionLenses Regions where
-        theRegions = id
 
 instance RegionLenses s => RegionLenses (WithAssertions s) where
-        theRegions = withAssrBase . theRegions
-
-emptyRegions :: Regions
-emptyRegions = Regions AM.empty []
+        regions = withAssrBase . regions
+        openRegions = withAssrBase . openRegions
 
 regionList :: (MonadState s m, RegionLenses s) => m [VariableID]
 regionList = liftM AM.distinctKeys $ use regions
