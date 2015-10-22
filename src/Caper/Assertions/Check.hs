@@ -34,4 +34,15 @@ checkRegionParams rtid params = do
                         checkParams (n+1) ps ts
                 checkParams _ _ _ = return ()
 
-
+-- |Determine if an assertion is stable by a straight-forward syntactic check.
+-- This allows us to short-circuit more complex stability testing where it is
+-- not necessary.  If this procedure returns 'True', the assertion is guaranteed
+-- to be stable.
+--
+-- Currently, this simply checks that no regions are mentioned
+isTriviallyStable :: Assrt -> Bool
+isTriviallyStable (AssrtPure {}) = True
+isTriviallyStable (AssrtSpatial _ (SARegion _)) = False
+isTriviallyStable (AssrtSpatial _ _) = True
+isTriviallyStable (AssrtConj _ a1 a2) = isTriviallyStable a1 && isTriviallyStable a2
+isTriviallyStable (AssrtITE _ _ a1 a2) = isTriviallyStable a1 && isTriviallyStable a2

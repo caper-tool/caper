@@ -8,16 +8,24 @@ import Control.Monad.State hiding (mapM_,forM_)
 import qualified Data.Map as Map
 import Control.Lens
 import Data.Foldable
+import Data.Maybe
+
+import Caper.Utils.Choice
 
 import qualified Caper.Parser.AST.Annotation as AST
 import Caper.Parser.AST.Annotation (StateInterpretation(..))
 import Caper.ProverDatatypes
 import Caper.RegionTypes
+import Caper.Regions
 import Caper.SymbolicState
 import Caper.Exceptions
 import Caper.Logger
 import Caper.Assertions.Produce
 import Caper.Prover
+import Caper.Assertions.Check
+import Caper.Assertions.Produce
+import Caper.Assertions.Consume
+import Caper.Predicates
 
 {--
 -- Actually, this is probably part of the AST...
@@ -102,26 +110,59 @@ checkStateInterpretationOtherAmbiguity params si1 si2 =
 -- is only one interpretation for each state.
 checkStateInterpretations ::
         (MonadRaise m, MonadIO m, MonadLogger m,
-        MonadReader r m, Provers r) =>
+        MonadReader r m, Provers r, RTCGetter r) =>
         [String] -- ^The region parameters
         -> [StateInterpretation]
         -> m ()
 checkStateInterpretations _ [] = return ()
 checkStateInterpretations params (si : sis) = do
+                checkStateInterpretationStability params si
                 checkStateInterpretationSelfAmbiguity params si
                 mapM_ (checkStateInterpretationOtherAmbiguity params si) sis
                 checkStateInterpretations params sis
 
+-- |Check that a state interpretation is stable.
+checkStateInterpretationStability ::
+        (MonadRaise m, MonadIO m, MonadLogger m,
+        MonadReader r m, Provers r, RTCGetter r) =>
+        [String] -- ^The region parameters
+        -> StateInterpretation
+        -> m ()
+checkStateInterpretationStability params si = 
+    contextualise si $ unless (isTriviallyStable (siInterp si)) $ do
+        r <- firstChoice $ flip evalStateT emptySymbState $ do
+                -- Produce the abstract state
+                state0 <- produceValueExpr (siState si)
+                -- Assume the conditions
+                forM_ (siConditions si) producePure
+                -- Produce the concrete state
+                produceAssrt True (siInterp si)
+                -- Stabilise regions
+                stabiliseRegions
+                -- Clear the logical variables
+                logicalVars .= emptyLVars
+                check $ do 
+                    -- Consume the new abstract state
+                    state1 <- consumeValueExpr (siState si)
+                    -- Assert that the state is the same
+                    assertEqual state0 state1
+                    -- Assert the conditions
+                    forM_ (siConditions si) consumePure
+                    -- Consume the concrete state
+                    consumeAssrt (siInterp si)
+        when (isNothing r) $
+            raise UnstableStateInterpretation
+
 checkRegionType :: 
         (MonadRaise m, MonadIO m, MonadLogger m,
-        MonadReader r m, Provers r) =>
+        MonadReader r m, Provers r, RTCGetter r) =>
         RegionType -> m ()
-checkRegionType rt = checkStateInterpretations (rtParamNames rt)
+checkRegionType rt = contextualise rt $ checkStateInterpretations (rtParamNames rt)
                         (rtInterpretation rt)
                 
 checkRegionTypeContextInterpretations ::
         (MonadRaise m, MonadIO m, MonadLogger m,
-        MonadReader r m, Provers r) =>
-        RegionTypeContext -> m ()
+        MonadReader r m, Provers r, RTCGetter r) =>
+        m ()
 checkRegionTypeContextInterpretations = 
-        mapM_ checkRegionType . rtcRegionTypes
+        view theRTContext >>= mapM_ checkRegionType . rtcRegionTypes

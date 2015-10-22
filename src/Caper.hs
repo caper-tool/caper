@@ -90,7 +90,9 @@ caperCommand (CLVerify file) = do
             rtc <- declrsToRegionTypeContext declrs
             liftIO $ print rtc 
             hoist (withReaderT (ProcedureContext procSpecs rtc provers)) $ do
-                checkRegionTypeContextInterpretations rtc
+                logEvent $ InfoEvent "Validating region declarations."
+                checkRegionTypeContextInterpretations
+                logEvent $ InfoEvent "Verifying procedures."
                 verifyProcedures funDecs
         case result of
             Right () -> putStrLn "ACCEPTED"
