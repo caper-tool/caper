@@ -3,6 +3,7 @@ module Caper.Utils.NondetClasses where
 
 import Control.Monad
 import Control.Monad.State
+import Control.Applicative
 
 import Caper.Utils.MonadHoist
 
@@ -45,4 +46,16 @@ branch b1 b2 = do
 -}
 branch_ :: (MonadState s m, MonadCut m) => m a -> m b -> m ()
 branch_ b1 b2 = branch b1 b2 >> return ()
+
+branches :: (MonadState s m, MonadCut m) => [m a] -> m [a]
+branches [] = return []
+branches [a] = a >>= (return . (:[]))
+branches (a:aa) = do
+        (b,bb) <- branch a (branches aa)
+        return (b:bb)
+
+branches_ :: (MonadState s m, MonadCut m) => [m a] -> m ()
+branches_ [] = return ()
+branches_ [a] = a >> return ()
+branches_ (a:aa) = branch_ a (branches_ aa)
         

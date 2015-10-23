@@ -40,6 +40,46 @@ instance (MonadRaise m, MonadIO m, MonadLogger m,
         RegionLenses s, MonadCut m) => SymExMonad r s m
 
 
+localiseLogicalVars :: (MonadState s m, SymbStateLenses s) =>
+        m a -> m a
+localiseLogicalVars mop = do
+            -- 'push' the logical variables
+            savedLVars <- use logicalVars
+            logicalVars .= emptyLVars
+            a <- mop -- Do what we have to do
+            -- 'pop' the logical variables
+            logicalVars .= savedLVars
+            return a
+        
+
+-- | Symbolically execute some code with the specified region open.
+-- Afterwards, the region should be closed and the state updated.
+-- The specified region should be in the domain of the map and have a region type.
+-- The region should also have been stabilised (BEFORE ANY REGIONS HAVE BEEN OPENED!)
+atomicOpenRegion ::
+        SymExMonad r s m => 
+        VariableID -> m () -> m ()
+atomicOpenRegion rid ase = do
+        -- Look up the region type
+        Just (rt, ps) <- getTypeOfRegion rid
+        -- Create a logical state holding the region parameters
+        -- It might be worth checking that the expressions have the
+        -- appropriate types, but for now I won't.  Hopefully this
+        -- should've been checked already.
+        let plstate = foldr 
+            (\(pe, (RTDVar parnam, t)) -> Map.insert parnam pe)
+                emptyLVars (zip ps (rtParameters rt))
+        -- For each region interpretation...
+        branches_ $ flip map (rtInterpretation rt) $ \interp -> 
+            do
+                -- ...
+                savedLVars <- use logicalVars
+                logicalVars .= plstate
+                st0 <- produceValueExpr (siState interp)
+                
+                logicalVars .= savedLVars
+        undefined
+        
 -- TODO: this should handle regions
 atomicSymEx :: m () -> m ()
 atomicSymEx ase = ase
@@ -107,7 +147,7 @@ symbolicExecute stmt cont = do
                                         -- XXX: Possibly shift this to a more delicate variableForVExpr (or such)
                                         --liftIO $ putStrLn $ (show paramVar) ++ " ==== " ++ show argVExpr 
                                         assumeTrue $ VAEq (var paramVar) argVExpr
-                                        logicalVars %= Map.insert param paramVar
+                                        logicalVars . ix param .= paramVar
                                 -- Consume the precondition
                                 -- TODO: Eventually it might be good to be lazier about stabilising regions
                                 when stabiliseBeforeConsumePrecondition $
@@ -116,14 +156,16 @@ symbolicExecute stmt cont = do
                                 --use progVars >>= (liftIO . print)
                                 contextualise "Consuming precondition" $
                                         check $ consumeAssrt sprec
+                                -- Need to stabilise the frame!!!!!!!!
+                                stabiliseRegions 
                                 -- Set up variable for the return result
                                 retVar <- case rvar of
                                     Nothing -> newAvar returnVariableName
                                     Just retv -> do
                                         retVar <- newAvar retv
-                                        progVars %= Map.insert retv (var retVar)
+                                        progVars . ix retv .= var retVar
                                         return retVar                                        
-                                logicalVars %= Map.insert returnVariableName retVar
+                                logicalVars . ix returnVariableName .= retVar
                                 contextualise "Producing postcondition" $
                                         produceAssrt stabiliseAfterProducePostcondition spost
                                 -- 'pop' the logical variables

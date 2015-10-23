@@ -290,5 +290,17 @@ subVars rt ps o = do
                 --params :: Map.Map RTDVar (e VariableID)
                 params = Map.fromList $ zip (map fst $ rtParameters rt) ps
 
-
+-- |Get the region type and parameters for a region.  If no type is available
+-- (because the variable does not identify a region or the region's type is
+-- not known) it will return Nothing.  It can throw an error if a region
+-- has an invalid region type identifier.
+getTypeOfRegion :: (MonadState s m, RegionLenses s, MonadReader r m, RTCGetter r) =>
+            VariableID -> m (Maybe (RegionType, [Expr VariableID]))
+getTypeOfRegion rid = do
+            regs <- use regions
+            case regs ^? ix rid >>= regTypeInstance of
+                Nothing -> return Nothing
+                Just (RegionInstance rtid ps) -> do
+                        rt <- lookupRType rtid
+                        return $ Just (rt, ps) 
 -- Check if a guard is compatible 
