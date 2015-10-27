@@ -72,9 +72,10 @@ module Caper.Prover(
         declareVars,
         declareEvar,
         newEvar,
-        freshNamedVar
+        freshNamedVar,
+        letAvar
         ) where
-import Prelude hiding (sequence,foldl,foldr,mapM_,mapM,elem,notElem,any)
+import Prelude hiding (sequence,foldl,foldr,mapM_,mapM,elem,notElem,any,all)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -133,11 +134,13 @@ class AssumptionLenses a where
         bindings = theAssumptions . assmBindings
         assumptions :: Simple Lens a [Condition VariableID]
         assumptions = theAssumptions . assmAssumptions
+        assumptionVars :: Getter a (Set VariableID)
 
 instance AssumptionLenses Assumptions where
         theAssumptions = lens id (\x y -> y)
         bindings = assmBindings
         assumptions = assmAssumptions
+        assumptionVars = to (TC.domain . _assmBindings)
 
 instance Show Assumptions where
         show ass = "[" ++ show (ass ^. bindings) ++ "]\n" ++
@@ -414,10 +417,10 @@ class (AssumptionLenses a) => AssertionLenses a where
         theAssertions :: Simple Lens a Assertions
         theAssertions = lens (\s -> Assertions (s ^. theAssumptions) (s ^. existentials) (s ^. assertions))
                                 (\s (Assertions ams es ats) -> (assertions .~ ats) $ (existentials .~ es) $ (theAssumptions .~ ams) s)
-        existentials :: Simple Lens a (Set VariableID)
-        existentials = theAssertions . assrEVars
         assertions :: Simple Lens a [Condition VariableID]
         assertions = theAssertions . assrAssertions
+        existentials :: Simple Lens a (Set VariableID)
+        existentials = theAssertions . assrEVars
 
 universalBindings :: (AssertionLenses a) => Getter a BindingContext
 universalBindings = to $ \s -> TC.filter (flip Set.notMember $ s ^. existentials) (s ^. bindings)
@@ -430,11 +433,12 @@ instance AssumptionLenses Assertions where
         theAssumptions = assrAssumptions
         bindings = assrAssumptions . bindings
         assumptions = assrAssumptions . assumptions
+        assumptionVars = to (\s -> Set.difference (TC.domain (s ^. assrAssumptions . bindings)) (_assrEVars s))
 
 instance AssertionLenses Assertions where
         theAssertions = lens id (\x y -> y)
-        existentials = assrEVars
         assertions = assrAssertions
+        existentials = assrEVars
 
 data WithAssertions b = WithAssertions {
         _withAssrBase :: b,
@@ -447,10 +451,11 @@ instance AssumptionLenses b => AssumptionLenses (WithAssertions b) where
     theAssumptions = withAssrBase . theAssumptions
     bindings = withAssrBase . bindings
     assumptions = withAssrBase . assumptions
+    assumptionVars = to (\s -> Set.difference (TC.domain (s ^. withAssrBase . bindings)) (_withAssrEVars s))
 
 instance AssumptionLenses b => AssertionLenses (WithAssertions b) where
-    existentials = withAssrEVars
     assertions = withAssrAssertions 
+    existentials = withAssrEVars
 
 showAssertions :: (AssertionLenses a) => a -> String
 showAssertions asts = "Assumptions: !["
@@ -528,6 +533,33 @@ newAvar vname = do
                 let avin = TC.firstFresh [ VIDInternal $ vname ++ suffix | suffix <- suffices ] vt
                 bindings %= TC.declare avin
                 return avin
+
+areAvars :: (MonadState s m, AssumptionLenses s, Foldable f) => f VariableID -> m Bool
+areAvars e = do
+                avrs <- use assumptionVars
+                return (all (`Set.member` avrs) e)
+
+-- |Bind an assumption variable to an expression.
+-- The expression must only contain assumption variables.
+-- If the expression is just a variable, then that is used.
+letAvar :: (MonadState s m, AssumptionLenses s) => String -> Expr VariableID -> m VariableID
+letAvar vname e = do
+                chk <- areAvars e
+                unless chk $ error $ "letAVar: the expression '" ++ show e ++ "' contains non-assumption variables."
+                letAvar' e
+    where
+        letAvar' (VariableExpr v) = return v
+        letAvar' (ValueExpr (VEVar v)) = return v -- XXX: Possibly assert the type of v
+        letAvar' (ValueExpr ve) = do
+                    v <- newAvar vname
+                    assume $ ValueCondition $ FOFAtom $ VAEq (var v) ve
+                    return v
+        letAvar' (PermissionExpr (PEVar v)) = return v
+        letAvar' (PermissionExpr pe) = do
+                    v <- newAvar vname
+                    assume $ PermissionCondition $ FOFAtom $ PAEq (var v) pe
+                    return v
+                 
 
 freshNamedVar :: (MonadState s m, AssumptionLenses s) => String -> m VariableID
 -- ^Generate a fresh named variable with a name similar to the one given.
