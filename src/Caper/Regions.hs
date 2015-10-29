@@ -167,6 +167,16 @@ cannotAlias r1 r2
                     (Just rt1, Just rt2) -> riType rt1 /= riType rt2
                     _ -> False
 
+
+{-
+-- For now, I'm not going to use this, in favour of cannotAliasStrong.
+cannotAliasRegs :: AliasMap VariableID Region -> VariableID -> VariableID -> Bool
+cannotAliasRegs regs r1 r2
+        | r1 == r2 = False
+        | otherwise = case (regs ^? ix r1 >>= regTypeInstance, regs ^? ix r2 >>= regTypeInstance) of
+                    (Just rt1, Just rt2) -> riType rt1 /= riType rt2
+                    _ -> False
+-}
 -- TODO: Put somewhere more appropriate?
 restoring :: (MonadState s m) => m a -> m a
 -- ^Run a stateful computation, restoring the state at the beginning.

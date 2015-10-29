@@ -99,6 +99,7 @@ atomicOpenRegion rid ase cont = do
                 produceAssrt False (siInterp interp)
                 consistent <- isConsistent -- If it's inconsistent then we've nothing to prove here
                 unless (consistent == Just False) $ do
+                    oldRegions <- use openRegions
                     openRegions %= (rid:)
                     logicalVars .= savedLVars
                     -- Execute the atomic thing
@@ -116,11 +117,25 @@ atomicOpenRegion rid ase cont = do
                         guardCond <- generateGuaranteeCondition rt ps rg st0 st1
                         assertTrue guardCond
                     logicalVars .= savedLVars'
+                    openRegions .= oldRegions
                     cont
+
+availableRegions :: (SymExMonad r s m) => m [VariableID]
+availableRegions = do
+            oregs <- use openRegions
+            regs <- use regions
+            let r0 = AM.distinctKeys regs
+            let r1 = [r | r <- r0, isJust $ AM.lookup r regs >>= regTypeInstance]
+            r2 <- filterM (\reg -> liftM and $ forM oregs (cannotAliasStrong reg)) r1
+            return r2
+            
+
         
 -- TODO: this should handle regions
-atomicSymEx :: (Monad m) => m () -> m () -> m ()
-atomicSymEx ase cont = ase >> cont
+atomicSymEx :: (SymExMonad r s m) => m () -> m () -> m ()
+atomicSymEx ase cont = (ase >> cont) {- `mplus` do
+            ars <- availableRegions
+            msum [ atomicOpenRegion r (atomicSymEx ase -} 
 
 
 data ExitMode = EMReturn (Maybe (ValueExpression VariableID)) | EMContinuation
