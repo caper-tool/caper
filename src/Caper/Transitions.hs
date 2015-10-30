@@ -120,6 +120,9 @@ matrixToReflRelation mx lower pre post = fmin (pre $=$ post) $ fst $ foldl' op1 
                         op2 i (f, j) e | i == j = (f, j + 1)
                                        | otherwise = (fmin f (fadd e (FOFAnd (VEConst i $=$ pre) (VEConst j $=$ post))), j + 1)
 
+-- |Compute an overapproximation of the closure of a set of transitions
+--
+-- TODO: rename this
 computeClosureRelation :: (MonadIO m, MonadReader r m, Provers r, Eq v, StringVariable v, MonadLogger m) =>
         StateSpace -> [GuardedTransition v] -> m (ValueExpression v -> ValueExpression v -> FOF ValueAtomic v)
 -- Best case scenario: no actions!
@@ -133,6 +136,19 @@ computeClosureRelation (StateSpace (Just lower) (Just upper)) gts = do
 -- Fallback: universal relation
 computeClosureRelation _ _ = return (\x y -> FOFTrue)
 
+
+-- |Compute an underapproximation of the closure of a set of transitions
+underComputeClosureRelation :: (MonadIO m, MonadReader r m, Provers r, Eq v, StringVariable v, MonadLogger m) =>
+        StateSpace -> [GuardedTransition v] -> m (ValueExpression v -> ValueExpression v -> FOF ValueAtomic v)
+-- No actions, so only identities
+underComputeClosureRelation _ [] = return (\x y -> FOFAtom $ VAEq x y)
+-- Finite state scenario
+underComputeClosureRelation (StateSpace (Just lower) (Just upper)) gts = do
+                        mx <- computeInitialMatrix lower upper gts
+                        let mx' = runFloyd mx
+                        return $ matrixToReflRelation mx' (toInteger lower)
+-- Fallback: identity relation
+underComputeClosureRelation _ _ = return (\x y -> FOFAtom $ VAEq x y)
 
 {-
 testgts = [ GuardedTransition [VIDNamed "x"]

@@ -294,6 +294,7 @@ makeSourcePos ''Predicate
 makeSourcePos ''Guard
 makeSourcePos ''Assrt
 makeSourcePos ''Action
+makeSourcePos ''StateInterpretation
 instance HasSourcePos AnyExpr where
         sourcePos (AnyVar e) = sourcePos e
         sourcePos (AnyVal e) = sourcePos e
@@ -334,3 +335,6 @@ instance Contextual CellAssrt where
 instance Contextual Action where
         toContext act = DescriptiveContext (sourcePos act)
                 "In an action declaration"
+instance Contextual StateInterpretation where
+        toContext si = DescriptiveContext (sourcePos si) $
+                "In a region interpretation: " ++ show si

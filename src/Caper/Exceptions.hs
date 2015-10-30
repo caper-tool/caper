@@ -69,6 +69,9 @@ data CaperException =
         | VerificationFailed String
         -- |'UndeclaredFunctionCall' indicates a call to a function that has no declaration.
         | UndeclaredFunctionCall String
+        -- |'UnstableStateInterpretation' indicates that a state
+        -- interpretation could not be proved to be stable.
+        | UnstableStateInterpretation
         deriving (Eq, Typeable)
 
 instance Show CaperException where
@@ -96,6 +99,8 @@ instance Show CaperException where
                 "Failed to verify: " ++ f
         show (UndeclaredFunctionCall f) =
                 "Call to undeclared function: " ++ f
+        show (UnstableStateInterpretation) =
+                "Could not show state interpretation to be stable."
 
 
 -- |The 'MonadRaise' class supports raising 'CaperException's and

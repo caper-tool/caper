@@ -28,6 +28,7 @@ data LogEvent
         | WarnMissingPrecondition String String
         | WarnMissingPostcondition String String
         | WarnUninitialisedVariable String
+        | InfoEvent String
 instance Show LogEvent where
         show (WarnAutoBind vars) = "WARNING: the variables " ++ show (Data.Set.toList vars) ++
                 " are being automatically bound as existentials."
@@ -46,6 +47,7 @@ instance Show LogEvent where
         show (WarnMissingPostcondition proc def) = "WARNING: the postcondition of '" ++
                 proc ++ "' is unspecified. Defaulting to '" ++ def ++ "'."
         show (WarnUninitialisedVariable v) = "WARNING: the variable '" ++ v ++ "' is used before it is initialised."
+        show (InfoEvent s) = "INFO: " ++ s
 
 
 type Log = [([ExceptionContext], LogEvent)]

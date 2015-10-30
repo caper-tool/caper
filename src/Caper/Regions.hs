@@ -4,16 +4,21 @@ module Caper.Regions where
 import Prelude hiding (mapM_,mapM,concat)
 import Control.Monad.State hiding (mapM_,mapM,forM_,msum)
 import Control.Monad.Reader hiding (mapM_,mapM,forM_,msum)
+import Control.Monad.Trans.Maybe
 import Control.Lens hiding (op)
 import Data.Foldable
 import Data.Traversable
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Data.Maybe
 
 import Caper.Utils.Choice
-import Caper.RegionTypes
 import Caper.Utils.AliasingMap (AliasMap)
 import qualified Caper.Utils.AliasingMap as AM
+
+import Caper.Parser.AST.Annotation (TopLevelGuardDeclr(..))
+
+import Caper.RegionTypes
 import Caper.Logger
 import Caper.ProverDatatypes
 import Caper.Prover -- TODO: move some stuff from Prover to ProverDatatypes?
@@ -34,16 +39,14 @@ data Region = Region {
         regGuards :: Guard VariableID
 }
 
-newtype Regions = Regions {_regions :: AliasMap VariableID Region}
-
 class RegionLenses a where
         regions :: Simple Lens a (AliasMap VariableID Region)
-
-instance RegionLenses Regions where
-        regions = lens _regions (\_ y -> Regions y)
+        openRegions :: Simple Lens a [VariableID]
+        
 
 instance RegionLenses s => RegionLenses (WithAssertions s) where
         regions = withAssrBase . regions
+        openRegions = withAssrBase . openRegions
 
 regionList :: (MonadState s m, RegionLenses s) => m [VariableID]
 regionList = liftM AM.distinctKeys $ use regions
@@ -164,6 +167,16 @@ cannotAlias r1 r2
                     (Just rt1, Just rt2) -> riType rt1 /= riType rt2
                     _ -> False
 
+
+{-
+-- For now, I'm not going to use this, in favour of cannotAliasStrong.
+cannotAliasRegs :: AliasMap VariableID Region -> VariableID -> VariableID -> Bool
+cannotAliasRegs regs r1 r2
+        | r1 == r2 = False
+        | otherwise = case (regs ^? ix r1 >>= regTypeInstance, regs ^? ix r2 >>= regTypeInstance) of
+                    (Just rt1, Just rt2) -> riType rt1 /= riType rt2
+                    _ -> False
+-}
 -- TODO: Put somewhere more appropriate?
 restoring :: (MonadState s m) => m a -> m a
 -- ^Run a stateful computation, restoring the state at the beginning.
@@ -239,7 +252,10 @@ stabiliseRegion
 -- state.
 stabiliseRegion r = return $ r {regDirty = False, regState = Nothing}
 
-
+-- |Determine a list of possible environment (rely) transitions for a given
+-- parametrised region type and guard.
+--
+-- TODO: Account for action conditions
 checkTransitions :: (ProverM s r m) => RegionType -> [Expr VariableID] -> Guard VariableID -> m [GuardedTransition VariableID]
 checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem rt)
         where
@@ -265,6 +281,48 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
                         return $ if guardCompat == Just False then [] else
                                 [GuardedTransition bvars FOFTrue (exprSub s prec) (exprSub s post)]
 
+-- |Determine a list of possible thread (guarantee) transitions for a given
+-- parametrised region type and guard.
+--
+-- TODO: Account for action conditions
+checkGuaranteeTransitions :: (ProverM s r m) => RegionType -> [Expr VariableID] -> Guard VariableID -> m [GuardedTransition VariableID]
+checkGuaranteeTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem rt)
+        where
+                bndVars tr = Set.difference (trVariables tr) (rtParamVars rt)
+                params = Map.fromList $ zip (map fst $ rtParameters rt) ps
+                checkTrans tr@(TransitionRule trgd prd prec post) = do
+                        -- Compute a binding for fresh variables
+                        bvmap <- freshInternals rtdvStr (bndVars tr)
+                        let bvars = Map.elems bvmap
+                        let subst = Map.union params $ fmap var bvmap
+                        let s v = Map.findWithDefault (error "checkGuaranteeTransitions: variable not found") v subst
+                        -- Now have to check if guard is available
+                        guardAvail <- case rtGuardType rt of
+                            ZeroGuardDeclr -> return (Just ())
+                            SomeGuardDeclr gdec -> runMaybeT $ hypothetical $ do
+                                _ <- guardEntailment gdec gd (exprSub s trgd)
+                                return ()
+                        return $ if isNothing guardAvail then [] else
+                                [GuardedTransition bvars FOFTrue (exprSub s prec) (exprSub s post)]
+
+generateGuaranteeCondition :: (ProverM s r m) =>
+-- |Type of the region
+    RegionType ->
+-- |Parameters for the region
+    [Expr VariableID] ->
+-- |Guard for the region
+    Guard VariableID ->
+-- |Old state
+    ValueExpression VariableID ->
+-- |New state
+    ValueExpression VariableID ->
+        m (Condition VariableID)
+generateGuaranteeCondition rt params gd st0 st1 = do
+        transitions <- checkGuaranteeTransitions rt params gd
+        rel <- underComputeClosureRelation (rtStateSpace rt) transitions
+        return $ ValueCondition (rel st0 st1)
+
+-- XXX: I think subVars' and subVars are vestigial.  I can't remember their purpose
 
 subVars' :: (Traversable t, ExpressionSub t e, Expression e) =>
         (String -> VariableID) -> RegionType -> [e VariableID] -> t RTDVar -> t VariableID
@@ -292,5 +350,17 @@ subVars rt ps o = do
                 --params :: Map.Map RTDVar (e VariableID)
                 params = Map.fromList $ zip (map fst $ rtParameters rt) ps
 
-
+-- |Get the region type and parameters for a region.  If no type is available
+-- (because the variable does not identify a region or the region's type is
+-- not known) it will return Nothing.  It can throw an error if a region
+-- has an invalid region type identifier.
+getTypeOfRegion :: (MonadState s m, RegionLenses s, MonadReader r m, RTCGetter r) =>
+            VariableID -> m (Maybe (RegionType, [Expr VariableID]))
+getTypeOfRegion rid = do
+            regs <- use regions
+            case regs ^? ix rid >>= regTypeInstance of
+                Nothing -> return Nothing
+                Just (RegionInstance rtid ps) -> do
+                        rt <- lookupRType rtid
+                        return $ Just (rt, ps) 
 -- Check if a guard is compatible 

@@ -15,6 +15,7 @@ import Control.Lens
 import Data.Maybe
 import Data.List (intercalate)
 import Data.IntCast
+import Text.ParserCombinators.Parsec (SourcePos)
 
 import Caper.Utils.SimilarStrings
 import Caper.FreeVariables
@@ -26,6 +27,7 @@ import qualified Caper.Parser.AST as AST
 import Caper.Parser.AST.Annotation ()
 import Caper.DeclarationTyping
 import Caper.Assertions.Generate
+import Caper.ExceptionContext
 
 -- The internal representation of a region type identifier
 type RTId = Integer
@@ -43,6 +45,7 @@ instance StringVariable RTDVar where
 
 data RegionType = RegionType
         {
+                rtSourcePos :: SourcePos,
                 rtRegionTypeName :: String,
                 rtParameters :: [(RTDVar, VariableType)],
                 rtGuardType :: AST.TopLevelGuardDeclr,
@@ -51,8 +54,12 @@ data RegionType = RegionType
                 rtInterpretation :: [AST.StateInterpretation]
         }
 
+instance Contextual RegionType where
+        toContext rt = DescriptiveContext (rtSourcePos rt) $
+                "In a region type declaration named '" ++ rtRegionTypeName rt ++ "'"
+
 instance Show RegionType where
-        show (RegionType nm params gt ss ts interp) =
+        show (RegionType _ nm params gt ss ts interp) =
                 "region " ++ nm ++ "(" ++ intercalate "," (map (show . fst) params) ++ ") {\n" ++
                 "  guards : " ++ show gt ++ "\n" ++
                 "  transitions {\n    " ++ intercalate "\n    " (map show ts) ++ "\n  }\n" ++
@@ -226,7 +233,7 @@ declrsToRegionTypeContext declrs = do
                     -- precondition for this)
                     let !stateSpace = computeStateSpace interps
                     transitions <- mapM (actionToTransitionRule (map fst params)) acts
-                    let rt = RegionType rtnam params gddec stateSpace transitions interps
+                    let rt = RegionType sp rtnam params gddec stateSpace transitions interps
                     accumulate typings (nextRTId + 1)
                         (ac {
                             rtcIds = Map.insert rtnam nextRTId (rtcIds ac),

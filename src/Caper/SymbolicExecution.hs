@@ -10,12 +10,13 @@ import Control.Lens hiding (pre)
 
 import Caper.Utils.Choice
 import Caper.Utils.NondetClasses
+import qualified Caper.Utils.AliasingMap as AM
 
 import Caper.Constants
 import Caper.ProverDatatypes
 import Caper.Exceptions
 import Caper.Logger
-import Caper.Parser.AST
+import Caper.Parser.AST hiding (Region)
 import Caper.Procedures
 import Caper.Predicates
 import Caper.RegionTypes
@@ -40,9 +41,101 @@ instance (MonadRaise m, MonadIO m, MonadLogger m,
         RegionLenses s, MonadCut m) => SymExMonad r s m
 
 
+localiseLogicalVars :: (MonadState s m, SymbStateLenses s) =>
+        m a -> m a
+localiseLogicalVars mop = do
+            -- 'push' the logical variables
+            savedLVars <- use logicalVars
+            logicalVars .= emptyLVars
+            a <- mop -- Do what we have to do
+            -- 'pop' the logical variables
+            logicalVars .= savedLVars
+            return a
+        
+
+-- | Symbolically execute some code with the specified region open.
+-- Afterwards, the region should be closed and the state updated.
+-- The specified region should be in the domain of the map and have a region type.
+-- The region should also have been stabilised (BEFORE ANY REGIONS HAVE BEEN OPENED!)
+atomicOpenRegion ::
+        SymExMonad r s m =>
+        -- |Region identifer 
+        VariableID ->
+        -- |Operation for performing symbolic execution 
+        m () ->
+        -- |Continuation
+        m () ->
+          m ()
+atomicOpenRegion rid ase cont = do
+        -- Resolve the region
+        regs <- use regions
+        (rs, rg, rt, ps :: [Expr VariableID]) <- case AM.lookup rid regs of
+            Nothing -> error $ "atomicOpenRegion: Unable to resolve region identifier '" ++ show rid ++ "'"
+            Just (Region {regDirty = True}) -> error $ "atomicOpenRegion: Cannot open dirty region '" ++ show rid ++ "'"
+            Just (Region {regTypeInstance = Nothing}) -> error $ "atomicOpenRegion: Region '" ++ show rid ++ "' is of unknown type"
+            Just (Region {regTypeInstance = Just (RegionInstance rti ps), regState = rs0, regGuards = rg}) -> do
+                    rt <- lookupRType rti
+                    rs <- case rs0 of
+                        Nothing -> liftM var $ newAvar (show rid ++ "state")
+                        Just rs -> return rs
+                    return (rs, rg, rt, ps)
+        -- Create a logical state holding the region parameters
+        -- It might be worth checking that the expressions have the
+        -- appropriate types, but for now I won't.  Hopefully this
+        -- should've been checked already.
+        plstate <- foldM (\m (pe, (RTDVar parnam, t)) -> do
+                         ev <- letAvar parnam pe
+                         return (Map.insert parnam ev m)) emptyLVars (zip ps (rtParameters rt)) 
+        -- For each region interpretation...
+        branches_ $ flip map (rtInterpretation rt) $ \interp -> 
+            do
+                savedLVars <- use logicalVars
+                logicalVars .= plstate
+                -- ...assume we are in that state
+                st0 <- produceValueExpr (siState interp)
+                assumeTrueE $ VAEq st0 rs
+                forM_ (siConditions interp) producePure
+                -- and produce the resources
+                produceAssrt False (siInterp interp)
+                consistent <- isConsistent -- If it's inconsistent then we've nothing to prove here
+                unless (consistent == Just False) $ do
+                    oldRegions <- use openRegions
+                    openRegions %= (rid:)
+                    logicalVars .= savedLVars
+                    -- Execute the atomic thing
+                    ase
+                    savedLVars' <- use logicalVars
+                    logicalVars .= plstate -- The parameters don't change
+                    -- Non-deterministically choose the next interpretation
+                    interp' <- msum $ map return (rtInterpretation rt)
+                    check $ do
+                        -- Assert that we are in this interpretation
+                        st1 <- consumeValueExpr (siState interp')
+                        forM_ (siConditions interp') consumePure
+                        consumeAssrt (siInterp interp')
+                        -- and that the state is guarantee related
+                        guardCond <- generateGuaranteeCondition rt ps rg st0 st1
+                        assertTrue guardCond
+                    logicalVars .= savedLVars'
+                    openRegions .= oldRegions
+                    cont
+
+availableRegions :: (SymExMonad r s m) => m [VariableID]
+availableRegions = do
+            oregs <- use openRegions
+            regs <- use regions
+            let r0 = AM.distinctKeys regs
+            let r1 = [r | r <- r0, isJust $ AM.lookup r regs >>= regTypeInstance]
+            r2 <- filterM (\reg -> liftM and $ forM oregs (cannotAliasStrong reg)) r1
+            return r2
+            
+
+        
 -- TODO: this should handle regions
-atomicSymEx :: m () -> m ()
-atomicSymEx ase = ase
+atomicSymEx :: (SymExMonad r s m) => m () -> m () -> m ()
+atomicSymEx ase cont = (ase >> cont) {- `mplus` do
+            ars <- availableRegions
+            msum [ atomicOpenRegion r (atomicSymEx ase -} 
 
 
 data ExitMode = EMReturn (Maybe (ValueExpression VariableID)) | EMContinuation
@@ -79,11 +172,11 @@ symbolicExecute stmt cont = do
         se (WhileStmt _ _ _ _) = undefined
         se (DoWhileStmt _ _ _ _) = undefined
         se (LocalAssignStmt _ trgt src) = symExLocalAssign trgt src >> cont EMContinuation
-        se (DerefStmt _ trgt src) = atomicSymEx $ symExRead trgt src >> cont EMContinuation
-        se (AssignStmt _ trgt src) = atomicSymEx $ symExWrite trgt src >> cont EMContinuation
+        se (DerefStmt _ trgt src) = atomicSymEx (symExRead trgt src) (cont EMContinuation)
+        se (AssignStmt _ trgt src) = atomicSymEx (symExWrite trgt src) (cont EMContinuation)
         se smt@(CallStmt sp rvar "CAS" args) = contextualise (DescriptiveContext sp "In a CAS") $ do
                 case args of
-                    [target, oldv, newv] -> atomicSymEx $ symExCAS rvar target oldv newv >> cont EMContinuation
+                    [target, oldv, newv] -> atomicSymEx (symExCAS rvar target oldv newv) (cont EMContinuation)
                     _ -> raise $ ArgumentCountMismatch 3 (length args)
         se smt@(CallStmt sp rvar "alloc" args) = contextualise (DescriptiveContext sp "In an alloc") $ do
                 case args of
@@ -107,7 +200,7 @@ symbolicExecute stmt cont = do
                                         -- XXX: Possibly shift this to a more delicate variableForVExpr (or such)
                                         --liftIO $ putStrLn $ (show paramVar) ++ " ==== " ++ show argVExpr 
                                         assumeTrue $ VAEq (var paramVar) argVExpr
-                                        logicalVars %= Map.insert param paramVar
+                                        logicalVars . ix param .= paramVar
                                 -- Consume the precondition
                                 -- TODO: Eventually it might be good to be lazier about stabilising regions
                                 when stabiliseBeforeConsumePrecondition $
@@ -116,14 +209,16 @@ symbolicExecute stmt cont = do
                                 --use progVars >>= (liftIO . print)
                                 contextualise "Consuming precondition" $
                                         check $ consumeAssrt sprec
+                                -- Need to stabilise the frame!!!!!!!!
+                                stabiliseRegions 
                                 -- Set up variable for the return result
                                 retVar <- case rvar of
                                     Nothing -> newAvar returnVariableName
                                     Just retv -> do
                                         retVar <- newAvar retv
-                                        progVars %= Map.insert retv (var retVar)
+                                        progVars . ix retv .= var retVar
                                         return retVar                                        
-                                logicalVars %= Map.insert returnVariableName retVar
+                                logicalVars . ix returnVariableName .= retVar
                                 contextualise "Producing postcondition" $
                                         produceAssrt stabiliseAfterProducePostcondition spost
                                 -- 'pop' the logical variables

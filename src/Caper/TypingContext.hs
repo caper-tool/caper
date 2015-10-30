@@ -4,6 +4,7 @@ import Prelude hiding (foldl, foldr, mapM_)
 import qualified Data.Map as Map
 import Data.Foldable
 import Data.Map (Map)
+import qualified Data.Set as Set
 import Control.Monad.State hiding (mapM_)
 import Control.Monad.Exception
 import Data.List hiding (foldl, foldr)
@@ -102,3 +103,6 @@ intersection (TContext (m1, i1)) (TContext (m2, _)) = TContext (Map.intersection
 
 filter :: (Eq v, Ord v) => (v -> Bool) -> TContext v t -> TContext v t
 filter f (TContext (m, i)) = TContext (Map.filterWithKey (\a b -> f a) m, i)
+
+domain :: (Ord v) => TContext v t -> Set.Set v
+domain (TContext (m, _)) = Set.fromAscList $ map fst $ Map.toAscList m
