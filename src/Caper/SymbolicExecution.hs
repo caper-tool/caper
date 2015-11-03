@@ -205,7 +205,7 @@ symbolicExecute stmt cont = do
                                         -- XXX: Possibly shift this to a more delicate variableForVExpr (or such)
                                         --liftIO $ putStrLn $ (show paramVar) ++ " ==== " ++ show argVExpr 
                                         assumeTrue $ VAEq (var paramVar) argVExpr
-                                        logicalVars . ix param .= paramVar
+                                        logicalVars . at param ?= paramVar
                                 -- Consume the precondition
                                 -- TODO: Eventually it might be good to be lazier about stabilising regions
                                 when stabiliseBeforeConsumePrecondition $
@@ -221,9 +221,9 @@ symbolicExecute stmt cont = do
                                     Nothing -> newAvar returnVariableName
                                     Just retv -> do
                                         retVar <- newAvar retv
-                                        progVars . ix retv .= var retVar
+                                        progVars . at retv ?= var retVar
                                         return retVar                                        
-                                logicalVars . ix returnVariableName .= retVar
+                                logicalVars . at returnVariableName ?= retVar
                                 contextualise "Producing postcondition" $
                                         produceAssrt stabiliseAfterProducePostcondition spost
                                 -- 'pop' the logical variables
