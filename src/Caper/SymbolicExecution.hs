@@ -59,10 +59,10 @@ localiseLogicalVars mop = do
 -- The region should also have been stabilised (BEFORE ANY REGIONS HAVE BEEN OPENED!)
 atomicOpenRegion ::
         SymExMonad r s m =>
-        -- |Region identifer 
+        -- |Region identifier 
         VariableID ->
-        -- |Operation for performing symbolic execution 
-        m () ->
+        -- |Operation for performing symbolic execution (parametrised by continuation) 
+        (m () -> m ()) ->
         -- |Continuation
         m () ->
           m ()
@@ -78,7 +78,7 @@ atomicOpenRegion rid ase cont = do
                     rs <- case rs0 of
                         Nothing -> liftM var $ newAvar (show rid ++ "state")
                         Just rs -> return rs
-                    return (rs, rg, rt, ps)
+                    return (rs, rg, rt, var rid : ps)
         -- Create a logical state holding the region parameters
         -- It might be worth checking that the expressions have the
         -- appropriate types, but for now I won't.  Hopefully this
@@ -89,11 +89,14 @@ atomicOpenRegion rid ase cont = do
         -- For each region interpretation...
         branches_ $ flip map (rtInterpretation rt) $ \interp -> 
             do
+                liftIO $ putStrLn $ "*** Trying interp " ++ show interp  
                 savedLVars <- use logicalVars
                 logicalVars .= plstate
                 -- ...assume we are in that state
                 st0 <- produceValueExpr (siState interp)
                 assumeTrueE $ VAEq st0 rs
+                --use theAssumptions >>= (liftIO . print)
+                --use logicalVars >>= (liftIO . print)
                 forM_ (siConditions interp) producePure
                 -- and produce the resources
                 produceAssrt False (siInterp interp)
@@ -103,22 +106,22 @@ atomicOpenRegion rid ase cont = do
                     openRegions %= (rid:)
                     logicalVars .= savedLVars
                     -- Execute the atomic thing
-                    ase
-                    savedLVars' <- use logicalVars
-                    logicalVars .= plstate -- The parameters don't change
-                    -- Non-deterministically choose the next interpretation
-                    interp' <- msum $ map return (rtInterpretation rt)
-                    check $ do
-                        -- Assert that we are in this interpretation
-                        st1 <- consumeValueExpr (siState interp')
-                        forM_ (siConditions interp') consumePure
-                        consumeAssrt (siInterp interp')
-                        -- and that the state is guarantee related
-                        guardCond <- generateGuaranteeCondition rt ps rg st0 st1
-                        assertTrue guardCond
-                    logicalVars .= savedLVars'
-                    openRegions .= oldRegions
-                    cont
+                    ase $ do
+                        savedLVars' <- use logicalVars
+                        logicalVars .= plstate -- The parameters don't change
+                        -- Non-deterministically choose the next interpretation
+                        interp' <- msum $ map return (rtInterpretation rt)
+                        check $ do
+                            -- Assert that we are in this interpretation
+                            st1 <- consumeValueExpr (siState interp')
+                            forM_ (siConditions interp') consumePure
+                            consumeAssrt (siInterp interp')
+                            -- and that the state is guarantee related
+                            guardCond <- generateGuaranteeCondition rt ps rg st0 st1
+                            assertTrue guardCond
+                        logicalVars .= savedLVars'
+                        openRegions .= oldRegions
+                        cont
 
 availableRegions :: (SymExMonad r s m) => m [VariableID]
 availableRegions = do
@@ -130,12 +133,17 @@ availableRegions = do
             return r2
             
 
-        
--- TODO: this should handle regions
-atomicSymEx :: (SymExMonad r s m) => m () -> m () -> m ()
-atomicSymEx ase cont = (ase >> cont) {- `mplus` do
+-- |Symbolically execute an atomic operation, trying opening
+-- regions.        
+atomicSymEx :: (SymExMonad r s m) =>
+-- |Atomic operation (parametrised by continuation
+    (m () -> m ()) ->
+-- |Continuation
+    m ()
+     -> m ()
+atomicSymEx ase cont = (ase cont) `mplus` do
             ars <- availableRegions
-            msum [ atomicOpenRegion r (atomicSymEx ase -} 
+            msum [ atomicOpenRegion r (atomicSymEx ase) cont | r <- ars] 
 
 
 data ExitMode = EMReturn (Maybe (ValueExpression VariableID)) | EMContinuation
@@ -172,9 +180,9 @@ symbolicExecute stmt cont = do
         se (WhileStmt _ _ _ _) = undefined
         se (DoWhileStmt _ _ _ _) = undefined
         se (LocalAssignStmt _ trgt src) = symExLocalAssign trgt src >> cont EMContinuation
-        se (DerefStmt _ trgt src) = atomicSymEx (symExRead trgt src) (cont EMContinuation)
-        se (AssignStmt _ trgt src) = atomicSymEx (symExWrite trgt src) (cont EMContinuation)
-        se smt@(CallStmt sp rvar "CAS" args) = contextualise (DescriptiveContext sp "In a CAS") $ do
+        se (DerefStmt _ trgt src) = atomicSymEx (symExRead trgt src >>) (cont EMContinuation)
+        se (AssignStmt _ trgt src) = atomicSymEx (symExWrite trgt src >>) (cont EMContinuation)
+        se smt@(CallStmt sp rvar "CAS" args) = contextualise (DescriptiveContext sp "In a CAS") $
                 case args of
                     [target, oldv, newv] -> atomicSymEx (symExCAS rvar target oldv newv) (cont EMContinuation)
                     _ -> raise $ ArgumentCountMismatch 3 (length args)
@@ -200,7 +208,7 @@ symbolicExecute stmt cont = do
                                         -- XXX: Possibly shift this to a more delicate variableForVExpr (or such)
                                         --liftIO $ putStrLn $ (show paramVar) ++ " ==== " ++ show argVExpr 
                                         assumeTrue $ VAEq (var paramVar) argVExpr
-                                        logicalVars . ix param .= paramVar
+                                        logicalVars . at param ?= paramVar
                                 -- Consume the precondition
                                 -- TODO: Eventually it might be good to be lazier about stabilising regions
                                 when stabiliseBeforeConsumePrecondition $
@@ -216,9 +224,9 @@ symbolicExecute stmt cont = do
                                     Nothing -> newAvar returnVariableName
                                     Just retv -> do
                                         retVar <- newAvar retv
-                                        progVars . ix retv .= var retVar
+                                        progVars . at retv ?= var retVar
                                         return retVar                                        
-                                logicalVars . ix returnVariableName .= retVar
+                                logicalVars . at returnVariableName ?= retVar
                                 contextualise "Producing postcondition" $
                                         produceAssrt stabiliseAfterProducePostcondition spost
                                 -- 'pop' the logical variables

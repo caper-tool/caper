@@ -59,6 +59,7 @@ instance (Show p) => Show (SymbState p) where
 
 instance AssumptionLenses p => AssumptionLenses (SymbState p) where
         theAssumptions = proverState . theAssumptions
+        assumptionVars = proverState . assumptionVars
 
 instance AssertionLenses p => AssertionLenses (SymbState p) where
         theAssertions = proverState . theAssertions
@@ -346,8 +347,8 @@ symExRead target eloc = do
 symExCAS :: (SymbStateLenses s, MonadRaise m, MonadLogger m, Provers p,
                 MonadReader p m, MonadIO m, MonadState s m, MonadPlus m,
                 MonadCut m) =>
-                Maybe String -> AExpr -> AExpr -> AExpr -> m ()
-symExCAS rtn target old new = do
+                Maybe String -> AExpr -> AExpr -> AExpr -> m () -> m ()
+symExCAS rtn target old new cont = do
                 loc <- aexprToVExpr target
                 oldv <- aexprToVExpr old
                 newv <- aexprToVExpr new
@@ -362,6 +363,7 @@ symExCAS rtn target old new = do
                         case rtn of
                             Nothing -> return ()
                             Just rtn' -> progVars %= Map.insert rtn' (VEConst 1)
+                        cont
                     )
                     (do -- failure branch
                         assumeFalse $ VAEq (var curv) oldv
@@ -369,6 +371,7 @@ symExCAS rtn target old new = do
                         case rtn of 
                             Nothing -> return ()
                             Just rtn' -> progVars %= Map.insert rtn' (VEConst 0)
+                        cont
                     )
 
 
