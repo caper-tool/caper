@@ -59,6 +59,7 @@ instance (Show p) => Show (SymbState p) where
 
 instance AssumptionLenses p => AssumptionLenses (SymbState p) where
         theAssumptions = proverState . theAssumptions
+        assumptionVars = proverState . assumptionVars
 
 instance AssertionLenses p => AssertionLenses (SymbState p) where
         theAssertions = proverState . theAssertions

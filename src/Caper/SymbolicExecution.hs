@@ -78,7 +78,7 @@ atomicOpenRegion rid ase cont = do
                     rs <- case rs0 of
                         Nothing -> liftM var $ newAvar (show rid ++ "state")
                         Just rs -> return rs
-                    return (rs, rg, rt, ps)
+                    return (rs, rg, rt, var rid : ps)
         -- Create a logical state holding the region parameters
         -- It might be worth checking that the expressions have the
         -- appropriate types, but for now I won't.  Hopefully this
@@ -89,11 +89,14 @@ atomicOpenRegion rid ase cont = do
         -- For each region interpretation...
         branches_ $ flip map (rtInterpretation rt) $ \interp -> 
             do
+                liftIO $ putStrLn $ "*** Trying interp " ++ show interp  
                 savedLVars <- use logicalVars
                 logicalVars .= plstate
                 -- ...assume we are in that state
                 st0 <- produceValueExpr (siState interp)
                 assumeTrueE $ VAEq st0 rs
+                --use theAssumptions >>= (liftIO . print)
+                --use logicalVars >>= (liftIO . print)
                 forM_ (siConditions interp) producePure
                 -- and produce the resources
                 produceAssrt False (siInterp interp)
