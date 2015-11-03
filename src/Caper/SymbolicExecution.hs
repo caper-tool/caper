@@ -59,10 +59,10 @@ localiseLogicalVars mop = do
 -- The region should also have been stabilised (BEFORE ANY REGIONS HAVE BEEN OPENED!)
 atomicOpenRegion ::
         SymExMonad r s m =>
-        -- |Region identifer 
+        -- |Region identifier 
         VariableID ->
-        -- |Operation for performing symbolic execution 
-        m () ->
+        -- |Operation for performing symbolic execution (parametrised by continuation) 
+        (m () -> m ()) ->
         -- |Continuation
         m () ->
           m ()
@@ -103,22 +103,22 @@ atomicOpenRegion rid ase cont = do
                     openRegions %= (rid:)
                     logicalVars .= savedLVars
                     -- Execute the atomic thing
-                    ase
-                    savedLVars' <- use logicalVars
-                    logicalVars .= plstate -- The parameters don't change
-                    -- Non-deterministically choose the next interpretation
-                    interp' <- msum $ map return (rtInterpretation rt)
-                    check $ do
-                        -- Assert that we are in this interpretation
-                        st1 <- consumeValueExpr (siState interp')
-                        forM_ (siConditions interp') consumePure
-                        consumeAssrt (siInterp interp')
-                        -- and that the state is guarantee related
-                        guardCond <- generateGuaranteeCondition rt ps rg st0 st1
-                        assertTrue guardCond
-                    logicalVars .= savedLVars'
-                    openRegions .= oldRegions
-                    cont
+                    ase $ do
+                        savedLVars' <- use logicalVars
+                        logicalVars .= plstate -- The parameters don't change
+                        -- Non-deterministically choose the next interpretation
+                        interp' <- msum $ map return (rtInterpretation rt)
+                        check $ do
+                            -- Assert that we are in this interpretation
+                            st1 <- consumeValueExpr (siState interp')
+                            forM_ (siConditions interp') consumePure
+                            consumeAssrt (siInterp interp')
+                            -- and that the state is guarantee related
+                            guardCond <- generateGuaranteeCondition rt ps rg st0 st1
+                            assertTrue guardCond
+                        logicalVars .= savedLVars'
+                        openRegions .= oldRegions
+                        cont
 
 availableRegions :: (SymExMonad r s m) => m [VariableID]
 availableRegions = do
@@ -130,12 +130,17 @@ availableRegions = do
             return r2
             
 
-        
--- TODO: this should handle regions
-atomicSymEx :: (SymExMonad r s m) => m () -> m () -> m ()
-atomicSymEx ase cont = (ase >> cont) {- `mplus` do
+-- |Symbolically execute an atomic operation, trying opening
+-- regions.        
+atomicSymEx :: (SymExMonad r s m) =>
+-- |Atomic operation
+    m () ->
+-- |Continuation
+    m ()
+     -> m ()
+atomicSymEx ase cont = (ase >> cont) `mplus` do
             ars <- availableRegions
-            msum [ atomicOpenRegion r (atomicSymEx ase -} 
+            msum [ atomicOpenRegion r (atomicSymEx ase) cont | r <- ars] 
 
 
 data ExitMode = EMReturn (Maybe (ValueExpression VariableID)) | EMContinuation
@@ -174,7 +179,7 @@ symbolicExecute stmt cont = do
         se (LocalAssignStmt _ trgt src) = symExLocalAssign trgt src >> cont EMContinuation
         se (DerefStmt _ trgt src) = atomicSymEx (symExRead trgt src) (cont EMContinuation)
         se (AssignStmt _ trgt src) = atomicSymEx (symExWrite trgt src) (cont EMContinuation)
-        se smt@(CallStmt sp rvar "CAS" args) = contextualise (DescriptiveContext sp "In a CAS") $ do
+        se smt@(CallStmt sp rvar "CAS" args) = contextualise (DescriptiveContext sp "In a CAS") $
                 case args of
                     [target, oldv, newv] -> atomicSymEx (symExCAS rvar target oldv newv) (cont EMContinuation)
                     _ -> raise $ ArgumentCountMismatch 3 (length args)
