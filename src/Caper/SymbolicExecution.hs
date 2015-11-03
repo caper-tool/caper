@@ -136,12 +136,12 @@ availableRegions = do
 -- |Symbolically execute an atomic operation, trying opening
 -- regions.        
 atomicSymEx :: (SymExMonad r s m) =>
--- |Atomic operation
-    m () ->
+-- |Atomic operation (parametrised by continuation
+    (m () -> m ()) ->
 -- |Continuation
     m ()
      -> m ()
-atomicSymEx ase cont = (ase >> cont) `mplus` do
+atomicSymEx ase cont = (ase cont) `mplus` do
             ars <- availableRegions
             msum [ atomicOpenRegion r (atomicSymEx ase) cont | r <- ars] 
 
@@ -180,8 +180,8 @@ symbolicExecute stmt cont = do
         se (WhileStmt _ _ _ _) = undefined
         se (DoWhileStmt _ _ _ _) = undefined
         se (LocalAssignStmt _ trgt src) = symExLocalAssign trgt src >> cont EMContinuation
-        se (DerefStmt _ trgt src) = atomicSymEx (symExRead trgt src) (cont EMContinuation)
-        se (AssignStmt _ trgt src) = atomicSymEx (symExWrite trgt src) (cont EMContinuation)
+        se (DerefStmt _ trgt src) = atomicSymEx (symExRead trgt src >>) (cont EMContinuation)
+        se (AssignStmt _ trgt src) = atomicSymEx (symExWrite trgt src >>) (cont EMContinuation)
         se smt@(CallStmt sp rvar "CAS" args) = contextualise (DescriptiveContext sp "In a CAS") $
                 case args of
                     [target, oldv, newv] -> atomicSymEx (symExCAS rvar target oldv newv) (cont EMContinuation)
