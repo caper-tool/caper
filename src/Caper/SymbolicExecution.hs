@@ -111,6 +111,7 @@ atomicOpenRegion rid ase cont = do
                         logicalVars .= plstate -- The parameters don't change
                         -- Non-deterministically choose the next interpretation
                         interp' <- msum $ map return (rtInterpretation rt)
+			liftIO $ putStrLn $ "*** Closing with interp " ++ show interp'
                         check $ do
                             -- Assert that we are in this interpretation
                             st1 <- consumeValueExpr (siState interp')
@@ -161,6 +162,7 @@ symbolicExecute stmt cont = do
             consistent <- isConsistent
             unless (consistent == Just False) $ do
                 stabiliseRegions
+		liftIO $ putStrLn $ ">>> " ++ take 30 (show stmt)
                 se stmt
     where
         ses [] = cont EMContinuation
