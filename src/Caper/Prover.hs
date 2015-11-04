@@ -748,22 +748,27 @@ justCheck = do
         unless res mzero
 
 
-hypothetical :: ProverM s r m => RWST r () Assertions (LoggerT IO) a -> m a
+-- hypothetical :: ProverM s r m => RWST r () Assertions (LoggerT IO) a -> m a
+hypothetical :: ProverM s r m => (forall s' m'. (ProverM s' r m', AssertionLenses s') => m' a) -> m a
 -- ^Evaluate hypothetically, given the current assumptions.
 hypothetical mn = do
                 rr <- ask
                 assms <- use theAssumptions
-                (ans, _, _) <- liftLoggerT liftIO $ runRWST mn rr (emptyAssertions assms)
+                (ans, _, ()) <- liftLoggerT liftIO $ runRWST mn rr (emptyAssertions assms)
                 return ans
 
+{-
 hypotheticalCheck :: (ProverM s r m, MonadLogger m) => --(MonadIO m, MonadState s m, AssumptionLenses s, MonadReader r m, Provers r) => 
                 RWST r () Assertions (MaybeT (LoggerT IO)) () -> m Bool
+-}
+hypotheticalCheck :: (ProverM s r m, MonadLogger m) =>
+		(forall s' m'. (ProverM s' r m', AssertionLenses s', MonadPlus m') => m' ()) -> m Bool
 hypotheticalCheck mn = do
                         rr <- ask
                         assms <- use theAssumptions
                         ans <- liftLoggerT liftIO $ runMaybeT $ runRWST (mn >> justCheck) rr (emptyAssertions assms)
                         case ans of
-                                Just _ -> return True
+                                Just (_,_,()) -> return True
                                 Nothing -> return False
 
 admitAssertions :: (AssertionLenses a) => a -> Assumptions
