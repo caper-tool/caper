@@ -111,6 +111,7 @@ atomicOpenRegion rid ase cont = do
                         logicalVars .= plstate -- The parameters don't change
                         -- Non-deterministically choose the next interpretation
                         interp' <- msum $ map return (rtInterpretation rt)
+			liftIO $ putStrLn $ "*** Closing with interp " ++ show interp'
                         check $ do
                             -- Assert that we are in this interpretation
                             st1 <- consumeValueExpr (siState interp')
@@ -119,6 +120,7 @@ atomicOpenRegion rid ase cont = do
                             -- and that the state is guarantee related
                             guardCond <- generateGuaranteeCondition rt ps rg st0 st1
                             assertTrue guardCond
+			liftIO $ putStrLn $ "*** Closed with interp " ++ show interp'
                         logicalVars .= savedLVars'
                         openRegions .= oldRegions
                         cont
@@ -161,6 +163,7 @@ symbolicExecute stmt cont = do
             consistent <- isConsistent
             unless (consistent == Just False) $ do
                 stabiliseRegions
+		liftIO $ putStrLn $ ">>> " ++ take 30 (show stmt)
                 se stmt
     where
         ses [] = cont EMContinuation
@@ -249,6 +252,7 @@ checkProcedure fd@(FunctionDeclr sp n opre opost args s) =
         contextualise fd $ contextualise ("Checking procedure '" ++ n ++ "'") $ do
             verRes <- firstChoice $ flip evalStateT (emptySymbStateWithVars args) $ do
                 -- Produce the precondition
+                logEvent $ InfoEvent $ "Producing pretcondition: " ++ show pre
                 contextualise "Producing precondition" $ produceAssrt
                     stabiliseAfterProducePrecondition
                     pre
@@ -262,6 +266,7 @@ checkProcedure fd@(FunctionDeclr sp n opre opost args s) =
         post = fromMaybe (defaultPostcondition sp) opost
         postcheck' res = contextualise ("Consuming postcondition: " ++ show post) $ do
                         --printSymbState
+                        logEvent $ InfoEvent $ "Consuming postcondition: " ++ show post
                         retVar <- newAvar returnVariableName
                         case res of
                             Just rv -> assumeTrue (VAEq (var retVar) rv)

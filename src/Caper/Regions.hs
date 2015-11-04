@@ -299,7 +299,7 @@ checkGuaranteeTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitio
                         -- Now have to check if guard is available
                         guardAvail <- case rtGuardType rt of
                             ZeroGuardDeclr -> return (Just ())
-                            SomeGuardDeclr gdec -> runMaybeT $ hypothetical $ do
+                            SomeGuardDeclr gdec -> hypothetical $ runMaybeT $ do
                                 _ <- guardEntailment gdec gd (exprSub s trgd)
                                 return ()
                         return $ if isNothing guardAvail then [] else
