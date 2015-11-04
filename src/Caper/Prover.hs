@@ -393,14 +393,8 @@ assumptionContext vids asms ast = foldr FOFForAll (foldr FOFImpl ast asms) vids
 -- AssertionLenses
 
 class (AssumptionLenses a) => AssertionLenses a where
-    {-
-        theAssertions :: Simple Lens a Assertions
-        theAssertions = lens (\s -> Assertions (s ^. theAssumptions) (s ^. existentials) (s ^. assertions))
-                                (\s (Assertions ams es ats) -> (assertions .~ ats) $ (existentials .~ es) $ (theAssumptions .~ ams) s) -}
         assertions :: Simple Lens a [Condition VariableID]
-        --assertions = theAssertions . assrAssertions
         existentials :: Simple Lens a (Set VariableID)
-        --existentials = theAssertions . assrEVars
 
 universalBindings :: (AssertionLenses a) => Getter a BindingContext
 universalBindings = to $ \s -> TC.filter (flip Set.notMember $ s ^. existentials) (s ^. bindings)
@@ -698,35 +692,3 @@ hypothetical mn = do
         ans <- mn
         put st0
         return ans
-
-{-
--- hypothetical :: ProverM s r m => RWST r () Assertions (LoggerT IO) a -> m a
-hypothetical :: ProverM s r m => (forall s' m'. (ProverM s' r m', AssertionLenses s') => m' a) -> m a
--- ^Evaluate hypothetically, given the current assumptions.
-hypothetical mn = do
-                rr <- ask
-                assms <- use theAssumptions
-                (ans, _, ()) <- liftLoggerT liftIO $ runRWST mn rr (emptyAssertions assms)
-                return ans
-
-{-
-hypotheticalCheck :: (ProverM s r m, MonadLogger m) => --(MonadIO m, MonadState s m, AssumptionLenses s, MonadReader r m, Provers r) => 
-                RWST r () Assertions (MaybeT (LoggerT IO)) () -> m Bool
--}
-hypotheticalCheck :: (ProverM s r m, MonadLogger m) =>
-		(forall s' m'. (ProverM s' r m', AssertionLenses s', MonadPlus m') => m' ()) -> m Bool
-hypotheticalCheck mn = do
-                        rr <- ask
-                        assms <- use theAssumptions
-                        ans <- liftLoggerT liftIO $ runMaybeT $ runRWST (mn >> justCheck) rr (emptyAssertions assms)
-                        case ans of
-                                Just (_,_,()) -> return True
-                                Nothing -> return False
-
-admitAssertions :: (AssertionLenses a) => a -> Assumptions
-admitAssertions asts = Assumptions (asts^.bindings) (afilter (asts^.assertions) ++ asts^.assumptions)
-        where
-                afilter = filter (any (\x -> Set.member x (asts^.existentials)))
-
--}
-

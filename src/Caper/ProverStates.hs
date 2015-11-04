@@ -5,11 +5,21 @@ import Control.Lens
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.List (intercalate)
+import Control.Monad.Reader
+import Control.Monad.State
+import Control.Monad
 
 import qualified Caper.TypingContext as TC
 import Caper.ProverDatatypes
 import Caper.Prover
+import Caper.RegionTypes
 
+showAssumptions :: (AssumptionLenses a) => a -> String
+showAssumptions ass = "[" ++ show avars ++ "]\n" ++
+                intercalate "\n" (map show (ass ^. assumptions))
+            where
+                avars = TC.filter (`Set.member` (ass ^. assumptionVars)) (ass ^. bindings)
+                
 -- |The 'Assumptions' data type represents a list of assumptions.
 -- It also records all of the free variables in the context, possibly
 -- with their types.
@@ -29,8 +39,7 @@ instance AssumptionLenses Assumptions where
         assumptionVars = to (TC.domain . _assmBindings)
 
 instance Show Assumptions where
-        show ass = "[" ++ show (ass ^. bindings) ++ "]\n" ++
-                intercalate "\n" (map show (ass ^. assumptions)) 
+        show = showAssumptions
 
 {-
 instance MonadState Assumptions m => MonadDebugState m where
@@ -40,31 +49,6 @@ instance MonadState Assumptions m => MonadDebugState m where
 -- |The empty assumption context.
 emptyAssumptions :: Assumptions
 emptyAssumptions = Assumptions TC.empty []
-
-data Assertions = Assertions {
-        _assrAssumptions :: Assumptions,
-        _assrEVars :: Set VariableID,
-        _assrAssertions :: [Condition VariableID]
-}
-makeLenses ''Assertions
-
-instance AssumptionLenses Assertions where
-        --theAssumptions = assrAssumptions
-        bindings = assrAssumptions . bindings
-        assumptions = assrAssumptions . assumptions
-        assumptionVars = to (\s -> Set.difference (TC.domain (s ^. assrAssumptions . bindings)) (_assrEVars s))
-
-instance AssertionLenses Assertions where
-        --theAssertions = lens id (\x y -> y)
-        assertions = assrAssertions
-        existentials = assrEVars
-
-instance Show Assertions where
-        show = showAssertions
-
-emptyAssertions :: Assumptions -> Assertions
-emptyAssertions asmts = Assertions asmts Set.empty []
-
 
 data WithAssertions b = WithAssertions {
         _withAssrBase :: b,
@@ -89,3 +73,18 @@ emptyWithAssertions x = WithAssertions x Set.empty []
 -- | Admit all assertions as assumptions 
 admitAssertions :: (AssumptionLenses a) => WithAssertions a -> a
 admitAssertions asts = asts & _withAssrBase . (assumptions %~ (asts ^. assertions ++))  
+
+{-
+type Assertions = WithAssertions Assumptions
+emptyAssertions :: Assumptions -> Assertions
+emptyAssertions = emptyWithAssertions
+-}
+
+class DebugState s where
+    showState :: (RTCGetter r) => r -> s -> String
+
+debugState :: (MonadState s m, MonadReader r m, RTCGetter r, DebugState s, MonadIO m) => m ()
+debugState = do
+            r <- ask
+            s <- get
+            liftIO $ putStrLn $ showState r s

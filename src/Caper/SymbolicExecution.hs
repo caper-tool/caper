@@ -23,6 +23,7 @@ import Caper.RegionTypes
 import Caper.Regions
 import Caper.SymbolicState
 import Caper.Prover
+import Caper.ProverStates
 import Caper.Assertions.Produce
 import Caper.Assertions.Consume
 
@@ -32,12 +33,12 @@ import Caper.Assertions.Consume
 
 class (MonadRaise m, MonadIO m, MonadLogger m,
         MonadReader r m, Provers r, RTCGetter r, SpecificationContext r,
-        MonadPlus m, MonadState s m, SymbStateLenses s, AssumptionLenses s,
+        MonadPlus m, MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s,
         RegionLenses s, MonadCut m) => SymExMonad r s m
 
 instance (MonadRaise m, MonadIO m, MonadLogger m,
         MonadReader r m, Provers r, RTCGetter r, SpecificationContext r,
-        MonadPlus m, MonadState s m, SymbStateLenses s, AssumptionLenses s,
+        MonadPlus m, MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s,
         RegionLenses s, MonadCut m) => SymExMonad r s m
 
 
@@ -131,8 +132,7 @@ availableRegions = do
             regs <- use regions
             let r0 = AM.distinctKeys regs
             let r1 = [r | r <- r0, isJust $ AM.lookup r regs >>= regTypeInstance]
-            r2 <- filterM (\reg -> liftM and $ forM oregs (cannotAliasStrong reg)) r1
-            return r2
+            filterM (liftM and . forM oregs . cannotAliasStrong) r1
             
 
 -- |Symbolically execute an atomic operation, trying opening
@@ -163,7 +163,8 @@ symbolicExecute stmt cont = do
             consistent <- isConsistent
             unless (consistent == Just False) $ do
                 stabiliseRegions
-		liftIO $ putStrLn $ ">>> " ++ take 30 (show stmt)
+                debugState
+                liftIO $ putStrLn $ ">>> " ++ take 30 (show stmt)
                 se stmt
     where
         ses [] = cont EMContinuation
@@ -252,10 +253,11 @@ checkProcedure fd@(FunctionDeclr sp n opre opost args s) =
         contextualise fd $ contextualise ("Checking procedure '" ++ n ++ "'") $ do
             verRes <- firstChoice $ flip evalStateT (emptySymbStateWithVars args) $ do
                 -- Produce the precondition
-                logEvent $ InfoEvent $ "Producing pretcondition: " ++ show pre
+                logEvent $ InfoEvent $ "Producing precondition: " ++ show pre
                 contextualise "Producing precondition" $ produceAssrt
                     stabiliseAfterProducePrecondition
                     pre
+                debugState
                 symbolicExecute s postcheck
             case verRes of
                 Nothing -> return False 
@@ -265,13 +267,14 @@ checkProcedure fd@(FunctionDeclr sp n opre opost args s) =
         pre = fromMaybe (defaultPrecondition sp) opre
         post = fromMaybe (defaultPostcondition sp) opost
         postcheck' res = contextualise ("Consuming postcondition: " ++ show post) $ do
-                        --printSymbState
                         logEvent $ InfoEvent $ "Consuming postcondition: " ++ show post
                         retVar <- newAvar returnVariableName
                         case res of
                             Just rv -> assumeTrue (VAEq (var retVar) rv)
                             _ -> return ()
                         logicalVars %= Map.insert returnVariableName retVar
+                        when stabiliseBeforeConsumePostcondition stabiliseRegions
+                        debugState
                         check $ consumeAssrt post
         postcheck EMContinuation = postcheck' Nothing
         postcheck (EMReturn ret) = postcheck' ret 

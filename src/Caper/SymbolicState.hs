@@ -1,5 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveFunctor, FlexibleContexts, MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleInstances, UndecidableInstances #-} 
 module Caper.SymbolicState where
 
 import Prelude hiding (sequence,foldl,foldr,mapM_,mapM,elem,notElem,concat,concatMap)
@@ -112,6 +113,24 @@ showSymbState = do
 
 printSymbState :: (MonadState SymbState m, MonadReader r m, RTCGetter r, MonadIO m) => m ()
 printSymbState = showSymbState >>= liftIO . putStrLn
+
+instance DebugState SymbState where
+    showState r s = show s ++ "\nRegions:\n" ++ show iregs
+        where
+            iregs = fmap inform (s ^. regions)
+            inform reg = InformedRegion (reg, regTypeInstance reg >>=
+                                \(RegionInstance rtid _) -> return $ (r ^. resolveRType) rtid)
+
+instance DebugState (WithAssertions SymbState) where
+    showState r s@(WithAssertions {_withAssrBase = SymbState p vs lvs prds regs oregs}) =
+        "Program variables:\n" ++ showPVarBindings vs 
+        ++ "Heap:\n" ++ (concat . intersperse "\n" . map showPredicate . toPredicateList) prds ++ "\n"
+        ++ "\nRegions:\n" ++ show iregs
+        ++ showAssertions s
+        where
+            iregs = fmap inform (s ^. regions)
+            inform reg = InformedRegion (reg, regTypeInstance reg >>=
+                                \(RegionInstance rtid _) -> return $ (r ^. resolveRType) rtid)
 
 validatePredicate :: (MonadState s m, SymbStateLenses s) => Predicate -> m ()
 -- ^Check that a predicate has the correct number and type of parameters.
