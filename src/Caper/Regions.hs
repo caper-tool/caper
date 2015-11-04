@@ -22,6 +22,7 @@ import Caper.RegionTypes
 import Caper.Logger
 import Caper.ProverDatatypes
 import Caper.Prover -- TODO: move some stuff from Prover to ProverDatatypes?
+import Caper.ProverStates
 import Caper.Guards
 import Caper.Transitions
 
@@ -272,7 +273,7 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
                                 -- combine guards
                                 gd' <- mergeGuards gd (exprSub s trgd)
                                 assms <- use assumptions
-                                -- check the matches the guard type
+                                -- check the guard matches the guard type
                                 if checkGuardAtType gd' (topLevelToWeakGuardType $ rtGuardType rt) then
                                         -- and is consistent
                                         isConsistent
@@ -299,7 +300,8 @@ checkGuaranteeTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitio
                         -- Now have to check if guard is available
                         guardAvail <- case rtGuardType rt of
                             ZeroGuardDeclr -> return (Just ())
-                            SomeGuardDeclr gdec -> hypothetical $ runMaybeT $ do
+                            -- FIXME: THIS NEEDS SOME THOUGHT!
+                            SomeGuardDeclr gdec -> get >>= \ss -> runMaybeT $ flip evalStateT (emptyWithAssertions ss) $ do  
                                 _ <- guardEntailment gdec gd (exprSub s trgd)
                                 return ()
                         return $ if isNothing guardAvail then [] else

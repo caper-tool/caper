@@ -20,6 +20,7 @@ import Caper.Utils.NondetClasses
 import Caper.Logger
 import Caper.ProverDatatypes
 import Caper.Prover
+import Caper.ProverStates
 import qualified Caper.Utils.AliasingMap as AliasMap
 import Caper.Parser.AST.Code
 import Caper.Regions
@@ -31,17 +32,17 @@ import Caper.Predicates
 
 
 -- Symbolic States!
-data SymbState p = SymbState {
-        _proverState :: p,
+data SymbState = SymbState {
+        _proverState :: Assumptions,
         _ssProgVars :: PVarBindings,
         _ssLogicalVars :: LVarBindings,
         _ssPreds :: Predicates,
         _ssRegions :: AliasMap.AliasMap VariableID Region,
         _ssOpenRegions :: [VariableID]
-        } deriving (Functor)
+        }
 makeLenses ''SymbState
 
-emptySymbState :: SymbState Assumptions
+emptySymbState :: SymbState
 emptySymbState = SymbState emptyAssumptions Map.empty emptyLVars Map.empty AliasMap.empty []
 
 showPVarBindings :: PVarBindings -> String
@@ -49,7 +50,7 @@ showPVarBindings = Map.foldWithKey showBinding ""
         where
                 showBinding pv vr s = pv ++ " := " ++ show vr ++ "\n" ++ s
 
-instance (Show p) => Show (SymbState p) where
+instance Show SymbState where
         show (SymbState p vs lvs prds regs oregs) = "Pure facts:\n" ++ show p 
                 ++ "\nProgram variables:\n" ++ showPVarBindings vs 
                 ++ "Heap:\n" ++ 
@@ -57,24 +58,22 @@ instance (Show p) => Show (SymbState p) where
                         map showPredicate . toPredicateList) prds
 
 
-instance AssumptionLenses p => AssumptionLenses (SymbState p) where
-        theAssumptions = proverState . theAssumptions
+instance AssumptionLenses SymbState where
+        bindings = proverState . bindings
+        assumptions = proverState . assumptions
         assumptionVars = proverState . assumptionVars
-
-instance AssertionLenses p => AssertionLenses (SymbState p) where
-        theAssertions = proverState . theAssertions
 
 class AssumptionLenses s => SymbStateLenses s where
         progVars :: Simple Lens s PVarBindings
         logicalVars :: Simple Lens s LVarBindings
         preds :: Simple Lens s Predicates
 
-instance AssumptionLenses p => SymbStateLenses (SymbState p) where
+instance SymbStateLenses SymbState where
         progVars = ssProgVars
         logicalVars = ssLogicalVars
         preds = ssPreds
 
-instance RegionLenses (SymbState p) where
+instance RegionLenses SymbState where
         regions = ssRegions
         openRegions = ssOpenRegions
 
@@ -83,7 +82,7 @@ instance SymbStateLenses s => SymbStateLenses (WithAssertions s) where
         logicalVars = withAssrBase . logicalVars
         preds = withAssrBase . preds
 
-emptySymbStateWithVars :: [String] -> SymbState Assumptions
+emptySymbStateWithVars :: [String] -> SymbState
 emptySymbStateWithVars vs = flip execState emptySymbState $ do
                 bindVarsAs (map VIDNamed vs) VTValue
                 ssProgVars .= Map.fromList [(x, var (VIDNamed x)) | x <- vs]
@@ -99,7 +98,7 @@ instance Show InformedRegion where
                         ++ ")" ++ (if drty then "*" else "") ++ ": " ++ show gd ++ "\n"
         show (InformedRegion (Region _ _ s gd, _)) = "?(" ++ maybe "_" show s ++ "): " ++ show gd ++ "\n"
 
-showSymbState :: (MonadState (SymbState p) m, Show p, MonadReader r m, RTCGetter r) => m String
+showSymbState :: (MonadState SymbState m, MonadReader r m, RTCGetter r) => m String
 showSymbState = do
                 stte <- get
                 iregs <- mapM inform (stte ^. regions)
@@ -111,7 +110,7 @@ showSymbState = do
                                         return $ InformedRegion (reg, Just rt)
                         _ -> return $ InformedRegion (reg, Nothing)
 
-printSymbState :: (MonadState (SymbState p) m, Show p, MonadReader r m, RTCGetter r, MonadIO m) => m ()
+printSymbState :: (MonadState SymbState m, MonadReader r m, RTCGetter r, MonadIO m) => m ()
 printSymbState = showSymbState >>= liftIO . putStrLn
 
 validatePredicate :: (MonadState s m, SymbStateLenses s) => Predicate -> m ()
@@ -187,7 +186,7 @@ admitChecks :: (MonadState s m, AssumptionLenses s) => StateT (WithAssertions s)
 admitChecks o = do
                 initial <- get
                 (r, s') <- runStateT o (emptyWithAssertions initial)
-                put $ (s' & theAssumptions .~ admitAssertions s') ^. withAssrBase
+                put $ admitAssertions s'
                 return r
 
 check :: (AssumptionLenses s, MonadLogger m, Provers p, MonadReader p m,

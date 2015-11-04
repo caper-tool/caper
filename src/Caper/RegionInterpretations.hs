@@ -22,6 +22,7 @@ import Caper.Exceptions
 import Caper.Logger
 import Caper.Assertions.Produce
 import Caper.Prover
+import Caper.ProverStates
 import Caper.Assertions.Check
 import Caper.Assertions.Produce
 import Caper.Assertions.Consume
@@ -51,7 +52,7 @@ checkStateInterpretationSelfAmbiguity ::
                 -- ^The state interpretation to check for self-ambiguity
         -> m ()
 checkStateInterpretationSelfAmbiguity params si@(StateInterpretation _ cs se _) =
-                flip evalStateT (fmap emptyAssertions emptySymbState) $ do
+                flip evalStateT (emptyWithAssertions emptySymbState) $ do
                         -- Produce the parameters
                         mapM_ produceVariable
                                 [AST.Variable undefined x | x <- params]

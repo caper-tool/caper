@@ -94,7 +94,8 @@ executable Caper
                    Caper.SymbolicExecution,
                    Caper.Constants,
                    Caper.Utils.Failure,
-                   Caper.Utils.Alternating
+                   Caper.Utils.Alternating,
+                   Caper.ProverStates
 
 executable Interpreter
   build-depends:

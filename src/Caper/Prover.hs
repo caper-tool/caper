@@ -7,9 +7,10 @@
 {-# LANGUAGE BangPatterns #-}
 module Caper.Prover(
         -- * Assumptions
-        Assumptions,
+        --Assumptions,
+        BindingContext,
         AssumptionLenses(..),
-        emptyAssumptions,
+        --emptyAssumptions,
         ProverM,
         -- ** Variable type bindings
         boundVars,
@@ -34,12 +35,12 @@ module Caper.Prover(
         -- ** Consistency
         isConsistent,
         -- * Assertions
-        Assertions,
+        --Assertions,
         AssertionLenses(..),
-        emptyAssertions,
-        WithAssertions,
-        withAssrBase,
-        emptyWithAssertions,
+        --emptyAssertions,
+        --WithAssertions,
+        --withAssrBase,
+        --emptyWithAssertions,
         -- ** Display
         showAssertions,
         printAssertions,
@@ -56,8 +57,8 @@ module Caper.Prover(
         checkAssertions,
         justCheck,
         hypothetical,
-        hypotheticalCheck,
-        admitAssertions, -- Questionable
+        --hypotheticalCheck,
+        --admitAssertions, -- Questionable
         {- -- ** Variable type bindings
         universalBindings,
         existentialBindings -}
@@ -104,6 +105,14 @@ import Caper.Logger
 -- |A 'BindingContext' associates variables with their types (if determined).
 type BindingContext = TC.TContext VariableID VariableType
 
+{-
+class DebugState s where
+    showState :: s -> String
+
+debugState :: (MonadIO m, DebugState r s, MonadReader r, Monad) => m ()
+debugState = showState >>= liftIO . putStrLn
+-}
+
 {- TODO: tag assumptions with a 'corollary' flag to indicate
  - if it is a consequence of other assumptions.  Some types
  - of prover may work better without corollaries.  For instance,
@@ -111,44 +120,20 @@ type BindingContext = TC.TContext VariableID VariableType
  - with corollaries.
  -}
 
--- |The 'Assumptions' data type represents a list of assumptions.
--- It also records all of the free variables in the context, possibly
--- with their types.
-data Assumptions = Assumptions {
-        -- |The type bindings for all free variables.
-        _assmBindings :: BindingContext,
-        -- |The list of assumptions.  Should be consistent
-        -- with the types declared in the bindings.
-        _assmAssumptions :: [Condition VariableID]
-        }
-makeLenses ''Assumptions
 
 -- |'AssumptionLenses' is the typeclass for assumption state information.
 -- An assumption state must provide a type binding for variables and
 -- a list of conditions that are the assumptions.
 class AssumptionLenses a where
-        theAssumptions :: Simple Lens a Assumptions
+        {- theAssumptions :: Simple Lens a Assumptions
         theAssumptions = lens (\s -> Assumptions (s ^. bindings) (s ^. assumptions))
-                                (\s (Assumptions bs as) -> (assumptions .~ as) $ (bindings .~ bs) s)
+                                (\s (Assumptions bs as) -> (assumptions .~ as) $ (bindings .~ bs) s) -}
         bindings :: Simple Lens a BindingContext
-        bindings = theAssumptions . assmBindings
+        --bindings = theAssumptions . assmBindings
         assumptions :: Simple Lens a [Condition VariableID]
-        assumptions = theAssumptions . assmAssumptions
+        --assumptions = theAssumptions . assmAssumptions
         assumptionVars :: Getter a (Set VariableID)
 
-instance AssumptionLenses Assumptions where
-        theAssumptions = lens id (\x y -> y)
-        bindings = assmBindings
-        assumptions = assmAssumptions
-        assumptionVars = to (TC.domain . _assmBindings)
-
-instance Show Assumptions where
-        show ass = "[" ++ show (ass ^. bindings) ++ "]\n" ++
-                intercalate "\n" (map show (ass ^. assumptions)) 
-
--- |The empty assumption context.
-emptyAssumptions :: Assumptions
-emptyAssumptions = Assumptions TC.empty []
 
 -- |A convenience type class synonym.
 class (MonadIO m, MonadState s m, AssumptionLenses s, MonadReader r m, Provers r, MonadLogger m) => ProverM s r m
@@ -396,12 +381,6 @@ assumptionContext vids asms ast = foldr FOFForAll (foldr FOFImpl ast asms) vids
  -}
 
 
-data Assertions = Assertions {
-        _assrAssumptions :: Assumptions,
-        _assrEVars :: Set VariableID,
-        _assrAssertions :: [Condition VariableID]
-}
-makeLenses ''Assertions
 
 {-
   TODO: Track in assertions when we have already checked provability.  This
@@ -414,13 +393,14 @@ makeLenses ''Assertions
 -- AssertionLenses
 
 class (AssumptionLenses a) => AssertionLenses a where
+    {-
         theAssertions :: Simple Lens a Assertions
         theAssertions = lens (\s -> Assertions (s ^. theAssumptions) (s ^. existentials) (s ^. assertions))
-                                (\s (Assertions ams es ats) -> (assertions .~ ats) $ (existentials .~ es) $ (theAssumptions .~ ams) s)
+                                (\s (Assertions ams es ats) -> (assertions .~ ats) $ (existentials .~ es) $ (theAssumptions .~ ams) s) -}
         assertions :: Simple Lens a [Condition VariableID]
-        assertions = theAssertions . assrAssertions
+        --assertions = theAssertions . assrAssertions
         existentials :: Simple Lens a (Set VariableID)
-        existentials = theAssertions . assrEVars
+        --existentials = theAssertions . assrEVars
 
 universalBindings :: (AssertionLenses a) => Getter a BindingContext
 universalBindings = to $ \s -> TC.filter (flip Set.notMember $ s ^. existentials) (s ^. bindings)
@@ -429,33 +409,7 @@ existentialBindings :: (AssertionLenses a) => Getter a BindingContext
 existentialBindings = to $ \s -> TC.filter (flip Set.member $ s ^. existentials) (s ^. bindings)
 
 
-instance AssumptionLenses Assertions where
-        theAssumptions = assrAssumptions
-        bindings = assrAssumptions . bindings
-        assumptions = assrAssumptions . assumptions
-        assumptionVars = to (\s -> Set.difference (TC.domain (s ^. assrAssumptions . bindings)) (_assrEVars s))
 
-instance AssertionLenses Assertions where
-        theAssertions = lens id (\x y -> y)
-        assertions = assrAssertions
-        existentials = assrEVars
-
-data WithAssertions b = WithAssertions {
-        _withAssrBase :: b,
-        _withAssrEVars :: Set VariableID,
-        _withAssrAssertions :: [Condition VariableID]
-    }
-makeLenses ''WithAssertions
-
-instance AssumptionLenses b => AssumptionLenses (WithAssertions b) where
-    theAssumptions = withAssrBase . theAssumptions
-    bindings = withAssrBase . bindings
-    assumptions = withAssrBase . assumptions
-    assumptionVars = to (\s -> Set.difference (TC.domain (s ^. withAssrBase . bindings)) (_withAssrEVars s))
-
-instance AssumptionLenses b => AssertionLenses (WithAssertions b) where
-    assertions = withAssrAssertions 
-    existentials = withAssrEVars
 
 showAssertions :: (AssertionLenses a) => a -> String
 showAssertions asts = "Assumptions: !["
@@ -466,15 +420,6 @@ showAssertions asts = "Assumptions: !["
                 ++ show (asts ^. existentialBindings)
                 ++ "] \n"
                 ++ intercalate "\n" (map show (asts ^. assertions))
-
-instance Show Assertions where
-        show = showAssertions
-
-emptyAssertions :: Assumptions -> Assertions
-emptyAssertions asmts = Assertions asmts Set.empty []
-
-emptyWithAssertions :: (AssumptionLenses a) => a -> WithAssertions a
-emptyWithAssertions x = WithAssertions x Set.empty []
 
 printAssertions :: (MonadIO m, MonadState s m, AssertionLenses s) => m ()
 printAssertions = get >>= liftIO . putStrLn . showAssertions
@@ -747,7 +692,14 @@ justCheck = do
         res <- checkAssertions
         unless res mzero
 
+hypothetical :: ProverM s r m => (forall m'. (ProverM s r m') => m' a) -> m a
+hypothetical mn = do
+        st0 <- get
+        ans <- mn
+        put st0
+        return ans
 
+{-
 -- hypothetical :: ProverM s r m => RWST r () Assertions (LoggerT IO) a -> m a
 hypothetical :: ProverM s r m => (forall s' m'. (ProverM s' r m', AssertionLenses s') => m' a) -> m a
 -- ^Evaluate hypothetically, given the current assumptions.
@@ -776,5 +728,5 @@ admitAssertions asts = Assumptions (asts^.bindings) (afilter (asts^.assertions) 
         where
                 afilter = filter (any (\x -> Set.member x (asts^.existentials)))
 
-
+-}
 

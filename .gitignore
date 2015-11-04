@@ -8,3 +8,6 @@ config.ini
 docs/design.aux
 docs/design.log
 docs/design.pdf
+**/SourceGraph/**
+*~
+*.swp
