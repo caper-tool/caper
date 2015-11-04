@@ -93,7 +93,8 @@ executable Caper
                    Caper.Provers.Values.SBV,
                    Caper.SymbolicExecution,
                    Caper.Constants,
-                   Caper.Utils.Failure
+                   Caper.Utils.Failure,
+                   Caper.Utils.Alternating
 
 executable Interpreter
   build-depends:
