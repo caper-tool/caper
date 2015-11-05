@@ -113,11 +113,13 @@ atomicOpenRegion rid ase cont = do
                         -- Non-deterministically choose the next interpretation
                         interp' <- msum $ map return (rtInterpretation rt)
 			liftIO $ putStrLn $ "*** Closing with interp " ++ show interp'
+                        debugState
                         check $ do
                             -- Assert that we are in this interpretation
                             st1 <- consumeValueExpr (siState interp')
                             forM_ (siConditions interp') consumePure
                             consumeAssrt (siInterp interp')
+                            justCheck -- This isn't needed, but may result in failing faster
                             -- and that the state is guarantee related
                             guardCond <- generateGuaranteeCondition rt ps rg st0 st1
                             assertTrue guardCond

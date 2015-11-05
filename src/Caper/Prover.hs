@@ -125,13 +125,8 @@ debugState = showState >>= liftIO . putStrLn
 -- An assumption state must provide a type binding for variables and
 -- a list of conditions that are the assumptions.
 class AssumptionLenses a where
-        {- theAssumptions :: Simple Lens a Assumptions
-        theAssumptions = lens (\s -> Assumptions (s ^. bindings) (s ^. assumptions))
-                                (\s (Assumptions bs as) -> (assumptions .~ as) $ (bindings .~ bs) s) -}
         bindings :: Simple Lens a BindingContext
-        --bindings = theAssumptions . assmBindings
         assumptions :: Simple Lens a [Condition VariableID]
-        --assumptions = theAssumptions . assmAssumptions
         assumptionVars :: Getter a (Set VariableID)
 
 
@@ -655,7 +650,7 @@ permissionCheck f = do
 checkAssertions :: (MonadIO m, MonadState s m, AssertionLenses s,
         MonadLogger m, MonadReader p m, Provers p) => m Bool
 checkAssertions = do
-        printAssertions
+        -- printAssertions
         bdgs <- use bindings
         asms <- use assumptions
         asts <- use assertions
