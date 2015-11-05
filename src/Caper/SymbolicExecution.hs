@@ -53,6 +53,11 @@ localiseLogicalVars mop = do
             logicalVars .= savedLVars
             return a
         
+-- |Check if the state is consistent; if not then do not execute the continuation.
+whenConsistent :: SymExMonad r s m => m () -> m ()
+whenConsistent xx = do
+            c <- isConsistent
+            unless (c == Just False) xx
 
 -- | Symbolically execute some code with the specified region open.
 -- Afterwards, the region should be closed and the state updated.
@@ -101,8 +106,8 @@ atomicOpenRegion rid ase cont = do
                 forM_ (siConditions interp) producePure
                 -- and produce the resources
                 produceAssrt False (siInterp interp)
-                consistent <- isConsistent -- If it's inconsistent then we've nothing to prove here
-                unless (consistent == Just False) $ do
+                -- If it's inconsistent then we've nothing to prove here
+                whenConsistent $ do
                     oldRegions <- use openRegions
                     openRegions %= (rid:)
                     logicalVars .= savedLVars
@@ -112,7 +117,7 @@ atomicOpenRegion rid ase cont = do
                         logicalVars .= plstate -- The parameters don't change
                         -- Non-deterministically choose the next interpretation
                         interp' <- msum $ map return (rtInterpretation rt)
-			liftIO $ putStrLn $ "*** Closing with interp " ++ show interp'
+                        liftIO $ putStrLn $ "*** Closing with interp " ++ show interp'
                         debugState
                         check $ do
                             -- Assert that we are in this interpretation
@@ -123,7 +128,8 @@ atomicOpenRegion rid ase cont = do
                             -- and that the state is guarantee related
                             guardCond <- generateGuaranteeCondition rt ps rg st0 st1
                             assertTrue guardCond
-			liftIO $ putStrLn $ "*** Closed with interp " ++ show interp'
+                            regions . ix rid %= (\r -> r {regState = Just st1, regDirty = True})
+                        liftIO $ putStrLn $ "*** Closed with interp " ++ show interp'
                         logicalVars .= savedLVars'
                         openRegions .= oldRegions
                         cont
@@ -190,7 +196,7 @@ symbolicExecute stmt cont = do
         se (AssignStmt _ trgt src) = atomicSymEx (symExWrite trgt src >>) (cont EMContinuation)
         se smt@(CallStmt sp rvar "CAS" args) = contextualise (DescriptiveContext sp "In a CAS") $
                 case args of
-                    [target, oldv, newv] -> atomicSymEx (symExCAS rvar target oldv newv) (cont EMContinuation)
+                    [target, oldv, newv] -> atomicSymEx (symExCAS rvar target oldv newv . whenConsistent) (cont EMContinuation)
                     _ -> raise $ ArgumentCountMismatch 3 (length args)
         se smt@(CallStmt sp rvar "alloc" args) = contextualise (DescriptiveContext sp "In an alloc") $ do
                 case args of
@@ -219,8 +225,8 @@ symbolicExecute stmt cont = do
                                 -- TODO: Eventually it might be good to be lazier about stabilising regions
                                 when stabiliseBeforeConsumePrecondition $
                                     stabiliseRegions
-                                --use logicalVars >>= (liftIO . print)
-                                --use progVars >>= (liftIO . print)
+                                liftIO $ putStrLn $ "Consuming precondition: " ++ show sprec
+                                debugState
                                 contextualise "Consuming precondition" $
                                         check $ consumeAssrt sprec
                                 -- Need to stabilise the frame!!!!!!!!
@@ -235,6 +241,8 @@ symbolicExecute stmt cont = do
                                 logicalVars . at returnVariableName ?= retVar
                                 contextualise "Producing postcondition" $
                                         produceAssrt stabiliseAfterProducePostcondition spost
+                                liftIO $ putStrLn $ "Produced postcondition: " ++ show spost
+                                debugState
                                 -- 'pop' the logical variables
                                 logicalVars .= savedLVars
                                 -- continue
@@ -268,7 +276,7 @@ checkProcedure fd@(FunctionDeclr sp n opre opost args s) =
     where
         pre = fromMaybe (defaultPrecondition sp) opre
         post = fromMaybe (defaultPostcondition sp) opost
-        postcheck' res = contextualise ("Consuming postcondition: " ++ show post) $ do
+        postcheck' res = contextualise ("Consuming postcondition: " ++ show post) $ whenConsistent $ do
                         logEvent $ InfoEvent $ "Consuming postcondition: " ++ show post
                         retVar <- newAvar returnVariableName
                         case res of
@@ -278,6 +286,7 @@ checkProcedure fd@(FunctionDeclr sp n opre opost args s) =
                         when stabiliseBeforeConsumePostcondition stabiliseRegions
                         debugState
                         check $ consumeAssrt post
+                        logEvent $ InfoEvent $ "Postcondition consumed."
         postcheck EMContinuation = postcheck' Nothing
         postcheck (EMReturn ret) = postcheck' ret 
             

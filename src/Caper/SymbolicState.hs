@@ -376,6 +376,7 @@ symExCAS rtn target old new cont = do
                         return curv
                 branch_
                     (do -- success branch
+                        liftIO $ putStrLn "* CAS succeeds"
                         assumeTrue $ VAEq (var curv) oldv
                         addPredicate (PCell, [toExpr loc, toExpr newv])
                         case rtn of
@@ -384,6 +385,7 @@ symExCAS rtn target old new cont = do
                         cont
                     )
                     (do -- failure branch
+                        liftIO $ putStrLn "* CAS fails"
                         assumeFalse $ VAEq (var curv) oldv
                         addPredicate (PCell, [toExpr loc, var curv])
                         case rtn of 
