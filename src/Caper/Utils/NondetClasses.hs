@@ -28,7 +28,28 @@ class MonadPlus m => MonadCut m where
 instance (MonadPlus m, MonadCut m) => MonadCut (StateT s m) where
         cut = hoist cut
 
+class Monad m => MonadDemonic m where
+        (<#>) :: m a -> m a -> m a
 
+-- |Demonic choice on all items of a list.
+-- Only really makes sense if the list is non-empty.
+dAll :: MonadDemonic m => [m a] -> m ()
+dAll [] = return ()
+dAll [a] = a >> return ()
+dAll (a:aa) = (a >> return ()) <#> dAll aa
+
+instance (MonadDemonic m) => MonadDemonic (StateT s m) where
+        (StateT a) <#> (StateT b) = StateT (\s -> a s <#> b s)  
+
+-- |Lift a 'Maybe' into an arbitrary non-deterministic monad.
+liftMaybe :: (MonadPlus m) => Maybe a -> m a
+liftMaybe (Just x) = return x
+liftMaybe Nothing = mzero
+
+chooseFrom :: (MonadPlus m) => [a] -> m a
+chooseFrom = msum . map return
+
+{-
 {- |Record the current state; execute the first computation; revert to the saved state;
     execute the second computation.  
 -} 
@@ -58,4 +79,4 @@ branches_ :: (MonadState s m, MonadCut m) => [m a] -> m ()
 branches_ [] = return ()
 branches_ [a] = a >> return ()
 branches_ (a:aa) = branch_ a (branches_ aa)
-        
+    -}    

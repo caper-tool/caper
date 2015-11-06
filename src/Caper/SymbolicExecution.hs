@@ -8,7 +8,7 @@ import Data.Maybe
 import qualified Data.Map as Map
 import Control.Lens hiding (pre)
 
-import Caper.Utils.Choice
+import Caper.Utils.Alternating
 import Caper.Utils.NondetClasses
 import qualified Caper.Utils.AliasingMap as AM
 
@@ -34,12 +34,12 @@ import Caper.Assertions.Consume
 class (MonadRaise m, MonadIO m, MonadLogger m,
         MonadReader r m, Provers r, RTCGetter r, SpecificationContext r,
         MonadPlus m, MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s,
-        RegionLenses s, MonadCut m) => SymExMonad r s m
+        RegionLenses s, MonadDemonic m) => SymExMonad r s m
 
 instance (MonadRaise m, MonadIO m, MonadLogger m,
         MonadReader r m, Provers r, RTCGetter r, SpecificationContext r,
         MonadPlus m, MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s,
-        RegionLenses s, MonadCut m) => SymExMonad r s m
+        RegionLenses s, MonadDemonic m) => SymExMonad r s m
 
 
 localiseLogicalVars :: (MonadState s m, SymbStateLenses s) =>
@@ -93,7 +93,7 @@ atomicOpenRegion rid ase cont = do
                          ev <- letAvar parnam pe
                          return (Map.insert parnam ev m)) emptyLVars (zip ps (rtParameters rt)) 
         -- For each region interpretation...
-        branches_ $ flip map (rtInterpretation rt) $ \interp -> 
+        dAll $ flip map (rtInterpretation rt) $ \interp -> 
             do
                 liftIO $ putStrLn $ "*** Trying interp " ++ show interp  
                 savedLVars <- use logicalVars
@@ -182,15 +182,14 @@ symbolicExecute stmt cont = do
         se (SeqStmt _ ss) = ses ss
         se (IfElseStmt sp cond sthen selse) = do
                 bc <- bexprToValueCondition cond
-                branch_   
-                    (do -- then branch
+                (do -- then branch
                         assumeTrueE bc
-                        se sthen)
+                        se sthen) <#>
                     (do -- else branch
                         assumeFalseE bc
                         se selse)
-        se (WhileStmt _ _ _ _) = undefined
-        se (DoWhileStmt _ _ _ _) = undefined
+        se (WhileStmt sp minv cond body) = symExLoop sp minv cond body
+        se (DoWhileStmt sp minv body cond) = symbolicExecute body (updateContinuation cont (symExLoop sp minv cond body)) 
         se (LocalAssignStmt _ trgt src) = symExLocalAssign trgt src >> cont EMContinuation
         se (DerefStmt _ trgt src) = atomicSymEx (symExRead trgt src >>) (cont EMContinuation)
         se (AssignStmt _ trgt src) = atomicSymEx (symExWrite trgt src >>) (cont EMContinuation)
@@ -254,6 +253,7 @@ symbolicExecute stmt cont = do
         se (SkipStmt _) = cont EMContinuation
         se (ForkStmt _ pname args) = undefined
         se (AssertStmt _ assrt) = undefined
+        symExLoop sp minv cond body = let inv = fromMaybe (AssrtPure sp $ ConstBAssrt sp True)
 
 checkProcedure ::
     (MonadRaise m, MonadIO m, MonadLogger m,
@@ -261,7 +261,7 @@ checkProcedure ::
         FunctionDeclr -> m Bool
 checkProcedure fd@(FunctionDeclr sp n opre opost args s) =
         contextualise fd $ contextualise ("Checking procedure '" ++ n ++ "'") $ do
-            verRes <- firstChoice $ flip evalStateT (emptySymbStateWithVars args) $ do
+            verRes <- runAlternatingT $ flip evalStateT (emptySymbStateWithVars args) $ do
                 -- Produce the precondition
                 logEvent $ InfoEvent $ "Producing precondition: " ++ show pre
                 contextualise "Producing precondition" $ produceAssrt

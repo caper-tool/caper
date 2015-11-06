@@ -89,7 +89,6 @@ executable Caper
                    Caper.Procedures,
                    Caper.Provers.Permissions.E,
                    Caper.Provers.Permissions.Internal,
-                   Caper.Provers.Permissions.SMT,
                    Caper.Provers.Values.SBV,
                    Caper.SymbolicExecution,
                    Caper.Constants,

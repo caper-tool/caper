@@ -15,14 +15,6 @@ import Debug.Trace
 import Caper.Utils.NondetClasses
 import Caper.Utils.MonadHoist
 
--- |Lift a 'Maybe' into an arbitrary non-deterministic monad.
-liftMaybe :: (MonadPlus m) => Maybe a -> m a
-liftMaybe (Just x) = return x
-liftMaybe Nothing = mzero
-
-chooseFrom :: (MonadPlus m) => [a] -> m a
-chooseFrom = msum . map return
-
 -- |'ChoiceM' datatype represents a non-deterministic choice of
 -- values of type a, having (lazy) side-effects in monad m.
 data ChoiceM m a =

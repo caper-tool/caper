@@ -12,7 +12,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Maybe
 
-import Caper.Utils.Choice
+import Caper.Utils.NondetClasses
 import Caper.Utils.AliasingMap (AliasMap)
 import qualified Caper.Utils.AliasingMap as AM
 

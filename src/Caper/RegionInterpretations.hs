@@ -10,7 +10,7 @@ import Control.Lens
 import Data.Foldable
 import Data.Maybe
 
-import Caper.Utils.Choice
+import Caper.Utils.Alternating
 
 import qualified Caper.Parser.AST.Annotation as AST
 import Caper.Parser.AST.Annotation (StateInterpretation(..))
@@ -131,7 +131,7 @@ checkStateInterpretationStability ::
         -> m ()
 checkStateInterpretationStability params si = 
     contextualise si $ unless (isTriviallyStable (siInterp si)) $ do
-        r <- firstChoice $ flip evalStateT emptySymbState $ do
+        r <- runAlternatingT $ flip evalStateT emptySymbState $ do
                 -- Produce the abstract state
                 state0 <- produceValueExpr (siState si)
                 -- Assume the conditions
