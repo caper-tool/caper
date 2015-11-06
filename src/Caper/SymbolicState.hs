@@ -364,8 +364,8 @@ symExRead target eloc = do
 symExCAS :: (SymbStateLenses s, MonadRaise m, MonadLogger m, Provers p,
                 MonadReader p m, MonadIO m, MonadState s m, MonadPlus m,
                 MonadDemonic m) =>
-                Maybe String -> AExpr -> AExpr -> AExpr -> m () -> m ()
-symExCAS rtn target old new cont = do
+                Maybe String -> AExpr -> AExpr -> AExpr -> m ()
+symExCAS rtn target old new = do
                 loc <- aexprToVExpr target
                 oldv <- aexprToVExpr old
                 newv <- aexprToVExpr new
@@ -380,7 +380,6 @@ symExCAS rtn target old new cont = do
                         case rtn of
                             Nothing -> return ()
                             Just rtn' -> progVars %= Map.insert rtn' (VEConst 1)
-                        cont
                     ) <#>
                     (do -- failure branch
                         liftIO $ putStrLn "* CAS fails"
@@ -389,7 +388,6 @@ symExCAS rtn target old new cont = do
                         case rtn of 
                             Nothing -> return ()
                             Just rtn' -> progVars %= Map.insert rtn' (VEConst 0)
-                        cont
                     )
 
 
