@@ -271,7 +271,29 @@ symbolicExecute stmt cont = do
                 -- use True as a default invariant
                 let inv = fromMaybe (AssrtPure sp $ ConstBAssrt sp True)
                 let wrlvs = writtenLocals body
-                undefined
+                -- consume invariant (using program variables as logical variables)
+                -- stabilise
+                -- havoc the local variables in wrlvs
+                (do
+                        -- produce the invariant (program variables)
+                        -- (conditionally) stabilise
+                        -- assume negative loop test
+                        -- continue
+                        cont EMContinuation) <#>
+                    (do
+                        -- store the heap and regions for future use
+                        -- abandon the heap and regions
+                        -- produce the invariant (program variables)
+                        -- (conditionally) stabilise
+                        -- assume positive loop test
+                        let
+                            cont' (EMReturn r) = do
+                                    -- restore frame
+                                    -- pass to return continuation
+                                    cont (EMReturn r)
+                            cont' (EMContinuation) = undefined -- consume the invariant
+                        symbolicExecute body cont')
+
 
 checkProcedure ::
     (MonadRaise m, MonadIO m, MonadLogger m,
