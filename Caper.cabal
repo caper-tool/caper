@@ -118,3 +118,14 @@ executable Interpreter
                    Caper.Parser.AST.Code,
                    Caper.Parser.AST.SourcePos,
                    Caper.Parser.Parser
+
+executable RunTests
+  build-depends:
+                   base >= 4,
+                   template-haskell >=2.8,
+                   directory >= 1.2,
+                   text >= 1.1,
+                   filepath >= 1.3,
+                   shelly >= 1.6
+  hs-source-dirs:  Tests
+  main-is:         RunTests.hs
