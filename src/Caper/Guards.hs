@@ -27,7 +27,7 @@ import Caper.Parser.AST.Annotation (GuardDeclr(..), TopLevelGuardDeclr(..))
 import Caper.Logger
 import Caper.ProverDatatypes
 import Caper.Prover
-import Caper.Utils.Choice
+import Caper.Utils.NondetClasses
 import Caper.Utils.Mix
 --import Caper.Exceptions
 -- import Caper.Assertions (generatePermissionExpr, generateValueExpr)
