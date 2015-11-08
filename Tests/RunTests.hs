@@ -25,9 +25,13 @@ testFile name = do
     expectedResult <- return $ concat $ (drop 11 $ contentsLines !! 1):["ED"]
     out            <- run absCaperPath [toTextIgnore absName]
     exitCode       <- lastExitCode
-    echo $ concat $ [testName, ": ", if exitCode == 0 && expectedResult == (last $ lines out)
-               then "\ESC[32m\STXPASSED\ESC[m\STX"
-               else "\ESC[31m\STXFAILED\ESC[m\STX"]
+    echo $ concat $ ["[", pack $ takeFileName (unpack $ toTextIgnore name), "] ",
+                     testName, ": ",
+                     if exitCode == 0
+                         then if expectedResult == (last $ lines out)
+                                  then "\ESC[32m\STXPASSED\ESC[m\STX"
+                                  else "\ESC[31m\STXFAILED\ESC[m\STX"
+                         else "\ESC[33m\STXERROR\ESC[m\STX"]
 
 main = shelly $ silently $ errExit False $ do
     dir   <- liftIO $ getExecutablePath
