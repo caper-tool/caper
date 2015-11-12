@@ -2,12 +2,13 @@
 module Caper.SymbolicExecution where
 
 import Control.Monad.Trans
-import Control.Monad.Reader
-import Control.Monad.State
+import Control.Monad.Reader hiding (forM_)
+import Control.Monad.State hiding (forM_)
 import Data.Maybe
 import qualified Data.Map as Map
 import Control.Lens hiding (pre)
 import qualified Data.Set as Set
+import Data.Foldable (forM_)
 
 import Caper.Utils.Alternating
 import Caper.Utils.NondetClasses
@@ -175,6 +176,32 @@ updateContinuation :: (Monad m) => (ExitMode -> m a) -> m a -> (ExitMode -> m a)
 updateContinuation cont newc EMContinuation = newc
 updateContinuation cont newc r = cont r
 
+variableForVExpr :: (MonadState s m, AssumptionLenses s) => String -> ValueExpression VariableID -> m (VariableID)
+-- ^Convert a value expression to a variable.  This takes a string to use as the basis
+-- of the variable name.  If the expression is already a variable, it won't introduce
+-- an additional variable.  Otherwise, it creates a new assumption variable and assumes
+-- that it is equal to the supplied 'ValueExpression'.  Note that all variables in the
+-- expression must be assumption variables.
+variableForVExpr _ (VEVar v) = return v
+variableForVExpr vn ve = do
+                vr <- newAvar vn
+                assumeTrue $ VAEq (var vr) ve
+                return vr
+                
+
+programVarsToLogicalVars :: SymExMonad r s m => m LVarBindings
+-- ^Modify the logical variables to include the current values of program variables.
+-- Returns the old bindings (so these can be restored following produce/consume).
+programVarsToLogicalVars = do
+            oldLVars <- use logicalVars
+            pvars <- use progVars
+            iforM_ pvars $ \pv pvval -> case oldLVars ^. at pv of
+                    Nothing -> variableForVExpr pv pvval >>= (logicalVars . at pv ?=) 
+                    Just lv -> if var lv == pvval then return () else do
+                            logEvent $ WarnAmbiguousVariable programVariableSupersedesLogicalVariable pv
+                            when programVariableSupersedesLogicalVariable
+                                (variableForVExpr pv pvval >>= (logicalVars . at pv ?=))
+            return oldLVars                    
 
 symbolicExecute :: forall r s m.
     SymExMonad r s m =>
@@ -228,15 +255,11 @@ symbolicExecute stmt cont = do
                                 logicalVars .= emptyLVars
                                 -- Initialise logical variables for the arguments
                                 forM_ (zip params args) $ \(param, arg) -> do
-                                        paramVar <- newAvar param
-                                        argVExpr <- aexprToVExpr arg
-                                        -- XXX: Possibly shift this to a more delicate variableForVExpr (or such)
-                                        --liftIO $ putStrLn $ (show paramVar) ++ " ==== " ++ show argVExpr 
-                                        assumeTrue $ VAEq (var paramVar) argVExpr
+                                        paramVar <- aexprToVExpr arg >>= variableForVExpr param
                                         logicalVars . at param ?= paramVar
                                 -- Consume the precondition
                                 -- TODO: Eventually it might be good to be lazier about stabilising regions
-                                when stabiliseBeforeConsumePrecondition $
+                                when stabiliseBeforeConsumePrecondition
                                     stabiliseRegions
                                 liftIO $ putStrLn $ "Consuming precondition: " ++ show sprec
                                 debugState
@@ -269,29 +292,56 @@ symbolicExecute stmt cont = do
         se (AssertStmt _ assrt) = undefined
         symExLoop sp minv cond body = do
                 -- use True as a default invariant
-                let inv = fromMaybe (AssrtPure sp $ ConstBAssrt sp True)
+                let inv = fromMaybe (AssrtPure sp $ ConstBAssrt sp True) minv
                 let wrlvs = writtenLocals body
+                let produceInv = do
+                        savedLVars <- programVarsToLogicalVars
+                        contextualise "Producing invariant" $
+                            produceAssrt stabiliseAfterProduceInvariant inv
+                        liftIO $ putStrLn $ "Produced invariant: " ++ show inv
+                        debugState
+                        logicalVars .= savedLVars
+                let consumeInv = do
+                        savedLVars <- programVarsToLogicalVars
+                        when stabiliseBeforeConsumeInvariant stabiliseRegions
+                        liftIO $ putStrLn $ "Consuming invariant: " ++ show inv
+                        debugState
+                        contextualise "Consuming invariant" $
+                            check $ consumeAssrt inv
+                        logicalVars .= savedLVars
                 -- consume invariant (using program variables as logical variables)
+                consumeInv
                 -- stabilise
+                stabiliseRegions
                 -- havoc the local variables in wrlvs
+                forM_ wrlvs $ \lv -> do
+                    lvv <- newAvar lv
+                    progVars . at lv ?= var lvv
                 (do
                         -- produce the invariant (program variables)
-                        -- (conditionally) stabilise
+                        produceInv
                         -- assume negative loop test
+                        bc <- bexprToValueCondition cond
+                        assumeFalseE bc
                         -- continue
                         cont EMContinuation) <#>
                     (do
-                        -- store the heap and regions for future use
-                        -- abandon the heap and regions
+                        -- store the heap and regions for future use, abandoning them
+                        restoreFrame <- frame
                         -- produce the invariant (program variables)
-                        -- (conditionally) stabilise
+                        produceInv
                         -- assume positive loop test
+                        bc <- bexprToValueCondition cond
+                        assumeTrueE bc
                         let
                             cont' (EMReturn r) = do
                                     -- restore frame
+                                    restoreFrame
                                     -- pass to return continuation
                                     cont (EMReturn r)
-                            cont' (EMContinuation) = undefined -- consume the invariant
+                            cont' (EMContinuation) =
+                                    -- consume the invariant
+                                    consumeInv
                         symbolicExecute body cont')
 
 

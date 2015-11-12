@@ -10,7 +10,8 @@ module Caper.Constants(
     stabiliseAfterProducePrecondition,
     returnVariableName,
     defaultPreconditionBool,
-    defaultPostconditionBool
+    defaultPostconditionBool,
+    programVariableSupersedesLogicalVariable
 )
  where
 
@@ -69,3 +70,8 @@ defaultPreconditionBool = False
 -- (when not otherwise specified) is True or False.
 defaultPostconditionBool :: Bool
 defaultPostconditionBool = False
+
+-- |This determines if a logical variable is superseded by a program
+-- variable of the same name when consuming an invariant or assertion
+programVariableSupersedesLogicalVariable :: Bool
+programVariableSupersedesLogicalVariable = True

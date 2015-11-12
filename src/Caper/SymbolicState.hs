@@ -27,6 +27,7 @@ import Caper.Regions
 import Caper.RegionTypes
 import Caper.Exceptions
 import Caper.Predicates
+import Caper.Guards
 
 -- default (ValueExpression VariableID, Integer, Double)
 
@@ -163,6 +164,9 @@ generatePredicateAssumptions p = do
 insertPredicate :: Predicate -> Predicates -> Predicates
 insertPredicate (n, es) = Map.insertWith (flip MultiSet.union) n (MultiSet.singleton es)
 
+mergePredicates :: Predicates -> Predicates -> Predicates
+mergePredicates = Map.unionWith MultiSet.union
+
 addPredicate :: (MonadState s m, SymbStateLenses s) => Predicate -> m ()
 addPredicate p = preds %= insertPredicate p
                 
@@ -261,7 +265,24 @@ consumePredicate p = do
                 validatePredicate p
                 consumePred p
 
-
+-- |Remove all resources (predicate and region), returning an operation
+-- that will restore them. 
+frame :: (MonadState s m, SymbStateLenses s, AssumptionLenses s, RegionLenses s,
+        MonadReader r m, RTCGetter r, Provers r,
+        MonadLogger m, MonadIO m) =>
+        m (m ())
+frame = do
+        stabiliseRegions
+        prds <- use preds
+        preds .= Map.empty
+        regs <- use regions
+        regions .= fmap (\r -> r {regState = Nothing, regGuards = emptyGuard}) regs
+        return $ do
+            preds %= mergePredicates prds
+            forM_ (AliasMap.toRootList regs) $ \(rid, rg) -> do
+                (Just rg') <- liftM (AliasMap.lookup rid) $ use regions
+                rg'' <- mergeRegions rg rg'
+                regions . ix rid .= rg'' 
 
 aexprToVExpr :: (MonadState s m, SymbStateLenses s, MonadLogger m, MonadRaise m) => AExpr -> m (ValueExpression VariableID)
 -- | Generate an expression that represents the

@@ -28,6 +28,7 @@ data LogEvent
         | WarnMissingPrecondition String String
         | WarnMissingPostcondition String String
         | WarnUninitialisedVariable String
+        | WarnAmbiguousVariable Bool String
         | InfoEvent String
 instance Show LogEvent where
         show (WarnAutoBind vars) = "WARNING: the variables " ++ show (Data.Set.toList vars) ++
@@ -47,6 +48,8 @@ instance Show LogEvent where
         show (WarnMissingPostcondition proc def) = "WARNING: the postcondition of '" ++
                 proc ++ "' is unspecified. Defaulting to '" ++ def ++ "'."
         show (WarnUninitialisedVariable v) = "WARNING: the variable '" ++ v ++ "' is used before it is initialised."
+        show (WarnAmbiguousVariable b v) = "WARNING: the variable '" ++ v ++ "' is ambiguous and could refer to a program " ++
+                "variable or logical variable. It is being treated as a " ++ (if b then "program" else "logical") ++ " variable."
         show (InfoEvent s) = "INFO: " ++ s
 
 
