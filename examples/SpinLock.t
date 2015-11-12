@@ -12,6 +12,7 @@ region SLock(r,x) {
   }
 }
 
+/*
 function makeLock()
   requires true;
   ensures SLock(r,ret,0) &*& r@(LOCK[1p]); {
@@ -19,11 +20,14 @@ function makeLock()
     [v] := 0;
     return v;
 }
+*/
 
 function lock(x)
   requires SLock(r,x,_) &*& r@(LOCK[p]);
   ensures SLock(r,x,1) &*& r@(LOCK[p] * UNLOCK); {
-    do {
+    do
+        invariant b = 0 ? SLock(r,x,_) &*& r@(LOCK[p]) : SLock(r,x,1) &*& r@(LOCK[p] * UNLOCK)
+    {
         b := CAS(x, 0, 1);
     } while (b = 0);
 }

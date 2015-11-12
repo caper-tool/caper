@@ -11,14 +11,14 @@ region SLock(r,x) {
     UNLOCK : 1 ~> 0;
   }
 }
-
+/*
 function makeLock()
   requires true;
   ensures SLock(r,ret,0) &*& r@(LOCK[1p]); {
     v := alloc(1);
     [v] := 0;
     return v;
-}
+}*/
 
 function lock(x)
   requires SLock(r,x,_) &*& r@(LOCK[p]);

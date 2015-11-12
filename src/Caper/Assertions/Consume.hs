@@ -21,6 +21,7 @@ import Caper.RegionTypes
 import qualified Caper.Guards as G
 import Caper.Assertions.Generate
 import Caper.Assertions.Check
+import Caper.Assertions.Produce
 
 {-
         At some point, this whole module should probably be rewritten.
@@ -179,5 +180,5 @@ consumeAssrt (AssrtPure sp a) = consumePure a
 consumeAssrt (AssrtSpatial sp a) = consumeSpatial a
 consumeAssrt (AssrtConj sp a1 a2) = consumeAssrt a1 >> consumeAssrt a2
 consumeAssrt (AssrtITE sp c a1 a2) =
-  (consumePure c >> consumeAssrt a1) <#>
-          (consumePure (NotBAssrt sp c) >> consumeAssrt a2)
+  (producePure c >> consumeAssrt a1) <#>
+          (producePure (NotBAssrt sp c) >> consumeAssrt a2)
