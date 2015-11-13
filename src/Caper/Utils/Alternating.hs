@@ -29,6 +29,7 @@ data AlternatingT m a where
     DemonicChoice :: AlternatingT m a -> AlternatingT m a -> AlternatingT m a
     OrElse :: AlternatingT m b -> AlternatingT m b -> (b -> AlternatingT m a) -> AlternatingT m a
     Cut :: AlternatingT m a -> AlternatingT m a
+    Success :: AlternatingT m a
 
 instance Functor m => Functor (AlternatingT m) where
     fmap _ NoChoice = NoChoice
@@ -38,6 +39,7 @@ instance Functor m => Functor (AlternatingT m) where
     fmap f (DemonicChoice x y) = DemonicChoice (fmap f x) (fmap f y)
     fmap f (OrElse x y z) = OrElse x y (fmap f . z)
     fmap f (Cut x) = Cut (fmap f x)
+    fmap _ Success = Success
     
 instance Monad m => Monad (AlternatingT m) where
     return = Result
@@ -49,6 +51,7 @@ instance Monad m => Monad (AlternatingT m) where
             (DemonicChoice x y) -> DemonicChoice (x >>= b) (y >>= b)
             (OrElse x y z) -> OrElse x y (z >=> b)
             (Cut x) -> Cut (x >>= b)
+            Success -> Success
     fail s = trace s NoChoice
     
 instance (Applicative m, Monad m) => Applicative (AlternatingT m) where
@@ -80,6 +83,7 @@ instance MonadHoist (AlternatingT) where
     hoist f (DemonicChoice x y) = DemonicChoice (hoist f x) (hoist f y)
     hoist f (OrElse x y z) = OrElse (hoist f x) (hoist f y) (hoist f . z)
     hoist f (Cut x) = Cut (hoist f x)
+    hoist f Success = Success
 
 instance MonadIO m => MonadIO (AlternatingT m) where
     liftIO = lift . liftIO
@@ -91,6 +95,7 @@ instance MonadReader r m => MonadReader r (AlternatingT m) where
     
 instance Monad m => MonadDemonic (AlternatingT m) where
     (<#>) = DemonicChoice
+    succeed = Success
     
 runAlternatingT' :: Monad m => AlternatingT m a -> m (Maybe [a]) -> m (Maybe [a])
 runAlternatingT' NoChoice bt = bt
@@ -125,6 +130,7 @@ runAlternatingT' (OrElse x y z) bt = do
                     Nothing -> return Nothing
                     Just rs' -> foo aa (rs ++ rs')  
 runAlternatingT' (Cut x) bt = runAlternatingT' x (return Nothing)
+runAlternatingT' Success bt = return (Just [])
 
 runAlternatingT :: Monad m => AlternatingT m a -> m (Maybe [a])
 runAlternatingT a = runAlternatingT' a (return Nothing)

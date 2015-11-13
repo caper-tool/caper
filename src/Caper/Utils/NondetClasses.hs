@@ -30,16 +30,18 @@ instance (MonadPlus m, MonadCut m) => MonadCut (StateT s m) where
 
 class Monad m => MonadDemonic m where
         (<#>) :: m a -> m a -> m a
+        succeed :: m a
 
 -- |Demonic choice on all items of a list.
 -- Only really makes sense if the list is non-empty.
 dAll :: MonadDemonic m => [m a] -> m ()
-dAll [] = return ()
+dAll [] = succeed
 dAll [a] = a >> return ()
 dAll (a:aa) = (a >> return ()) <#> dAll aa
 
 instance (MonadDemonic m) => MonadDemonic (StateT s m) where
-        (StateT a) <#> (StateT b) = StateT (\s -> a s <#> b s)  
+        (StateT a) <#> (StateT b) = StateT (\s -> a s <#> b s)
+        succeed = lift succeed
 
 -- |Lift a 'Maybe' into an arbitrary non-deterministic monad.
 liftMaybe :: (MonadPlus m) => Maybe a -> m a

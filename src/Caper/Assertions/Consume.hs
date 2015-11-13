@@ -184,9 +184,10 @@ consumeAssrt (AssrtITE sp c a1 a2) =
   (do
     liftIO $ putStrLn $ "*** case " ++ show c
     producePure c
-    -- TODO: This is sub-optimal; should simply succeed when inconsistent
-    whenConsistent $ consumeAssrt a1) <#>
+    succeedIfInconsistent
+    consumeAssrt a1) <#>
         (do
             liftIO $ putStrLn $ "*** case " ++ show (NotBAssrt sp c)
             producePure (NotBAssrt sp c)
-            whenConsistent $ consumeAssrt a2)
+            succeedIfInconsistent
+            consumeAssrt a2)

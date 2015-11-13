@@ -35,6 +35,7 @@ module Caper.Prover(
         -- ** Consistency
         isConsistent,
         whenConsistent,
+        succeedIfInconsistent,
         -- * Assertions
         --Assertions,
         AssertionLenses(..),
@@ -94,6 +95,8 @@ import Data.Foldable
 --import Control.Monad hiding (mapM_,mapM)
 import Control.Lens
 import Data.List (intercalate)
+
+import Caper.Utils.NondetClasses
 
 import Caper.ProverDatatypes
 --import Caper.ValueProver
@@ -365,7 +368,10 @@ whenConsistent xx = do
             c <- isConsistent
             unless (c == Just False) xx
 
-
+succeedIfInconsistent :: (ProverM s r m, MonadDemonic m) => m ()
+succeedIfInconsistent = do
+            c <- isConsistent
+            when (c == Just False) succeed
 
 assumptionContext :: (Functor a, Foldable a) =>
         [v] -> [FOF a v] -> FOF a v -> FOF a v
