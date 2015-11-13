@@ -34,6 +34,7 @@ module Caper.Prover(
         assumeFalseE,
         -- ** Consistency
         isConsistent,
+        whenConsistent,
         -- * Assertions
         --Assertions,
         AssertionLenses(..),
@@ -356,6 +357,14 @@ isConsistent = do
                                         (_, Just False) -> Just False
                                         (Just True, Just True) -> Just True
                                         _ -> Nothing
+
+        
+-- |Check if the state is consistent; if not then do not execute the continuation.
+whenConsistent :: ProverM s r m => m () -> m ()
+whenConsistent xx = do
+            c <- isConsistent
+            unless (c == Just False) xx
+
 
 
 assumptionContext :: (Functor a, Foldable a) =>

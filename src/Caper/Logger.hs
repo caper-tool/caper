@@ -107,6 +107,9 @@ instance (MonadIO m) => MonadLogger (HLoggerT m) where
 runErrLogger :: HLoggerT m a -> m a
 runErrLogger (HLoggerT x) = runReaderT x stderr
 
+runOutLogger :: HLoggerT m a -> m a
+runOutLogger (HLoggerT x) = runReaderT x stdout
+
 newtype FilterLoggerT m a = FilterLoggerT (ReaderT (LogEvent -> Bool) m a)
         deriving (Applicative,Monad,MonadIO,MonadHoist,Functor,Alternative,MonadPlus)
 

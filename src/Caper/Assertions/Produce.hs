@@ -171,7 +171,7 @@ produceSpatial _ (SAGuards a) = produceGuards a
 produceAssrt ::  (MonadState s m, AssumptionLenses s, RegionLenses s,
                 SymbStateLenses s,
                 MonadReader r m, RTCGetter r,
-                MonadRaise m, MonadDemonic m) =>
+                MonadRaise m, MonadDemonic m, MonadIO m) =>
         Bool ->
         Assrt -> m ()
 produceAssrt _ (AssrtPure sp a) = producePure a
@@ -179,5 +179,11 @@ produceAssrt dirty (AssrtSpatial sp a) = produceSpatial dirty a
 produceAssrt dirty (AssrtConj sp a1 a2) = produceAssrt dirty a1 >>
                                         produceAssrt dirty a2
 produceAssrt dirty (AssrtITE sp c a1 a2) =
-  (producePure c >> produceAssrt dirty a1) <#>
-          (producePure (NotBAssrt sp c) >> produceAssrt dirty a2)
+  (do
+    liftIO (putStrLn $ "*** case: " ++ show c)
+    producePure c 
+    produceAssrt dirty a1) <#>
+          (do
+            liftIO (putStrLn $ "*** case: " ++ show (NotBAssrt sp c))
+            producePure (NotBAssrt sp c)
+            produceAssrt dirty a2)

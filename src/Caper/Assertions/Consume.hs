@@ -173,12 +173,20 @@ consumeSpatial (SACell a) = consumeCell a
 consumeSpatial (SAGuards a) = consumeGuards a
 
 consumeAssrt :: (MonadState s m, AssertionLenses s, RegionLenses s,
-                SymbStateLenses s, MonadReader r m, RTCGetter r,
-                MonadRaise m, MonadLogger m, MonadPlus m, MonadDemonic m) =>
+                SymbStateLenses s, MonadReader r m, RTCGetter r, Provers r,
+                MonadRaise m, MonadLogger m, MonadPlus m, MonadDemonic m,
+                MonadIO m) =>
         Assrt -> m ()
 consumeAssrt (AssrtPure sp a) = consumePure a
 consumeAssrt (AssrtSpatial sp a) = consumeSpatial a
 consumeAssrt (AssrtConj sp a1 a2) = consumeAssrt a1 >> consumeAssrt a2
 consumeAssrt (AssrtITE sp c a1 a2) =
-  (producePure c >> consumeAssrt a1) <#>
-          (producePure (NotBAssrt sp c) >> consumeAssrt a2)
+  (do
+    liftIO $ putStrLn $ "*** case " ++ show c
+    producePure c
+    -- TODO: This is sub-optimal; should simply succeed when inconsistent
+    whenConsistent $ consumeAssrt a1) <#>
+        (do
+            liftIO $ putStrLn $ "*** case " ++ show (NotBAssrt sp c)
+            producePure (NotBAssrt sp c)
+            whenConsistent $ consumeAssrt a2)

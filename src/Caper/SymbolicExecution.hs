@@ -66,12 +66,6 @@ localiseLogicalVars mop = do
             -- 'pop' the logical variables
             logicalVars .= savedLVars
             return a
-        
--- |Check if the state is consistent; if not then do not execute the continuation.
-whenConsistent :: SymExMonad r s m => m () -> m ()
-whenConsistent xx = do
-            c <- isConsistent
-            unless (c == Just False) xx
 
 -- | Symbolically execute some code with the specified region open.
 -- Afterwards, the region should be closed and the state updated.
@@ -208,8 +202,7 @@ symbolicExecute :: forall r s m.
             Stmt -> (ExitMode -> m ()) -> m ()
 symbolicExecute stmt cont = do
             -- If we reach an inconsistent state then we can stop
-            consistent <- isConsistent
-            unless (consistent == Just False) $ do
+            whenConsistent $ do
                 stabiliseRegions
                 debugState
                 liftIO $ putStrLn $ ">>> " ++ take 30 (show stmt)
@@ -318,6 +311,7 @@ symbolicExecute stmt cont = do
                     lvv <- newAvar lv
                     progVars . at lv ?= var lvv
                 (do
+                        liftIO $ putStrLn $ "*** exiting loop"
                         -- produce the invariant (program variables)
                         produceInv
                         -- assume negative loop test
@@ -326,6 +320,7 @@ symbolicExecute stmt cont = do
                         -- continue
                         cont EMContinuation) <#>
                     (do
+                        liftIO $ putStrLn $ "*** executing loop body"
                         -- store the heap and regions for future use, abandoning them
                         restoreFrame <- frame
                         -- produce the invariant (program variables)
