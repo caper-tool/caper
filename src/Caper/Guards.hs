@@ -11,26 +11,20 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Control.Monad.Exception
 import Control.Monad hiding (mapM,sequence)
---import Control.Monad.Trans.Class
---import Control.Monad.Trans.Maybe
 import Data.Typeable
 import Data.Foldable
 import Data.Traversable
---import Data.Maybe
 import Data.List (intercalate)
 import Control.Monad.State hiding (mapM_,mapM,sequence)
 import Debug.Trace              -- TODO: get rid of this
 import Control.Lens hiding (op)
 
 import Caper.Parser.AST.Annotation (GuardDeclr(..), TopLevelGuardDeclr(..))
---import qualified Caper.Parser.AST as AST
 import Caper.Logger
 import Caper.ProverDatatypes
 import Caper.Prover
 import Caper.Utils.NondetClasses
 import Caper.Utils.Mix
---import Caper.Exceptions
--- import Caper.Assertions (generatePermissionExpr, generateValueExpr)
 
 
 data GuardTypeException =
@@ -87,36 +81,6 @@ topLevelToWeakGuardType ZeroGuardDeclr = Set.singleton Map.empty
 topLevelToWeakGuardType (SomeGuardDeclr gt) = toWeakGuardType gt
 
 
--- toWeakGuardTypeWorker :: WeakGuardType -> GuardType
-{-
-data GuardAST v =
-                EmptyG
-                | NamedG String
-                | NamedPermissionG String (PermissionExpression v)
-                | ParametrisedG String (ValueExpression v)
-                | CoParametrisedG String [ValueExpression v]
-                | StarG (GuardAST v) (GuardAST v)
-                deriving (Functor,Foldable,Traversable)
-
-instance (Show v) => Show (GuardAST v) where
-        show EmptyG = "0"
-        show (NamedG g) = g
-        show (NamedPermissionG g p) = g ++ "[" ++ show p ++ "]"
-        show (ParametrisedG g p) = g ++ "(" ++ show p ++ ")"
-        show (CoParametrisedG g p) = g ++ "{" ++ show p ++ "}"
-        show (StarG a b) = show a ++ " * " ++ show b
-
-
-
-data GuardException v =
-                GEInconsistentOccurrences String (GuardAST v)
-                deriving Typeable
-
-instance Show v => Show (GuardException v) where
-        show (GEInconsistentOccurrences s g) = "The guard named \"" ++ s ++ "\" is used inconsistently in the guard expression \"" ++ show g ++ "\"."
-
-instance (Typeable v, Show v) => Exception (GuardException v)
--}
 
 data GuardParameters v = NoGP | PermissionGP (PermissionExpression v)
  --- | Parameters [ValueExpression] | CoParameters [ValueExpression] [ValueExpression]
@@ -155,32 +119,6 @@ instance ExpressionSub GuardParameters Expr where
 instance ExpressionSub Guard Expr where
         exprSub s (GD g) = GD $ Map.map (exprSub s) g
 
--- Code for producing guards will now reside in Caper.Assertions
-
-
-{-
-toGuard :: (Typeable v, Show v, Throws (GuardException v) l) => GuardAST v -> EM l (Guard v)
-toGuard gast = tg Map.empty gast
-        where
-                tg g (EmptyG) = return $ GD g
-                tg g (NamedG n) = if n `Map.member` g then throw (GEInconsistentOccurrences n gast) else return . GD $ Map.insert n NoGP g
-                tg g (NamedPermissionG n pe) = case Map.lookup n g of
-                                        (Nothing) -> return . GD $ Map.insert n (PermissionGP pe) g
-                                        (Just (PermissionGP pe0)) -> return . GD $ Map.insert n (PermissionGP (PESum pe0 pe)) g
-                                        _ -> throw $ GEInconsistentOccurrences n gast
-{--                tg g (ParametrisedG n v) = case Map.lookup n g of
-                                        (Nothing) -> return $ Map.insert n (Parameters [v]) g
-                                        (Just (Parameters vs)) -> return $ Map.insert n (Parameters (v : vs)) g
-                                        (Just (CoParameters vs covs)) -> return $ Map.insert n (CoParameters (v : vs) covs) g
-                                        _ -> throw $ GEInconsistentOccurrences n gast
-                tg g (CoParametrisedG n vs) = case Map.lookup n g of
-                                        (Nothing) -> return $ Map.insert n (CoParameters [] vs) g
-                                        (Just (Parameters vs')) -> return $ Map.insert n (CoParameters vs' vs) g
-                                        _ -> throw $ GEInconsistentOccurrences n gast --}
-                tg g (StarG ge1 ge2) = do
-                                                (GD g') <- tg g ge1
-                                                tg g' ge2
--}
 
 checkGuardAtType :: Guard v -> WeakGuardType -> Bool
 checkGuardAtType (GD g)
@@ -357,3 +295,9 @@ consumeGuard :: (MonadPlus m, MonadState s m, AssertionLenses s,
 consumeGuard ZeroGuardDeclr = \_ _ _ -> mzero -- Something has gone wrong...
 consumeGuard (SomeGuardDeclr gt) = consumeGuard' gt
 
+-- |Compute an underapproximation of the least upper bound of two guards.
+-- That is, compute a guard that is guaranteed to be entailed by the least
+-- guard that entails both of the provided guards.
+conservativeGuardLUB :: (MonadState s m, AssumptionLenses s) =>
+        GuardDeclr -> Guard VariableID -> Guard VariableID -> m (Guard VariableID)
+conservativeGuardLUB = undefined

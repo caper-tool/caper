@@ -56,10 +56,13 @@ data CaperException =
         -- because they are of different types (named/permission) or
         -- there is more than one named guard. 
         | IncompatibleGuardOccurrences String
+        -- |'GuardInconsistentWithGuardType' indicates that a guard (labelling
+        -- a transition) is not consistent with the guard type for the region.
+        | GuardInconsistentWithGuardType String String
         -- |'OverlappingStateInterpretation' indicates that there is some state
         -- whose interpretation is (potentially) ambiguous.
         | OverlappingStateInterpretation
-        -- |'MissingStateInterpretation' indicates that no state intepretations
+        -- |'MissingStateInterpretation' indicates that no state interpretations
         -- are provided for a region.  (This could become a parse error.)
         | MissingStateInterpretation
         -- |'OverloadedProcedure' indicates that two procedures with the same
@@ -89,6 +92,8 @@ instance Show CaperException where
                 show required ++ " arguments were expected, but " ++ show actual ++ " arguments were supplied."
         show (IncompatibleGuardOccurrences gname) =
                 "There were incompatible occurrences of guards named '" ++ gname ++ "'."
+        show (GuardInconsistentWithGuardType gd gt) =
+                "The guard '" ++ gd ++ "' is not consistent with the guard type '" ++ gt ++ "'."
         show (OverlappingStateInterpretation) =
                 "There are multiple possible interpretations for a single region state."
         show (MissingStateInterpretation) =

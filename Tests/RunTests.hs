@@ -25,7 +25,7 @@ data TestResult = Passed | Failed | Errored | Skipped
 
 --echoResult :: Text -> FilePath -> TestResult -> Sh ()
 echoResult fname testName res = do
-    echo_n $ concat $ ["[", pack $ takeFileName (unpack $ toTextIgnore fname), "] ",
+    echo_n $ concat ["[", pack $ takeFileName (unpack $ toTextIgnore fname), "] ",
         testName, ": "]
     case res of
         Passed -> liftIO (setSGR [SetColor Foreground Vivid Green]) >> echo "PASSED"
@@ -58,10 +58,10 @@ testFile rmap name = do
 
 
 main = shelly $ silently $ errExit False $ do
-    dir   <- liftIO $ getExecutablePath
-    cd $ fromText $ pack $ takeDirectory $ dir
-    cd $ rootPath
+    dir   <- liftIO getExecutablePath
+    cd $ fromText $ pack $ takeDirectory dir
+    cd rootPath
     value <- pwd
-    names <- findWhen (\n -> return $ isSuffixOf ".t" $ toTextIgnore n) testsPath
+    names <- findWhen (return . isSuffixOf ".t" . toTextIgnore) testsPath
     m' <- foldM testFile (Map.empty :: Map.Map TestResult Int) names
     liftIO $ putStrLn $ Map.foldlWithKey (\s k v -> (s ++ show k ++ ": " ++ show v ++ "; ")) "" m'

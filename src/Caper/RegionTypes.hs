@@ -1,10 +1,10 @@
 {-# LANGUAGE RankNTypes, BangPatterns, MultiParamTypeClasses #-}
 module Caper.RegionTypes where
 
-import Prelude hiding (notElem)
-import Control.Monad
+import Prelude hiding (notElem, mapM_)
+import Control.Monad hiding (mapM_)
 import Control.Monad.Reader.Class
-import Control.Monad.State
+import Control.Monad.State hiding (mapM_)
 import Control.Arrow
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -206,7 +206,16 @@ computeStateSpace ss = case constStates ss Set.empty of
                     constStates xs (Set.insert n' s)
                  _ -> Nothing
 
-
+checkActionsGuards :: (Monad m, MonadRaise m) =>
+        AST.TopLevelGuardDeclr -> [AST.Action] -> m ()
+checkActionsGuards tlgd@(AST.SomeGuardDeclr gd) = mapM_ $ \a -> let grd = AST.actionGuard a in
+        contextualise a $ do            
+            g <- generateGuard (const (return ())) grd
+            unless (checkGuardAtType g (toWeakGuardType gd)) $
+                raise $ GuardInconsistentWithGuardType (show grd) (show tlgd)
+checkActionsGuards tlgd@AST.ZeroGuardDeclr = mapM_ $ \a -> let grd = AST.actionGuard a in
+        contextualise a $            
+            unless (null grd) $ raise $ GuardInconsistentWithGuardType (show grd) (show tlgd)
 
 declrsToRegionTypeContext :: (Monad m, MonadRaise m, MonadLogger m) =>
         [AST.Declr]
@@ -226,6 +235,8 @@ declrsToRegionTypeContext declrs = do
                     let !params = map toParam $ Map.findWithDefault
                             (error "declrsToRegionTypeContext: region parameters not determined.")
                             rtnam typings
+                    -- Check that the action guards conform to the guard algebra
+                    checkActionsGuards gddec acts
                     -- Check that there is at least some state interpretation
                     contextualise decl $ when (null interps) $
                         raise MissingStateInterpretation
