@@ -68,6 +68,7 @@ instance Expression PermissionExpression where
 data PermissionAtomic v =
                  PAEq (PermissionExpression v) (PermissionExpression v)
                 | PADis (PermissionExpression v) (PermissionExpression v)
+                | PALte (PermissionExpression v) (PermissionExpression v)
                 deriving (Functor, Foldable, Traversable, Eq, Ord, Show)
 
 class ExpressionSub c e where
@@ -79,6 +80,7 @@ instance Monad m => ExpressionSub m m where
 instance ExpressionSub PermissionExpression e => ExpressionSub PermissionAtomic e where
         exprSub s (PAEq x y) = PAEq (exprSub s x) (exprSub s y)
         exprSub s (PADis x y) = PADis (exprSub s x) (exprSub s y)
+        exprSub s (PALte x y) = PALte (exprSub s x) (exprSub s y)
 
 {-
 instance Show v => Show (PermissionAtomic v) where

@@ -46,6 +46,7 @@ data BAFormula v =
         | BADisj (BAExpression v) (BAExpression v)
         | BAComp (BAExpression v) (BAExpression v) (BAExpression v)
         | BAEq (BAExpression v) (BAExpression v)
+        | BALte (BAExpression v) (BAExpression v)
         | BATrue
         | BAFalse
         deriving (Eq, Ord, Functor)
@@ -63,6 +64,7 @@ instance Show v => Show (BAFormula v) where
         show (BADisj e1 e2) = "disj(" ++ show e1 ++ "," ++ show e2 ++ ")"
         show (BAComp e1 e2 e3) = "compose(" ++ show e1 ++ "," ++ show e2 ++ "," ++ show e3 ++ ")"
         show (BAEq e1 e2) = "(" ++ show e1 ++ " = " ++ show e2 ++ ")"
+        show (BALte e1 e2) = "lte(" ++ show e1 ++ "," ++ show e2 ++ ")"
         show BATrue = "$true"
         show BAFalse = "$false"
         
@@ -93,6 +95,8 @@ toBAFormula (FOFAtom (PAEq pe1 pe2)) = BAAnd (BAAnd (baDisjoints pe1) (baDisjoin
                                         (BAEq (toBAExpression pe1) (toBAExpression pe2))
 toBAFormula (FOFAtom (PADis pe1 pe2)) = BAAnd (BAAnd (baDisjoints pe1) (baDisjoints pe2))
                                         (BADisj (toBAExpression pe1) (toBAExpression pe2))
+toBAFormula (FOFAtom (PALte pe1 pe2)) = BAAnd (BAAnd (baDisjoints pe1) (baDisjoints pe2))
+                                        (BALte (toBAExpression pe1) (toBAExpression pe2))
 toBAFormula (FOFAnd f1 f2) = BAAnd (toBAFormula f1) (toBAFormula f2)
 toBAFormula (FOFOr f1 f2) = BAOr (toBAFormula f1) (toBAFormula f2)
 toBAFormula (FOFImpl f1 f2) = BAImpl (toBAFormula f1) (toBAFormula f2)

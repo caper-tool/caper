@@ -83,7 +83,7 @@ instance PermModel IntegerTree where
 -- Permissions with expressions
 
 data PermExpr = PEFull | PEZero | PEVar Int | PESum PermExpr PermExpr | PECompl PermExpr
-data PermAtom = PAEqual PermExpr PermExpr | PADisjoint PermExpr PermExpr
+data PermAtom = PAEqual PermExpr PermExpr | PADisjoint PermExpr PermExpr | PALte PermExpr PermExpr
 data PermFormula = PFFalse | PFTrue
                 | PFAtom PermAtom
                 | PFNot PermFormula
@@ -102,6 +102,7 @@ instance Show PermExpr where
 instance Show PermAtom where
         show (PAEqual e1 e2) = show e1 ++ " = " ++ show e2
         show (PADisjoint e1 e2) = show e1 ++ " # " ++ show e2
+        show (PALte e1 e2) = show e1 ++ " <= " ++ show e2
 
 instance Show PermFormula where
         show PFFalse = "_|_"
@@ -125,6 +126,7 @@ toPermExpr s (PD.PECompl e) = PECompl (toPermExpr s e)
 toPermAtom :: (a -> Int) -> PD.PermissionAtomic a -> PermAtom
 toPermAtom s (PD.PAEq e1 e2) = PAEqual (toPermExpr s e1) (toPermExpr s e2)
 toPermAtom s (PD.PADis e1 e2) = PADisjoint (toPermExpr s e1) (toPermExpr s e2)
+toPermAtom s (PD.PALte e1 e2) = PALte (toPermExpr s e1) (toPermExpr s e2)
 
 toPermFormula :: (Eq a) => (a -> Int) -> PD.FOF PD.PermissionAtomic a -> PermFormula
 toPermFormula s (PD.FOFForAll v f') = PFAll (toPermFormula (\x -> if x == v then 0 else s x + 1) f')
@@ -171,6 +173,7 @@ atomEvalEnv d et (PAEqual pe1 pe2) = let pc1 = exprToComb pe1 in
                                         isPCEmpty d et (PCInter (PCCompl pc1) pc2)
 atomEvalEnv d et (PADisjoint pe1 pe2) = isPCEmpty d et (exprDisjCombs pe1) && isPCEmpty d et (exprDisjCombs pe2) &&
                                         isPCEmpty d et (PCInter (exprToComb pe1) (exprToComb pe2))
+atomEvalEnv d et (PALte pe1 pe2) = isPCEmpty d et (PCInter (exprToComb pe1) (PCCompl (exprToComb pe2)))
 
 exprToComb :: PermExpr -> PermComb
 exprToComb PEFull = PCPrim PPFull

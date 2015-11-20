@@ -88,6 +88,8 @@ z3ify ctx (FOFAtom atm) = do
                 masks (PAEq e1 e2) = (smtpe ctx (PECompl e1) .&. smtpe ctx e2) : 
                         (smtpe ctx e1 .&. smtpe ctx (PECompl e2)) :
                                 smtdjs ctx e1 ++ smtdjs ctx e2
+                masks (PALte e1 e2) = (smtpe ctx e1 .&. smtpe ctx (PECompl e2)) :
+                                smtdjs ctx e1 ++ smtdjs ctx e2
 z3ify ctx (FOFAnd f1 f2) = do
                 r1 <- z3ify ctx f1
                 r2 <- z3ify ctx f2
@@ -158,6 +160,8 @@ smtify bits ctx (FOFAtom atm) = "(and " ++ intercalate " "
                 masks (PADis e1 e2) = (smtpe ctx e1 .&. smtpe ctx e2) : smtdjs ctx e1 ++ smtdjs ctx e2
                 masks (PAEq e1 e2) = (smtpe ctx (PECompl e1) .&. smtpe ctx e2) : 
                         (smtpe ctx e1 .&. smtpe ctx (PECompl e2)) :
+                                smtdjs ctx e1 ++ smtdjs ctx e2
+                masks (PALte e1 e2) = (smtpe ctx e1 .&. smtpe ctx (PECompl e2)) :
                                 smtdjs ctx e1 ++ smtdjs ctx e2
 smtify bits ctx (FOFAnd f1 f2) = "(and " ++ smtify bits ctx f1 ++ " " ++
                                 smtify bits ctx f2 ++ ")"

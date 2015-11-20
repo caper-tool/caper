@@ -36,6 +36,8 @@ fof(split,axiom,
     ! [X]: (X = zero | ?[Y]: ~(meet(X,Y) = zero | meet(X,Y) = X))).
 fof(disjoint,definition,
     ![X, Y]: (disj(X, Y) <=> meet(X,Y) = zero)).
+fof(lte,definition,
+    ![X, Y]: (lte(X, Y) <=> meet(X,Y) = X)).
 fof(compose,definition,
     ![X, Y, Z]: (compose(X, Y, Z) <=> (join(X, Y) = Z & meet(X, Y) = zero))).
 
