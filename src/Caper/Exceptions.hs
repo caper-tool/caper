@@ -59,6 +59,9 @@ data CaperException =
         -- |'GuardInconsistentWithGuardType' indicates that a guard (labelling
         -- a transition) is not consistent with the guard type for the region.
         | GuardInconsistentWithGuardType String String
+        -- |'GuardTypeMultipleOccurrences' indicates that a guard type declares
+        -- the same guard more than once.
+        | GuardTypeMultipleOccurrences String (Maybe String)
         -- |'OverlappingStateInterpretation' indicates that there is some state
         -- whose interpretation is (potentially) ambiguous.
         | OverlappingStateInterpretation
@@ -94,6 +97,8 @@ instance Show CaperException where
                 "There were incompatible occurrences of guards named '" ++ gname ++ "'."
         show (GuardInconsistentWithGuardType gd gt) =
                 "The guard '" ++ gd ++ "' is not consistent with the guard type '" ++ gt ++ "'."
+        show (GuardTypeMultipleOccurrences s Nothing) = "Multiple guards named '" ++ s ++ "' are declared in a guard type."
+        show (GuardTypeMultipleOccurrences s (Just gt)) = "Multiple guards named '" ++ s ++ "' are declared in the guard type '" ++ gt ++ "'."
         show (OverlappingStateInterpretation) =
                 "There are multiple possible interpretations for a single region state."
         show (MissingStateInterpretation) =

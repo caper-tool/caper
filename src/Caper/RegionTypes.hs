@@ -235,6 +235,8 @@ declrsToRegionTypeContext declrs = do
                     let !params = map toParam $ Map.findWithDefault
                             (error "declrsToRegionTypeContext: region parameters not determined.")
                             rtnam typings
+                    -- Check that the guard declaration is legal
+                    validateGuardDeclr gddec
                     -- Check that the action guards conform to the guard algebra
                     checkActionsGuards gddec acts
                     -- Check that there is at least some state interpretation

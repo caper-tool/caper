@@ -295,6 +295,7 @@ makeSourcePos ''Guard
 makeSourcePos ''Assrt
 makeSourcePos ''Action
 makeSourcePos ''StateInterpretation
+makeSourcePos ''GuardDeclr
 instance HasSourcePos AnyExpr where
         sourcePos (AnyVar e) = sourcePos e
         sourcePos (AnyVal e) = sourcePos e
@@ -338,3 +339,6 @@ instance Contextual Action where
 instance Contextual StateInterpretation where
         toContext si = DescriptiveContext (sourcePos si) $
                 "In a region interpretation: " ++ show si
+instance Contextual GuardDeclr where
+        toContext gdec = DescriptiveContext (sourcePos gdec) $
+                "In a guard declaration: " ++ show gdec

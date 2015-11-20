@@ -9,9 +9,7 @@ module Caper.Guards where
 import Prelude hiding (mapM,sequence,foldl,mapM_,concatMap)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Control.Monad.Exception
 import Control.Monad hiding (mapM,sequence)
-import Data.Typeable
 import Data.Foldable
 import Data.Traversable
 import Data.List (intercalate)
@@ -25,17 +23,8 @@ import Caper.ProverDatatypes
 import Caper.Prover
 import Caper.Utils.NondetClasses
 import Caper.Utils.Mix
+import Caper.Exceptions
 
-
-data GuardTypeException =
-                GTEMultipleOccurrence String (Maybe GuardDeclr)
-                deriving Typeable
-
-instance Show GuardTypeException where
-        show (GTEMultipleOccurrence s Nothing) = "Multiple guards named \"" ++ s ++ "\" are declared in a guard type."
-        show (GTEMultipleOccurrence s (Just gt)) = "Multiple guards named \"" ++ s ++ "\" are declared in the guard type \"" ++ show gt ++ "\"."
-
-instance Exception GuardTypeException
 
 
 data GuardParameterType =
@@ -47,9 +36,9 @@ data GuardParameterType =
 -- INVARIANT : instances of WeakGuardType must be non-empty
 type WeakGuardType = Set.Set (Map.Map String GuardParameterType)
 
-validateGuardDeclr :: (Throws GuardTypeException l) => TopLevelGuardDeclr -> EM l ()
+validateGuardDeclr :: (MonadRaise m, Monad m) => TopLevelGuardDeclr -> m ()
 validateGuardDeclr ZeroGuardDeclr = return ()
-validateGuardDeclr (SomeGuardDeclr gt) = do
+validateGuardDeclr (SomeGuardDeclr gt) = contextualise gt $ do
                         _ <- vgt Set.empty gt
                         return ()
         where
@@ -63,7 +52,7 @@ validateGuardDeclr (SomeGuardDeclr gt) = do
                                                 s1 <- vgt s gt1
                                                 vgt s1 gt2
                 checkFresh s n = if Set.member n s then
-                                        throw $ GTEMultipleOccurrence n (Just gt)
+                                        raise $ GuardTypeMultipleOccurrences n (Just (show gt))
                                 else
                                         return $ Set.insert n s
 
@@ -171,9 +160,17 @@ mergeGuards (GD g1) (GD g2) = liftM GD $ sequence (Map.unionWith unionop (fmap r
                                                 -- matter what we return here...
                                                 return v1
 
+-- |Assuming the guard conforms to a parent guard type, checks
+-- if the guard matches the given (sub)guard type declaration.
+matchesGuardDeclr :: GuardDeclr -> Guard v -> Bool
+matchesGuardDeclr (NamedGD _ n) (GD g) = Map.member n g
+matchesGuardDeclr (PermissionGD _ n) (GD g) = Map.member n g
+matchesGuardDeclr (ProductGD _ t1 t2) g = matchesGuardDeclr t1 g || matchesGuardDeclr t2 g
+matchesGuardDeclr (SumGD _ t1 t2) g = matchesGuardDeclr t1 g || matchesGuardDeclr t2 g
+
 
 guardEquivalence :: GuardDeclr -> Guard v1 -> Guard v2 -> (Guard v3, Guard v4)
--- Given a GuardDeclr and a pair of guards, find a pair of guards that
+-- ^Given a 'GuardDeclr' and a pair of guards, find a pair of guards that
 -- could be used to rewrite the first to entail the second.
 -- This assumes the guards conform to the guard type.
 guardEquivalence (ProductGD _ gta1 gta2) gd1 gd2 = (guardJoin gd3a gd3b, guardJoin gd4a gd4b)
@@ -188,11 +185,7 @@ guardEquivalence (SumGD _ gta1 gta2) gd1 gd2 =
                                         (_, True, True, _) -> (fgf gta2 gd1, fgf gta1 gd2)
                                         _ -> (GD Map.empty, GD Map.empty)
                 where
-                        ma :: GuardDeclr -> Guard v -> Bool
-                        ma (NamedGD _ n) (GD g) = Map.member n g
-                        ma (PermissionGD _ n) (GD g) = Map.member n g
-                        ma (ProductGD _ t1 t2) g = ma t1 g || ma t2 g
-                        ma (SumGD _ t1 t2) g = ma t1 g || ma t2 g
+                        ma = matchesGuardDeclr
                         fgf :: GuardDeclr -> Guard v -> Guard w
                         fgf (NamedGD _ n) _ = GD $ Map.singleton n NoGP
                         fgf (PermissionGD _ n) _ = GD $ Map.singleton n (PermissionGP PEFull)
@@ -298,6 +291,41 @@ consumeGuard (SomeGuardDeclr gt) = consumeGuard' gt
 -- |Compute an underapproximation of the least upper bound of two guards.
 -- That is, compute a guard that is guaranteed to be entailed by the least
 -- guard that entails both of the provided guards.
+--
+-- PRECONDITION: the guards match the guard type declaration, and the declaration is valid
 conservativeGuardLUB :: (MonadState s m, AssumptionLenses s) =>
         GuardDeclr -> Guard VariableID -> Guard VariableID -> m (Guard VariableID)
-conservativeGuardLUB = undefined
+conservativeGuardLUB (NamedGD _ n) g1@(GD g1m) g2 = return $ if Map.member n g1m then g1 else g2
+conservativeGuardLUB (PermissionGD _ n) g1@(GD g1m) g2@(GD g2m) =
+                            case (Map.lookup n g1m, Map.lookup n g2m) of
+                                (Nothing, _) -> return g2
+                                (_, Nothing) -> return g1
+                                (Just (PermissionGP p1), Just (PermissionGP p2)) -> do
+                                    p <- liftM var $ newAvar ("p_" ++ n)
+                                    assumeTrue $ PALte p1 p
+                                    assumeTrue $ PALte p2 p
+                                    return (GD $ Map.singleton n (PermissionGP p))
+                                _ -> error "conservativeGuardLUB: guard does not mach expected type."
+conservativeGuardLUB (ProductGD _ gd1 gd2) g1 g2 = do
+                            (GD gg1) <- conservativeGuardLUB gd1 (res gd1 g1) (res gd1 g2)
+                            (GD gg2) <- conservativeGuardLUB gd2 (res gd2 g1) (res gd2 g2)
+                            -- Since the guard delcrs are well-formed, gg1 and gg2 won't share keys
+                            return $ GD $ Map.union gg1 gg2
+                    where
+                        res gd (GD g) = GD $ Map.intersection g (gdnames gd) 
+                        gdnames (NamedGD _ n) = Map.singleton n ()
+                        gdnames (PermissionGD _ n) = Map.singleton n ()
+                        gdnames (ProductGD _ gda gdb) = Map.union (gdnames gda) (gdnames gdb)
+                        gdnames (SumGD _ gda gdb) = Map.union (gdnames gda) (gdnames gdb)
+conservativeGuardLUB (SumGD _ gd1 gd2) g1 g2 = 
+                case (ma gd1 g1, ma gd2 g1, ma gd1 g2, ma gd2 g2) of
+                    (True, False, False, True) -> return $ fullGuard $ toWeakGuardType gd1
+                    (False, True, True, False) -> return $ fullGuard $ toWeakGuardType gd1
+                    (True, False, True, False) -> conservativeGuardLUB gd1 g1 g2
+                    (False, True, False, True) -> conservativeGuardLUB gd2 g1 g2
+                    (_, _, False, False) -> return g1
+                    (False, False, _, _) -> return g2
+                    _ -> error "conservativeGuardLUB: guard does not mach expected type."
+        where
+            ma = matchesGuardDeclr
+
