@@ -305,7 +305,7 @@ conservativeGuardLUB (PermissionGD _ n) g1@(GD g1m) g2@(GD g2m) =
                                     assumeTrue $ PALte p1 p
                                     assumeTrue $ PALte p2 p
                                     return (GD $ Map.singleton n (PermissionGP p))
-                                _ -> error "conservativeGuardLUB: guard does not mach expected type."
+                                _ -> error "conservativeGuardLUB: guard does not match expected type."
 conservativeGuardLUB (ProductGD _ gd1 gd2) g1 g2 = do
                             (GD gg1) <- conservativeGuardLUB gd1 (res gd1 g1) (res gd1 g2)
                             (GD gg2) <- conservativeGuardLUB gd2 (res gd2 g1) (res gd2 g2)
@@ -325,7 +325,7 @@ conservativeGuardLUB (SumGD _ gd1 gd2) g1 g2 =
                     (False, True, False, True) -> conservativeGuardLUB gd2 g1 g2
                     (_, _, False, False) -> return g1
                     (False, False, _, _) -> return g2
-                    _ -> error "conservativeGuardLUB: guard does not mach expected type."
+                    _ -> error "conservativeGuardLUB: guard does not match expected type."
         where
             ma = matchesGuardDeclr
 
