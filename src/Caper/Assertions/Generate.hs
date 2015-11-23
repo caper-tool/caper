@@ -142,3 +142,22 @@ guardToNameParam genv gd@(PermGuard _ nm pe) = contextualise gd $ do
 guardToNameParam genv gd@(ParamGuard {}) = contextualise gd $
                         raise $ SyntaxNotImplemented "parametrised guards"
 
+generatePure :: (MonadRaise m, Monad m) =>
+            (VarExpr -> m v) -> PureAssrt -> m (Condition v)
+generatePure handler assn = contextualise assn $ generatePure' False assn
+        where
+            mkCond b = if b then negativeCondition else toCondition 
+            generatePure' b (NotBAssrt _ pa) = generatePure' (not $! b) pa
+            generatePure' b (ConstBAssrt _ b') = return (if b == b' then condFalse else condTrue)
+            generatePure' b (BinaryVarAssrt sp ebo vl vr) = do -- The only two cases are equality and disequality
+                            vvl <- handler vl
+                            vvr <- handler vr
+                            return $ mkCond (b == (ebo == EqualRel)) (EqualityCondition vvl vvr)
+            generatePure' b (BinaryValAssrt sp bo vel ver) = do
+                            vvel <- generateValueExpr handler vel
+                            vver <- generateValueExpr handler ver
+                            return $ mkCond b $ valueRel bo vvel vver
+            generatePure' b (BinaryPermAssrt sp brel pel per) = do
+                            ppel <- generatePermissionExpr handler pel
+                            pper <- generatePermissionExpr handler per
+                            return $ mkCond b $ permissionRel brel ppel pper

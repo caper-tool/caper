@@ -52,6 +52,7 @@ module Caper.Prover(
         assertEqual,
         assertTrue,
         assertFalse,
+        assertE,
         assertEqualE,
         assertTrueE,
         assertFalseE,

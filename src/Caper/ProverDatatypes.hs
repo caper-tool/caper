@@ -340,6 +340,8 @@ instance ConditionProp Condition where
 condFalse :: forall v. Condition v
 condFalse = ValueCondition FOFFalse
 
+condTrue :: forall v. Condition v
+condTrue = ValueCondition FOFTrue
 
 {-- This would probably be a bad idea
 instance (ConditionProp (FOF a)) => ConditionProp a where        

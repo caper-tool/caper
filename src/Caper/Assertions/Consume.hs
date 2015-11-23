@@ -89,6 +89,8 @@ consumeAnyExpr = generateAnyExpr consumeVariable
 consumePure :: (MonadState s m, AssertionLenses s, SymbStateLenses s,
         MonadRaise m, MonadPlus m, MonadLogger m) =>
                 PureAssrt -> m ()
+consumePure assn = generatePure consumeVariable assn >>= assertE
+{-
 consumePure = consumePure' False
         where
                 asrt sp b = addSPContext sp . if b then assertFalseE else assertTrueE
@@ -109,6 +111,7 @@ consumePure = consumePure' False
                         ppel <- consumePermissionExpr pel
                         pper <- consumePermissionExpr per
                         asrt sp b $ rel ppel pper
+-}
 
 consumeCell :: (MonadPlus m, MonadState s m, AssertionLenses s,
         SymbStateLenses s, MonadRaise m, MonadLogger m) =>

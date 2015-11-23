@@ -35,6 +35,8 @@ import           Caper.Utils.NondetClasses
 producePure :: (MonadState s m, AssumptionLenses s, SymbStateLenses s,
         MonadRaise m) =>
                 PureAssrt -> m ()
+producePure assn = generatePure produceVariable assn >>= assumeE
+{-
 producePure = producePure' False
         where
                 asm sp b = addSPContext sp . if b then assumeFalseE else assumeTrueE
@@ -55,6 +57,7 @@ producePure = producePure' False
                                 ppel <- producePermissionExpr pel
                                 pper <- producePermissionExpr per
                                 asm sp b $ rel ppel pper
+-}
 
 -- |Produce a variable.  Named variables are converted to 'VIDNamed'
 -- instances, and declared in the assumptions.  Anonymous (wildcard)
