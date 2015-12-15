@@ -5,7 +5,7 @@ import Caper.RegionTypes
 import Caper.SymbolicState
 import Caper.ProverDatatypes
 import Caper.Prover
-
+{-
 -- | Type for a proof obligation
 data Obligation =
         SymExObligation
@@ -13,5 +13,5 @@ data Obligation =
                 RegionTypeContext       -- Region typing context
                 (SymbState Assumptions) -- Current symbolic state
                 Assrt                   -- Postcondition
-                
+  -}              
           

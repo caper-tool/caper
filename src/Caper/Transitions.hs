@@ -13,6 +13,7 @@ import Caper.RegionTypes
 import Caper.Logger
 -- import Caper.Provers -- TODO: remove (used for testing)
 
+{-
 data ClosureVariable v = Context v | Local String deriving (Eq, Ord)
 
 instance (Show v) => Show (ClosureVariable v) where
@@ -22,7 +23,7 @@ instance (Show v) => Show (ClosureVariable v) where
 instance (StringVariable v) => StringVariable (ClosureVariable v) where
         varToString (Context v) = "c_" ++ varToString v
         varToString (Local s) = "l_" ++ s
-
+-}
 
 {- OK.
  - I want to compute a formula that represents the transitive closure of
@@ -77,7 +78,7 @@ instance (Eq b, Eq (a b)) => Floydable (FOF a b) where
         -- finfty is FOFFalse
         finfty = FOFFalse
 
--- Given a GuardedTransition and a pair of states, computes the condition
+-- |Given a 'GuardedTransition' and a pair of states, computes the condition
 -- for that transition firing.  In particular, it checks if the condition
 -- can never happen, or always happens.
 computeCondition :: (MonadIO m, MonadReader r m, Provers r, Eq v, StringVariable v, MonadLogger m) =>
@@ -93,7 +94,7 @@ computeCondition i j t = do
                                 Just True -> return FOFTrue
                                 _ -> return cond
 
--- Uses computeCondition to determine how to instantiate the matrix.
+-- |Uses 'computeCondition' to determine how to instantiate the matrix.
 -- Reflexive transitions are always allowed.
 computeConditions :: (MonadIO m, MonadReader r m, Provers r, Eq v, StringVariable v, MonadLogger m) =>
         [GuardedTransition v] -> Int -> Int -> m (FOF ValueAtomic v)

@@ -328,6 +328,9 @@ instance Contextual Predicate where
 instance Contextual RegionAssrt where
         toContext (Region sp rtn _ _ _) = DescriptiveContext sp $
                 "In a region assertion of type '" ++ rtn ++ "'"
+instance Contextual PureAssrt where
+        toContext pa = DescriptiveContext (sourcePos pa) $
+                "In a pure assertion '" ++ show pa ++ "'"
 instance Contextual CellAssrt where
         toContext (Cell sp _ _) = DescriptiveContext sp
                 "In a heap-cell assertion (... |-> ...)"

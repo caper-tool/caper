@@ -41,6 +41,7 @@ instance Show RTDVar where
         show (RTDVar s) = s
 instance StringVariable RTDVar where
         varToString (RTDVar s) = s
+        varFromString = RTDVar
 
 
 data RegionType = RegionType
@@ -104,7 +105,7 @@ data TransitionRule = TransitionRule
                 trGuard :: Guard RTDVar,
                 -- Some (pure) predicate that conditions the transition
                 -- (Not Implemented Yet)
-                trPredicate :: (),
+                trPredicate :: [Condition RTDVar],
                 -- An expression describing the state to transition from
                 trPreState :: ValueExpression RTDVar,
                 -- An expression describing the state to transition to
@@ -121,13 +122,14 @@ instance Show TransitionRule where
 actionToTransitionRule :: (MonadRaise m, Monad m) => [RTDVar] -> AST.Action -> m TransitionRule
 actionToTransitionRule params act@(AST.Action _ conds gds prest postst) =
         contextualise act $ do
-            unless (null conds) $ raise $ SyntaxNotImplemented "predicated transitions"
-            (gg, prec, post) <- flip evalStateT freshVars $ do
+            -- unless (null conds) $ raise $ SyntaxNotImplemented "predicated transitions"
+            (cds, gg, prec, post) <- flip evalStateT freshVars $ do
+                cds <- mapM (generatePure varExprToRTDVar) conds
                 gg <- generateGuard varExprToRTDVar gds
                 prec <- generateValueExpr varExprToRTDVar prest
                 post <- generateValueExpr varExprToRTDVar postst
-                return (gg,prec,post) 
-            return $ TransitionRule gg () prec post
+                return (cds, gg,prec,post) 
+            return $ TransitionRule gg cds prec post
     where
         theVars = params ++ (map RTDVar . mapMaybe AST.unVarExpr . Set.toList . freeVariables) act
         freshVars = filter (`notElem` theVars) [RTDVar ("WILDCARD" ++ show x) | x <- [(0::Int)..]]

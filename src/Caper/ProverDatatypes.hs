@@ -172,6 +172,11 @@ class StringVariable v where
         -- Care should be taken to ensure that variables conform to
         -- syntax restrictions: [a-zA-Z0-9_]* 
         varToString :: v -> String
+        -- |Convert a string to a variable.  As a precondition, the
+        -- string should conform to the syntax restriction: [a-zA-Z0-9_]*
+        -- Note that in general converting to and from a string will not
+        -- give an identity operation (and vice-versa).
+        varFromString :: String -> v
 
 data VariableType = VTPermission | VTValue | VTRegionID
         deriving (Eq, Ord, Typeable)
@@ -220,6 +225,7 @@ instance StringVariable VariableID where
         varToString (VIDNamed n) = "n_" ++ n
         varToString (VIDInternal n) = "i_" ++ n
         varToString (VIDExistential n) = "e_" ++ n
+        varFromString n = VIDInternal n
 
 
 -- Refreshable instance allows us to generate a 'fresh' version of a variable
@@ -273,6 +279,7 @@ literalToFOF (LNeg a) = FOFNot $ FOFAtom a
 
 class ExpressionCASub c e where
         exprCASub :: (Refreshable v, Eq v) => (v -> e v) -> c v -> c v
+        exprCASub' :: (Refreshable w, Eq v, Eq w, StringVariable v, StringVariable w) => (v -> e w) -> c v -> c w
 
 instance (ExpressionSub a e, Functor a, Foldable a, Functor e, Monad e) => ExpressionCASub (FOF a) e where
         exprCASub s0 = unhelpSub . helpSub (fmap Right . s0) 
@@ -280,6 +287,28 @@ instance (ExpressionSub a e, Functor a, Foldable a, Functor e, Monad e) => Expre
                 -- helpSub :: (v -> e (Either v v)) -> FOF a v -> FOF a (Either v v)
                 helpSub s (FOFForAll v p) = FOFForAll (Left v) (helpSub (\x -> if x == v then return $ Left v else s x) p)
                 helpSub s (FOFExists v p) = FOFExists (Left v) (helpSub (\x -> if x == v then return $ Left v else s x) p)
+                helpSub s (FOFAtom a) = FOFAtom (exprSub s a)
+                helpSub s (FOFAnd p1 p2) = FOFAnd (helpSub s p1) (helpSub s p2)
+                helpSub s (FOFOr p1 p2) = FOFOr (helpSub s p1) (helpSub s p2)
+                helpSub s (FOFImpl p1 p2) = FOFImpl (helpSub s p1) (helpSub s p2)
+                helpSub s (FOFNot p) = FOFNot (helpSub s p)
+                helpSub _ FOFFalse = FOFFalse
+                helpSub _ FOFTrue = FOFTrue
+                unhelpSub :: forall b. (Eq b, Refreshable b) => FOF a (Either b b) -> FOF a b 
+                unhelpSub f = fmap refresh f
+                        where
+                                refresh :: Either b b -> b   
+                                refresh (Left v) = head $ filter (\x -> not $ freeIn (Right x :: Either b b) f) ( v : freshen v )
+                                refresh (Right v) = v
+        exprCASub' s0 = unhelpSub . helpSub (fmap Right . s0)
+            where
+                -- straight :: v -> w
+                straight = varFromString . varToString 
+                -- helpSub :: (v -> e (Either v v)) -> FOF a v -> FOF a (Either v v)
+                helpSub s (FOFForAll v p) = let v' = Left (straight v) in 
+                        FOFForAll v' (helpSub (\x -> if x == v then return $ v' else s x) p)
+                helpSub s (FOFExists v p) = let v' = Left (straight v) in
+                        FOFExists v' (helpSub (\x -> if x == v then return $ v' else s x) p)
                 helpSub s (FOFAtom a) = FOFAtom (exprSub s a)
                 helpSub s (FOFAnd p1 p2) = FOFAnd (helpSub s p1) (helpSub s p2)
                 helpSub s (FOFOr p1 p2) = FOFOr (helpSub s p1) (helpSub s p2)
@@ -474,6 +503,10 @@ instance ExpressionCASub Condition Expr where
         exprCASub s (ValueCondition vc) = ValueCondition $ exprCASub s vc
         exprCASub s (EqualityCondition v1 v2) = exprEquality (s v1) (s v2)
         exprCASub s (DisequalityCondition v1 v2) = negativeCondition $ exprEquality (s v1) (s v2)
+        exprCASub' s (PermissionCondition pc) = PermissionCondition $ exprCASub' s pc
+        exprCASub' s (ValueCondition vc) = ValueCondition $ exprCASub' s vc
+        exprCASub' s (EqualityCondition v1 v2) = exprEquality (s v1) (s v2)
+        exprCASub' s (DisequalityCondition v1 v2) = negativeCondition $ exprEquality (s v1) (s v2)
 
 makeEquality :: v -> Expr v -> Condition v
 -- ^Given a variable and an expression, generate a condition that

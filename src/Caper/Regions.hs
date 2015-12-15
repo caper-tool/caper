@@ -1,7 +1,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {- Regions -}
 module Caper.Regions where
-import Prelude hiding (mapM_,mapM,concat)
+import Prelude hiding (mapM_,mapM,concat,any,foldl,concatMap)
 import Control.Monad.State hiding (mapM_,mapM,forM_,msum)
 import Control.Monad.Reader hiding (mapM_,mapM,forM_,msum)
 import Control.Monad.Trans.Maybe
@@ -11,6 +11,7 @@ import Data.Traversable
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Maybe
+import Data.List (partition)
 
 import Caper.Utils.NondetClasses
 import Caper.Utils.AliasingMap (AliasMap)
@@ -20,6 +21,7 @@ import Caper.Parser.AST.Annotation (TopLevelGuardDeclr(..))
 
 import Caper.RegionTypes
 import Caper.Logger
+import Caper.Exceptions
 import Caper.ProverDatatypes
 import Caper.Prover -- TODO: move some stuff from Prover to ProverDatatypes?
 import Caper.ProverStates
@@ -208,7 +210,7 @@ cannotAliasStrong r1 r2
                         
 
 -- |Stabilise all regions
-stabiliseRegions :: (ProverM s r m, RegionLenses s, RTCGetter r) =>
+stabiliseRegions :: (ProverM s r m, RegionLenses s, RTCGetter r, MonadRaise m) =>
                         m ()
 stabiliseRegions = do
                         regs <- use regions
@@ -225,7 +227,7 @@ stabiliseRegion reg = if regDirty reg then
                                 return reg -}
 
 -- Stabilise a region
-stabiliseRegion :: (ProverM s r m, RTCGetter r) =>
+stabiliseRegion :: (ProverM s r m, RTCGetter r, MonadRaise m) =>
                         Region -> m Region
 -- Not dirty, so nothing to do!
 stabiliseRegion
@@ -257,7 +259,7 @@ stabiliseRegion r = return $ r {regDirty = False, regState = Nothing}
 -- parametrised region type and guard.
 --
 -- TODO: Account for action conditions
-checkTransitions :: (ProverM s r m) => RegionType -> [Expr VariableID] -> Guard VariableID -> m [GuardedTransition VariableID]
+checkTransitions :: (ProverM s r m, MonadRaise m) => RegionType -> [Expr VariableID] -> Guard VariableID -> m [GuardedTransition VariableID]
 checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem rt)
         where
                 bndVars tr = Set.difference (trVariables tr) (rtParamVars rt)
@@ -268,8 +270,17 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
                         let bvars = Map.elems bvmap
                         let subst = Map.union params $ fmap var bvmap
                         let s v = Map.findWithDefault (error "checkTransitions: variable not found") v subst
+                        let isDynVar = (`Set.member` Set.fromList (concatMap toList [prec, post]))
+                        -- The list of conditions for the transition rule can be divided into:
+                        -- * Static conditions, which are independent of the state transition; and
+                        -- * Dynamic conditions, which may constrain the state transition (and can only depend on values)
+                        let (dyconds, stconds) = partition (any isDynVar) prd 
+                        -- Checking guard compatibility may generate some conditions (as assertions) that may constrain the transition
+                        -- However, since parametrised guards are not yet implemented, that actually can't happen (yet!)
                         -- Now have to check if guard is applicable!
                         guardCompat <- hypothetical $ do
+                                -- assume the static conditions
+                                mapM_ (assume . exprCASub' s) stconds
                                 -- combine guards
                                 gd' <- mergeGuards gd (exprSub s trgd)
                                 assms <- use assumptions
@@ -279,14 +290,13 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
                                         isConsistent
                                     else
                                         return $ Just False
-                        return $ if guardCompat == Just False then [] else
-                                [GuardedTransition bvars FOFTrue (exprSub s prec) (exprSub s post)]
+                        if guardCompat == Just False then return [] else do
+                                cond <- foldlM (\x -> liftM (FOFAnd x . exprCASub' s) . toValueFOF isDynVar) FOFTrue dyconds
+                                return [GuardedTransition bvars cond (exprSub s prec) (exprSub s post)]
 
 -- |Determine a list of possible thread (guarantee) transitions for a given
 -- parametrised region type and guard.
---
--- TODO: Account for action conditions
-checkGuaranteeTransitions :: (ProverM s r m) => RegionType -> [Expr VariableID] -> Guard VariableID -> m [GuardedTransition VariableID]
+checkGuaranteeTransitions :: (ProverM s r m, MonadRaise m) => RegionType -> [Expr VariableID] -> Guard VariableID -> m [GuardedTransition VariableID]
 checkGuaranteeTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem rt)
         where
                 bndVars tr = Set.difference (trVariables tr) (rtParamVars rt)
@@ -297,60 +307,52 @@ checkGuaranteeTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitio
                         let bvars = Map.elems bvmap
                         let subst = Map.union params $ fmap var bvmap
                         let s v = Map.findWithDefault (error "checkGuaranteeTransitions: variable not found") v subst
-                        -- Now have to check if guard is available
-                        guardAvail <- case rtGuardType rt of
-                            ZeroGuardDeclr -> return (Just ())
-                            -- FIXME: THIS NEEDS SOME THOUGHT!
-                            SomeGuardDeclr gdec -> get >>= \ss -> runMaybeT $ flip evalStateT (emptyWithAssertions ss) $ do  
-                                _ <- guardEntailment gdec gd (exprSub s trgd)
-                                return ()
-                        return $ if isNothing guardAvail then [] else
-                                [GuardedTransition bvars FOFTrue (exprSub s prec) (exprSub s post)]
+                        let isDynVar = (`Set.member` Set.fromList (concatMap toList [prec, post]))
+                        -- The list of conditions for the transition rule can be divided into:
+                        -- * Static conditions, which are independent of the state transition; and
+                        -- * Dynamic conditions, which may constrain the state transition (and can only depend on values)
+                        let (dyconds, stconds) = partition (any isDynVar) prd 
+                        -- Consuming the guard may generate some conditions (as assertions) that may constrain the transition
+                        -- However, since parametrised guards are not yet implemented, that actually can't happen (yet!)
+                        -- Now have to check if guard is available.
+                        transitionImpossible <- liftM isNothing $
+                             get >>= \ss -> runMaybeT $ flip evalStateT (emptyWithAssertions ss) $ do
+                                mapM_ (assert . exprCASub' s) stconds
+                                case rtGuardType rt of
+                                    ZeroGuardDeclr -> return ()
+                                    SomeGuardDeclr gdec -> do
+                                            _ <- guardEntailment gdec gd (exprSub s trgd)
+                                            return ()
+                                justCheck
+                        case transitionImpossible of
+                            True -> return []
+                            False -> do
+                                cond <- foldlM (\x -> liftM (FOFAnd x . exprCASub' s) . toValueFOF isDynVar) FOFTrue dyconds
+                                return [GuardedTransition bvars cond (exprSub s prec) (exprSub s post)]
 
-generateGuaranteeCondition :: (ProverM s r m) =>
--- |Type of the region
-    RegionType ->
--- |Parameters for the region
-    [Expr VariableID] ->
--- |Guard for the region
-    Guard VariableID ->
--- |Old state
-    ValueExpression VariableID ->
--- |New state
-    ValueExpression VariableID ->
-        m (Condition VariableID)
+
+toValueFOF :: (MonadRaise m, Monad m) => (v -> Bool) -> Condition v -> m (FOF ValueAtomic v)
+toValueFOF varTest (ValueCondition v) = return v
+toValueFOF varTest (PermissionCondition pc) = case find varTest pc of
+                                Nothing -> error "Caper.Regions.toValueFOF: internal error"
+                                Just v -> raise $ TypeMismatch VTPermission VTValue
+toValueFOF varTest (EqualityCondition v1 v2) = return $ FOFAtom $ VAEq (var v1) (var v2)
+toValueFOF varTest (DisequalityCondition v1 v2) = return $ FOFNot $ FOFAtom $ VAEq (var v1) (var v2)
+
+-- |Generate a 'Condition' that captures the fact that two abstract
+-- states must be related by the guarantee for a region.   
+generateGuaranteeCondition :: (ProverM s r m, MonadRaise m) =>
+    RegionType                      -- ^Type of the region
+    -> [Expr VariableID]            -- ^Parameters for the region
+    -> Guard VariableID             -- ^Guard for the region
+    -> ValueExpression VariableID   -- ^Old state
+    -> ValueExpression VariableID   -- ^New state
+        -> m (Condition VariableID)
 generateGuaranteeCondition rt params gd st0 st1 = do
         transitions <- checkGuaranteeTransitions rt params gd
         rel <- underComputeClosureRelation (rtStateSpace rt) transitions
         return $ ValueCondition (rel st0 st1)
 
--- XXX: I think subVars' and subVars are vestigial.  I can't remember their purpose
-
-subVars' :: (Traversable t, ExpressionSub t e, Expression e) =>
-        (String -> VariableID) -> RegionType -> [e VariableID] -> t RTDVar -> t VariableID
-subVars' frsh rt ps = exprSub s
-        where
-                s v@(RTDVar vn) = Map.findWithDefault (var $ frsh vn) v params
-                params = Map.fromList $ zip (map fst $ rtParameters rt) ps
-
-subVars :: (ProverM s r m, Traversable t, ExpressionSub t e, Expression e) =>
-        RegionType -> [e VariableID] -> t RTDVar -> m (t VariableID)
-subVars rt ps o = do
-                -- determine the substitution
-                subs <- foldrM makeSubs params o
-                let s v = Map.findWithDefault (error "subVars: variable not found") v subs
-                -- apply the substitution
-                return $ exprSub s o
-        where
-                makeSubs vr@(RTDVar vn) mp =
-                        -- determine substitution
-                        case Map.lookup vr params of
-                                (Just e) -> return mp
-                                Nothing -> do
-                                        mt <- liftM var $ freshInternal vn
-                                        return $ Map.insert vr mt mp
-                --params :: Map.Map RTDVar (e VariableID)
-                params = Map.fromList $ zip (map fst $ rtParameters rt) ps
 
 -- |Get the region type and parameters for a region.  If no type is available
 -- (because the variable does not identify a region or the region's type is

@@ -94,7 +94,8 @@ executable Caper
                    Caper.Constants,
                    Caper.Utils.Failure,
                    Caper.Utils.Alternating,
-                   Caper.ProverStates
+                   Caper.ProverStates,
+                   Caper.TransitivityCheck
 
 executable Interpreter
   build-depends:

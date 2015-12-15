@@ -73,13 +73,10 @@ localiseLogicalVars mop = do
 -- The region should also have been stabilised (BEFORE ANY REGIONS HAVE BEEN OPENED!)
 atomicOpenRegion ::
         SymExMonad r s m =>
-        -- |Region identifier 
-        VariableID ->
-        -- |Operation for performing symbolic execution (parametrised by continuation) 
-        (m () -> m ()) ->
-        -- |Continuation
-        m () ->
-          m ()
+        VariableID          -- ^Region identifier
+        -> (m () -> m ())   -- ^Operation for performing symbolic execution (parametrised by continuation)
+        -> m ()             -- ^Continuation
+            -> m ()
 atomicOpenRegion rid ase cont = do
         -- Resolve the region
         regs <- use regions
@@ -154,10 +151,8 @@ availableRegions = do
 -- |Symbolically execute an atomic operation, trying opening
 -- regions.        
 atomicSymEx :: (SymExMonad r s m) =>
--- |Atomic operation (parametrised by continuation
-    (m () -> m ()) ->
--- |Continuation
-    m ()
+    (m () -> m ())  -- ^Atomic operation (parametrised by continuation 
+    -> m ()         -- ^Continuation
      -> m ()
 atomicSymEx ase cont = (ase cont) `mplus` do
             ars <- availableRegions
