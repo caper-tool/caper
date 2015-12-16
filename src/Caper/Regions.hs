@@ -257,8 +257,6 @@ stabiliseRegion r = return $ r {regDirty = False, regState = Nothing}
 
 -- |Determine a list of possible environment (rely) transitions for a given
 -- parametrised region type and guard.
---
--- TODO: Account for action conditions
 checkTransitions :: (ProverM s r m, MonadRaise m) => RegionType -> [Expr VariableID] -> Guard VariableID -> m [GuardedTransition VariableID]
 checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem rt)
         where

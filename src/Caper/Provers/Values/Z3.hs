@@ -67,7 +67,7 @@ valueCheck timeout f = evalZ3With Nothing opts $ do
                 k <- astToString c'
                 assert c'
                 r <- check
-                x <- withModel showModel
+                -- x <- withModel showModel
                 {-case x of
                         (_, Just x') -> error $ k ++ "\n" ++ x'
                         _ -> return ()-}

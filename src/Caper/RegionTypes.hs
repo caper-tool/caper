@@ -104,7 +104,6 @@ data TransitionRule = TransitionRule
                 -- The guard that is required to perform the transition
                 trGuard :: Guard RTDVar,
                 -- Some (pure) predicate that conditions the transition
-                -- (Not Implemented Yet)
                 trPredicate :: [Condition RTDVar],
                 -- An expression describing the state to transition from
                 trPreState :: ValueExpression RTDVar,
