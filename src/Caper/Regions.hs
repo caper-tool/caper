@@ -346,7 +346,14 @@ generateGuaranteeCondition :: (ProverM s r m, MonadRaise m) =>
     -> ValueExpression VariableID   -- ^Old state
     -> ValueExpression VariableID   -- ^New state
         -> m (Condition VariableID)
-generateGuaranteeCondition rt params gd st0 st1 = do
+generateGuaranteeCondition rt params gd st0 st1
+    | rtIsTransitive rt = do
+        transitions <- checkGuaranteeTransitions rt params gd
+        return $ ValueCondition $ foldBy FOFOr FOFFalse $ do
+            GuardedTransition bvars cond e0 e1 <- transitions
+            let c = FOFAnd (FOFAnd (st0 $=$ e0) (st1 $=$ e1)) cond
+            return $ foldr FOFExists c bvars
+    | otherwise = do
         transitions <- checkGuaranteeTransitions rt params gd
         rel <- underComputeClosureRelation (rtStateSpace rt) transitions
         return $ ValueCondition (rel st0 st1)
