@@ -203,21 +203,6 @@ wrapRWST initial fin op = RWST $ \rd s0 -> do
                         return (r, fin t1, w)
 -}
 
--- |Admit the assumptions as assertions
-admitChecks :: (MonadState s m, AssumptionLenses s) => StateT (WithAssertions s) m a -> m a
-admitChecks o = do
-                initial <- get
-                (r, s') <- runStateT o (emptyWithAssertions initial)
-                put $ admitAssertions s'
-                return r
-
-check :: (AssumptionLenses s, MonadLogger m, Provers p, MonadReader p m,
-            MonadIO m, MonadState s m, MonadPlus m) =>
-           StateT (WithAssertions s) m a -> m a
-check c = admitChecks $ do
-                r <- c
-                justCheck
-                return r
 
 -- |Consumes a predicate.  Does not check that the predicate is well-formed.
 -- 

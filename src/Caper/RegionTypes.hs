@@ -1,7 +1,7 @@
 {-# LANGUAGE RankNTypes, BangPatterns, MultiParamTypeClasses #-}
 module Caper.RegionTypes where
 
-import Prelude hiding (notElem, mapM_)
+import Prelude hiding (notElem, mapM_, foldr)
 import Control.Monad hiding (mapM_)
 import Control.Monad.Reader.Class
 import Control.Monad.State hiding (mapM_)
@@ -18,9 +18,14 @@ import Data.IntCast
 import Text.ParserCombinators.Parsec (SourcePos)
 
 import Caper.Utils.SimilarStrings
+import Caper.Utils.NondetClasses
+import Caper.Utils.Alternating
+
 import Caper.FreeVariables
 import Caper.Guards
 import Caper.ProverDatatypes
+import Caper.ProverStates
+import Caper.Prover
 import Caper.Exceptions
 import Caper.Logger
 import qualified Caper.Parser.AST as AST
@@ -52,6 +57,7 @@ data RegionType = RegionType
                 rtGuardType :: AST.TopLevelGuardDeclr,
                 rtStateSpace :: StateSpace,
                 rtTransitionSystem :: [TransitionRule],
+                rtIsTransitive :: Bool,
                 rtInterpretation :: [AST.StateInterpretation]
         }
 
@@ -111,12 +117,12 @@ data TransitionRule = TransitionRule
                 trPostState :: ValueExpression RTDVar
         }
 
-trVariables :: TransitionRule -> Set RTDVar
-trVariables (TransitionRule g prd prec post) = Set.fromList $ toList g ++ toList prec ++ toList post
-
 instance Show TransitionRule where
         show (TransitionRule gd prd prec post) =
                 show gd ++ " : " ++ show prec ++ " ~> " ++ show post
+
+instance FreeVariables TransitionRule RTDVar where
+    foldrFree f b tr = foldr f (foldr f (foldrFree f (foldr f b (trGuard tr)) (trPredicate tr)) (trPreState tr)) (trPostState tr) 
 
 actionToTransitionRule :: (MonadRaise m, Monad m) => [RTDVar] -> AST.Action -> m TransitionRule
 actionToTransitionRule params act@(AST.Action _ conds gds prest postst) =
@@ -218,7 +224,7 @@ checkActionsGuards tlgd@AST.ZeroGuardDeclr = mapM_ $ \a -> let grd = AST.actionG
         contextualise a $            
             unless (null grd) $ raise $ GuardInconsistentWithGuardType (show grd) (show tlgd)
 
-declrsToRegionTypeContext :: (Monad m, MonadRaise m, MonadLogger m) =>
+declrsToRegionTypeContext :: (Monad m, MonadRaise m, MonadLogger m, MonadReader r m, Provers r) =>
         [AST.Declr]
         -- ^ Declarations
         -> m RegionTypeContext
@@ -247,7 +253,9 @@ declrsToRegionTypeContext declrs = do
                     -- precondition for this)
                     let !stateSpace = computeStateSpace interps
                     transitions <- mapM (actionToTransitionRule (map fst params)) acts
-                    let rt = RegionType sp rtnam params gddec stateSpace transitions interps
+                    let rt0 = RegionType sp rtnam params gddec stateSpace transitions False interps
+                    isTrans <- isTransitive rt0
+                    let rt = rt0 { rtIsTransitive = isTrans }
                     accumulate typings (nextRTId + 1)
                         (ac {
                             rtcIds = Map.insert rtnam nextRTId (rtcIds ac),
@@ -255,3 +263,45 @@ declrsToRegionTypeContext declrs = do
                             }) rs
         toParam (s, vt) = (RTDVar s, vt)
 
+isTransitive :: (MonadIO m, MonadLogger m, MonadReader r m, Provers r) =>
+        RegionType -> m Bool
+isTransitive rt = do 
+            m <- runAlternatingT $ dAll [checkForClosure rt tr1 tr2 | tr1 <- rtTransitionSystem rt, tr2 <- rtTransitionSystem rt]
+            return (isJust m)
+
+checkForClosure :: (MonadIO m, MonadPlus m, MonadLogger m, MonadReader r m, Provers r) =>
+        RegionType -> TransitionRule -> TransitionRule -> m ()
+checkForClosure rt tr1 tr2 = flip evalStateT emptyAssumptions $ do
+        -- Generate parameters for the region
+        pmap <- liftM Map.fromList $ forM (rtParameters rt) $ \(param, ptype) -> do
+            v <- newAvar (varToString param)
+            bindVarAs v ptype
+            return (param, v)
+        -- Generate the parameters for the transitions
+        pmap1 <- transParams newAvar pmap tr1
+        pmap2 <- transParams newAvar pmap tr2
+        -- Assume that the conditions hold
+        mapM_ (assume . exprCASub' (sub pmap1)) (trPredicate tr1)
+        mapM_ (assume . exprCASub' (sub pmap2)) (trPredicate tr2)
+        -- Assume that the post-state of tr1 is the pre-state of tr2
+        assumeTrue $ exprSub (sub pmap1) (trPostState tr1) $=$ exprSub (sub pmap2) (trPreState tr2)
+        -- If the assumptions are inconsistent then these transitions cannot happen in sequence
+        -- so we are done.  
+        whenConsistent $ do
+            -- Otherwise, compute (conservatively) the upper bound of the two guards 
+            grd <- conservativeGuardLUBTL (rtGuardType rt)
+                    (exprSub (sub pmap1) (trGuard tr1)) (exprSub (sub pmap2) (trGuard tr2))
+            -- Try to find a third transition that subsumes the sequencing.
+            msum $ flip map (rtTransitionSystem rt) $ \tr3 -> check $ do
+                pmap3 <- transParams newEvar pmap tr3
+                mapM_ (assert . exprCASub' (sub pmap3)) (trPredicate tr3)
+                _ <- guardEntailmentTL (rtGuardType rt) grd (exprSub (sub pmap3) (trGuard tr3))
+                assertTrue $ exprSub (sub pmap1) (trPreState tr1) $=$ exprSub (sub pmap3) (trPreState tr3)
+                assertTrue $ exprSub (sub pmap2) (trPostState tr2) $=$ exprSub (sub pmap3) (trPostState tr3)
+    where
+        transParams new = foldrFreeM (transParam new)
+        transParam new param pmap = if param `Map.member` pmap then return pmap else do
+                        v <- new (varToString param)
+                        return $ Map.insert param v pmap
+        sub :: Map.Map RTDVar VariableID -> RTDVar -> Expr VariableID
+        sub pmap v = toExpr $ Identity $ Map.findWithDefault (error "checkForClosure: variable not found") v pmap 

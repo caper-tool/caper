@@ -11,5 +11,8 @@ class FreeVariables t v | t -> v where
         freeVariables :: (Ord v) => t -> Set.Set v
         freeVariables = foldrFree Set.insert Set.empty
 
+foldrFreeM :: (FreeVariables t v, Eq v, Monad m) => (v -> b -> m b) -> b -> t -> m b
+foldrFreeM f b0 = foldrFree (\v bm -> bm >>= f v) (return b0)
+
 instance (FreeVariables t v) => FreeVariables [t] v where
         foldrFree f = foldr (flip (foldrFree f))

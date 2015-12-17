@@ -10,6 +10,7 @@ import Control.Monad.State
 import Control.Monad
 
 import qualified Caper.TypingContext as TC
+import Caper.Logger
 import Caper.ProverDatatypes
 import Caper.Prover
 import Caper.RegionTypes
@@ -73,6 +74,24 @@ emptyWithAssertions x = WithAssertions x Set.empty []
 -- | Admit all assertions as assumptions 
 admitAssertions :: (AssumptionLenses a) => WithAssertions a -> a
 admitAssertions asts = asts & _withAssrBase . (assumptions %~ (asts ^. assertions ++))  
+
+-- |Admit the assumptions as assertions
+admitChecks :: (MonadState s m, AssumptionLenses s) => StateT (WithAssertions s) m a -> m a
+admitChecks o = do
+                initial <- get
+                (r, s') <- runStateT o (emptyWithAssertions initial)
+                put $ admitAssertions s'
+                return r
+
+check :: (AssumptionLenses s, MonadLogger m, Provers p, MonadReader p m,
+            MonadIO m, MonadState s m, MonadPlus m) =>
+           StateT (WithAssertions s) m a -> m a
+check c = admitChecks $ do
+                r <- c
+                justCheck
+                return r
+
+
 
 {-
 type Assertions = WithAssertions Assumptions

@@ -257,6 +257,13 @@ guardEntailment gt g1 g2 = guardPrimitiveEntailmentM g1 g2 `mplus`
                                 frame1 <- guardPrimitiveEntailmentM g1 gel
                                 guardPrimitiveEntailmentM (guardJoin frame1 ger) g2
 
+guardEntailmentTL :: (MonadPlus m, MonadState s m, AssertionLenses s,
+        MonadLogger m) =>
+                TopLevelGuardDeclr -> Guard VariableID -> Guard VariableID ->
+                        m (Guard VariableID)
+guardEntailmentTL ZeroGuardDeclr _ _ = return emptyGuard
+guardEntailmentTL (SomeGuardDeclr gt) g1 g2 = guardEntailment gt g1 g2
+
 -- |Try to extract a single guard resource, where we don't know the guard type.
 -- Consequently, no rewriting of guards is possible.
 consumeGuardNoType :: (MonadPlus m, MonadState s m, AssertionLenses s,
@@ -329,3 +336,12 @@ conservativeGuardLUB (SumGD _ gd1 gd2) g1 g2 =
         where
             ma = matchesGuardDeclr
 
+-- |Compute an underapproximation of the least upper bound of two guards.
+-- That is, compute a guard that is guaranteed to be entailed by the least
+-- guard that entails both of the provided guards.
+--
+-- PRECONDITION: the guards match the guard type declaration, and the declaration is valid
+conservativeGuardLUBTL :: (MonadState s m, AssumptionLenses s) =>
+        TopLevelGuardDeclr -> Guard VariableID -> Guard VariableID -> m (Guard VariableID)
+conservativeGuardLUBTL ZeroGuardDeclr _ _ = return $ emptyGuard
+conservativeGuardLUBTL (SomeGuardDeclr gd) g1 g2 = conservativeGuardLUB gd g1 g2
