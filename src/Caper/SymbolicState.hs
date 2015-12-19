@@ -114,14 +114,14 @@ showSymbState = do
 printSymbState :: (MonadState SymbState m, MonadReader r m, RTCGetter r, MonadIO m) => m ()
 printSymbState = showSymbState >>= liftIO . putStrLn
 
-instance DebugState SymbState where
+instance RTCGetter r => DebugState SymbState r where
     showState r s = show s ++ "\nRegions:\n" ++ show iregs
         where
             iregs = fmap inform (s ^. regions)
             inform reg = InformedRegion (reg, regTypeInstance reg >>=
                                 \(RegionInstance rtid _) -> return $ (r ^. resolveRType) rtid)
 
-instance DebugState (WithAssertions SymbState) where
+instance RTCGetter r => DebugState (WithAssertions SymbState) r where
     showState r s@(WithAssertions {_withAssrBase = SymbState p vs lvs prds regs oregs}) =
         "Program variables:\n" ++ showPVarBindings vs 
         ++ "Heap:\n" ++ (concat . intersperse "\n" . map showPredicate . toPredicateList) prds ++ "\n"

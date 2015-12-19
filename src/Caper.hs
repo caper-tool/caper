@@ -87,7 +87,7 @@ caperCommand (CLVerify file) = do
         provers <- initProvers
         result <- runOutLogger $ filterLogger logNotProver $ flip runReaderT [StringContext $ "File: \"" ++ file ++ "\"."] $ runRaiseT $ do
             procSpecs <- declrsToProcedureSpecs funDecs
-            rtc <- declrsToRegionTypeContext declrs
+            rtc <- hoist (withReaderT (ProverContext provers)) $ declrsToRegionTypeContext declrs
             liftIO $ print rtc 
             hoist (withReaderT (ProcedureContext procSpecs rtc provers)) $ do
                 logEvent $ InfoEvent "Validating region declarations."

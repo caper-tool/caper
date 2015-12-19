@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell, MultiParamTypeClasses #-}
 module Caper.ProverStates where
 
 import Control.Lens
@@ -13,7 +13,7 @@ import qualified Caper.TypingContext as TC
 import Caper.Logger
 import Caper.ProverDatatypes
 import Caper.Prover
-import Caper.RegionTypes
+-- import Caper.RegionTypes
 
 showAssumptions :: (AssumptionLenses a) => a -> String
 showAssumptions ass = "[" ++ show avars ++ "]\n" ++
@@ -99,10 +99,10 @@ emptyAssertions :: Assumptions -> Assertions
 emptyAssertions = emptyWithAssertions
 -}
 
-class DebugState s where
-    showState :: (RTCGetter r) => r -> s -> String
+class DebugState s r where
+    showState :: r -> s -> String
 
-debugState :: (MonadState s m, MonadReader r m, RTCGetter r, DebugState s, MonadIO m) => m ()
+debugState :: (MonadState s m, MonadReader r m, DebugState s r, MonadIO m) => m ()
 debugState = do
             r <- ask
             s <- get

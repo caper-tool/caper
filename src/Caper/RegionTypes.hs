@@ -66,7 +66,7 @@ instance Contextual RegionType where
                 "In a region type declaration named '" ++ rtRegionTypeName rt ++ "'"
 
 instance Show RegionType where
-        show (RegionType _ nm params gt ss ts interp) =
+        show (RegionType _ nm params gt ss ts _ interp) =
                 "region " ++ nm ++ "(" ++ intercalate "," (map (show . fst) params) ++ ") {\n" ++
                 "  guards : " ++ show gt ++ "\n" ++
                 "  transitions {\n    " ++ intercalate "\n    " (map show ts) ++ "\n  }\n" ++
@@ -224,7 +224,7 @@ checkActionsGuards tlgd@AST.ZeroGuardDeclr = mapM_ $ \a -> let grd = AST.actionG
         contextualise a $            
             unless (null grd) $ raise $ GuardInconsistentWithGuardType (show grd) (show tlgd)
 
-declrsToRegionTypeContext :: (Monad m, MonadRaise m, MonadLogger m, MonadReader r m, Provers r) =>
+declrsToRegionTypeContext :: (MonadIO m, MonadRaise m, MonadLogger m, MonadReader r m, Provers r) =>
         [AST.Declr]
         -- ^ Declarations
         -> m RegionTypeContext

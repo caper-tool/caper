@@ -260,6 +260,7 @@ stabiliseRegion r = return $ r {regDirty = False, regState = Nothing}
 checkTransitions :: (ProverM s r m, MonadRaise m) => RegionType -> [Expr VariableID] -> Guard VariableID -> m [GuardedTransition VariableID]
 checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem rt)
         where
+                bndVars :: TransitionRule -> Set.Set RTDVar
                 bndVars tr = Set.difference (freeVariables tr) (rtParamVars rt)
                 params = Map.fromList $ zip (map fst $ rtParameters rt) ps
                 checkTrans tr@(TransitionRule trgd prd prec post) = do
@@ -297,6 +298,7 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
 checkGuaranteeTransitions :: (ProverM s r m, MonadRaise m) => RegionType -> [Expr VariableID] -> Guard VariableID -> m [GuardedTransition VariableID]
 checkGuaranteeTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem rt)
         where
+                bndVars :: TransitionRule -> Set.Set RTDVar
                 bndVars tr = Set.difference (freeVariables tr) (rtParamVars rt)
                 params = Map.fromList $ zip (map fst $ rtParameters rt) ps
                 checkTrans tr@(TransitionRule trgd prd prec post) = do

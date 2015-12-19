@@ -35,12 +35,12 @@ import Caper.Assertions.Consume
 
 class (MonadRaise m, MonadIO m, MonadLogger m,
         MonadReader r m, Provers r, RTCGetter r, SpecificationContext r,
-        MonadPlus m, MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s,
+        MonadPlus m, MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s r,
         RegionLenses s, MonadDemonic m) => SymExMonad r s m
 
 instance (MonadRaise m, MonadIO m, MonadLogger m,
         MonadReader r m, Provers r, RTCGetter r, SpecificationContext r,
-        MonadPlus m, MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s,
+        MonadPlus m, MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s r,
         RegionLenses s, MonadDemonic m) => SymExMonad r s m
 
 

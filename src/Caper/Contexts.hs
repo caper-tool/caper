@@ -29,3 +29,17 @@ instance RTCGetter ProcedureContext where
         
 instance ECLenses ProcedureContext where
         exceptionContext = pcExceptionContext
+
+data ProverContext = ProverContext {
+        _pvcProverContext :: ProverRecord,
+        _pvcExceptionContext :: [ExceptionContext]
+        }
+makeLenses ''ProverContext
+
+instance Provers ProverContext where
+        permissionsProver = permissionsProver . _pvcProverContext
+        valueProver = valueProver . _pvcProverContext
+
+instance ECLenses ProverContext where
+        exceptionContext = pvcExceptionContext
+
