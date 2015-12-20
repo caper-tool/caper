@@ -351,7 +351,7 @@ generateGuaranteeCondition :: (ProverM s r m, MonadRaise m) =>
 generateGuaranteeCondition rt params gd st0 st1
     | rtIsTransitive rt = do
         transitions <- checkGuaranteeTransitions rt params gd
-        return $ ValueCondition $ foldBy FOFOr FOFFalse $ do
+        return $ ValueCondition $ foldl FOFOr (st0 $=$ st1) $ do
             GuardedTransition bvars cond e0 e1 <- transitions
             let c = FOFAnd (FOFAnd (st0 $=$ e0) (st1 $=$ e1)) cond
             return $ foldr FOFExists c bvars
