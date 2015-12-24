@@ -14,6 +14,8 @@ import Data.Foldable
 import Data.Traversable
 import Data.Typeable
 import Data.Functor.Identity
+import qualified Data.Map as Map
+
 import Caper.FreeVariables
 
 
@@ -23,7 +25,15 @@ class Refreshable v where
 instance Refreshable String where
         freshen s = [ s ++ show x | x <- [0 :: Int ..] ]
 
-
+freshSub :: (Refreshable v, Eq v, Ord v, Foldable f, Foldable g) => f v -> g v -> v -> v
+-- ^Given a collection of variables to refresh, and a colletion that they
+-- should be fresh with respect to, produces a function that substitutes
+-- the old variables for the fresh ones (leaving others alone).  This
+-- substitution should only really be applied to variables in the second collection.
+freshSub rvs wrtvs = \v -> Map.findWithDefault v v (foldl frshmp Map.empty rvs)
+        where
+                frshmp mp v = if Map.member v mp then mp else
+                                Map.insert v (head [vs | vs <- freshen v, vs `notElem` wrtvs]) mp
 
 data Literal a v = LPos (a v) | LNeg (a v) deriving (Functor, Foldable, Traversable)
 

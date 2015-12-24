@@ -267,6 +267,7 @@ isTransitive :: (MonadIO m, MonadLogger m, MonadReader r m, Provers r) =>
         RegionType -> m Bool
 isTransitive rt = do 
             m <- runAlternatingT $ dAll [checkForClosure rt tr1 tr2 | tr1 <- rtTransitionSystem rt, tr2 <- rtTransitionSystem rt]
+            liftIO $ putStrLn $ "Transitivity check " ++ show (isJust m) ++ " for region type " ++ show rt
             return (isJust m)
 
 checkForClosure :: (MonadIO m, MonadPlus m, MonadLogger m, MonadReader r m, Provers r) =>

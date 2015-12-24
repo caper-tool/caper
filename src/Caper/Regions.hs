@@ -239,7 +239,7 @@ stabiliseRegion
                         rt <- lookupRType rtid
                         transitions <- (trace $ "Checking transitions: " ++ show rt ++ " " ++ show ps ++ " " ++ show gd) checkTransitions rt ps gd
                         -- compute the closure relation
-                        tcrel <- computeClosureRelation (rtStateSpace rt) transitions
+                        tcrel <- rely rt transitions -- computeClosureRelation (rtStateSpace rt) transitions
                         -- create a new state variable
                         newStateVar <- newAvar "state"
                         -- assume it is related to the old state
@@ -250,6 +250,16 @@ stabiliseRegion
                                 rti
                                 (Just (var newStateVar))
                                 gd
+                where
+                        rely rt transitions
+                                | rtIsTransitive rt = return $ \x y -> foldr (FOFOr . gtToFOF x y) (FOFAtom $ VAEq x y) transitions
+                                | otherwise = computeClosureRelation (rtStateSpace rt) transitions
+                        gtToFOF :: ValueExpression VariableID -> ValueExpression VariableID -> GuardedTransition VariableID -> FOF ValueAtomic VariableID
+                        gtToFOF x y (GuardedTransition bvs cond e1 e2) =
+                                let sub = freshSub bvs (Set.fromList $ toList x ++ toList y ++ bvs ++ toList cond ++ toList e1 ++ toList e2) in
+                                let sub' = VEVar . sub in
+                                    foldr (FOFExists . sub) (FOFAnd (FOFAnd (FOFAtom $ VAEq x (exprSub sub' e1)) (FOFAtom $ VAEq y (exprSub sub' e2))) (exprCASub sub' cond)) bvs
+                                -- Rename bvs so that they don't clash with variables in x and y (also cond e1 and e2)
 -- In this case, we don't know the region type, or don't know the
 -- region state, in which case we don't know the stabilised region
 -- state.
