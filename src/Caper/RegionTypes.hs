@@ -2,9 +2,9 @@
 module Caper.RegionTypes where
 
 import Prelude hiding (notElem, mapM_, foldr)
-import Control.Monad hiding (mapM_)
+import Control.Monad hiding (mapM_, msum)
 import Control.Monad.Reader.Class
-import Control.Monad.State hiding (mapM_)
+import Control.Monad.State hiding (mapM_, msum)
 import Control.Arrow
 import Data.Map (Map)
 import qualified Data.Map as Map

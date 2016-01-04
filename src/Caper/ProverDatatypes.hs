@@ -7,7 +7,7 @@
 module Caper.ProverDatatypes (
         module Caper.FreeVariables,
         module Caper.ProverDatatypes) where
-import Prelude hiding (sequence,foldl,foldr,elem,mapM_,mapM)
+import Prelude hiding (sequence,foldl,foldr,elem,mapM_,mapM,notElem)
 import Control.Applicative
 import Control.Monad.State hiding (mapM_,mapM)
 import Data.Foldable

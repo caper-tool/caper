@@ -1,7 +1,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {- Regions -}
 module Caper.Regions where
-import Prelude hiding (mapM_,mapM,concat,any,foldl,concatMap)
+import Prelude hiding (mapM_,mapM,concat,any,foldl,concatMap,foldr)
 import Control.Monad.State hiding (mapM_,mapM,forM_,msum)
 import Control.Monad.Reader hiding (mapM_,mapM,forM_,msum)
 import Control.Monad.Trans.Maybe
