@@ -94,7 +94,8 @@ executable Caper
                    Caper.Utils.MonadHoist,
                    Caper.Utils.NondetClasses,
                    Caper.Utils.PMaybe,
-                   Caper.Utils.SimilarStrings
+                   Caper.Utils.SimilarStrings,
+                   Caper.DeductionFailure
 
 executable Interpreter
   build-depends:
