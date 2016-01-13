@@ -1,4 +1,15 @@
-module Caper.DeductionFailure where
+{-# LANGUAGE ExistentialQuantification #-}
+
+module Caper.DeductionFailure(
+    module Caper.Utils.Failure,
+    module Caper.DeductionFailure
+) where
+
+import Caper.Utils.Failure
+
+import Caper.ProverDatatypes
+import Caper.RegionTypes
+import Caper.Prover
 
 data DeductionFailure =
-    MissingRegion
+    forall s. (AssertionLenses s) => MissingRegionByType RTId [Expr VariableID] (ValueExpression VariableID) s

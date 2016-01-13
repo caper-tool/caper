@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE MultiParamTypeClasses, FlexibleContexts #-}
 {- Regions -}
 module Caper.Regions where
 import Prelude hiding (mapM_,mapM,concat,any,foldl,concatMap,foldr)
@@ -24,6 +24,7 @@ import Caper.Logger
 import Caper.Exceptions
 import Caper.ProverDatatypes
 import Caper.Prover -- TODO: move some stuff from Prover to ProverDatatypes?
+import Caper.DeductionFailure
 import Caper.ProverStates
 import Caper.Guards
 import Caper.Transitions
@@ -118,7 +119,7 @@ produceMergeRegion rvar region = do
 -- point to a region.
 consumeRegion :: (MonadState s m, AssertionLenses s, RegionLenses s,
                 MonadReader r m, RTCGetter r,
-                MonadPlus m,
+                MonadPlus m, Failure DeductionFailure m,
                 MonadLogger m) =>
                 RTId                    -- ^Type of the region 
                 -> VariableID           -- ^Identifier variable 
@@ -143,7 +144,8 @@ consumeRegion rtid rid params st = do
                         let crs = filter okRegionType (AM.toRootList regs)
                         (arid, Region _ (Just (RegionInstance _ aparams))
                                                          astate _)
-                                <- chooseFrom crs
+                                <- chooseFrom crs `mplus` 
+                                    (get >>= \s -> failure (MissingRegionByType rtid params st s))
                         -- Bind the identifier
                         assert (EqualityCondition rid arid)
                         bindParams aparams
