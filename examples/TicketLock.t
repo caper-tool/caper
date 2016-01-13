@@ -1,13 +1,9 @@
-// Spin lock
+// Ticket lock
 
 region TLock(r,x) {
   guards NEXT;
   interpretation {
     n : x |-> m &*& (x + 1) |-> n &*& r@(NEXT{ k | k >= m }) &*& m >= n;
-  }
-  interpretation {
-    0 : x |-> 0 &*& r@(UNLOCK);
-    1 : x |-> 1;
   }
   actions {
     NEXT{ k | n <= k, k < m } : n ~> m;
