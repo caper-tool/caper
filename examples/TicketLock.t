@@ -1,7 +1,7 @@
 // Ticket lock
 
 region TLock(r,x) {
-  guards NEXT;
+  guards #NEXT;
   interpretation {
     n : x |-> m &*& (x + 1) |-> n &*& r@(NEXT{ k | k >= m }) &*& m >= n;
   }
