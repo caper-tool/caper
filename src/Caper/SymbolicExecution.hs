@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, ScopedTypeVariables #-}
+{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, ScopedTypeVariables #-}
 module Caper.SymbolicExecution where
 
 import Control.Monad.Trans
@@ -28,6 +28,7 @@ import Caper.Prover
 import Caper.ProverStates
 import Caper.Assertions.Produce
 import Caper.Assertions.Consume
+import Caper.DeductionFailure
 
 {-
     Symbolic execution.
@@ -35,12 +36,14 @@ import Caper.Assertions.Consume
 
 class (MonadRaise m, MonadIO m, MonadLogger m,
         MonadReader r m, Provers r, RTCGetter r, SpecificationContext r,
-        MonadPlus m, MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s r,
+        MonadPlus m, Failure DeductionFailure m,
+        MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s r,
         RegionLenses s, MonadDemonic m) => SymExMonad r s m
 
 instance (MonadRaise m, MonadIO m, MonadLogger m,
         MonadReader r m, Provers r, RTCGetter r, SpecificationContext r,
-        MonadPlus m, MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s r,
+        MonadPlus m, Failure DeductionFailure m,
+        MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s r,
         RegionLenses s, MonadDemonic m) => SymExMonad r s m
 
 

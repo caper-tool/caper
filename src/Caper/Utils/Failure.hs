@@ -2,6 +2,10 @@
 module Caper.Utils.Failure where
 
 import Control.Monad.Trans.Class
+import Control.Monad.State
+import Control.Monad.Reader
+
+-- import Caper.Utils.MonadHoist
 
 
 class Failure e f | f -> e where
@@ -13,5 +17,10 @@ class (Monad m, Failure e m) => OnFailure e m where
     -- pass the failure to the function; if this gives a Just, then execute that
     -- followed by the continuation; otherwise stick with the failure.
 
-instance (Failure e m, Monad m, MonadTrans t) => Failure e (t m) where
-    failure = lift . failure 
+class (MonadTrans t) => FailureLift t where
+
+instance (Failure e m, Monad m) => Failure e (StateT s m) where
+    failure = lift . failure
+
+instance (Failure e m, Monad m) => Failure e (ReaderT s m) where
+    failure = lift . failure
