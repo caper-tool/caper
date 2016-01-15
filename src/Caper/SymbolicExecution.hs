@@ -36,13 +36,13 @@ import Caper.DeductionFailure
 
 class (MonadRaise m, MonadIO m, MonadLogger m,
         MonadReader r m, Provers r, RTCGetter r, SpecificationContext r,
-        MonadPlus m, Failure DeductionFailure m,
+        MonadPlus m, Failure DeductionFailure m, OnFailure DeductionFailure m,
         MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s r,
         RegionLenses s, MonadDemonic m) => SymExMonad r s m
 
 instance (MonadRaise m, MonadIO m, MonadLogger m,
         MonadReader r m, Provers r, RTCGetter r, SpecificationContext r,
-        MonadPlus m, Failure DeductionFailure m,
+        MonadPlus m, Failure DeductionFailure m, OnFailure DeductionFailure m,
         MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s r,
         RegionLenses s, MonadDemonic m) => SymExMonad r s m
 
@@ -171,6 +171,8 @@ createRegionWithParams :: (SymExMonad r s m) =>
     -> m ()
 createRegionWithParams rtid params st = do
         rt <- lookupRType rtid
+        oldRegions <- use openRegions
+        savedLVars <- use logicalVars
         check $ do
             let vars = Set.unions (toSet st : map toSet params)
             bvars <- use boundVars
@@ -178,22 +180,32 @@ createRegionWithParams rtid params st = do
                 declareEvar v
             rid <- newEvar "region"
             -- Create a logical state holding the region parameters
-            -- It might be worth checking that the expressions have the
-            -- appropriate types, but for now I won't.  Hopefully this
-            -- should've been checked already.
-            
             plstate <- foldM (\m (pe, (RTDVar parnam, t)) -> do
                              ev <- letAvar parnam pe
-                             return (Map.insert parnam ev m)) emptyLVars (zip ps (rtParameters rt)) 
-
-
-            oldRegions <- use openRegions
+                             bindVarAs ev t
+                             return (Map.insert parnam ev m)) emptyLVars (zip params (rtParameters rt))
             openRegions %= (rid:)
-            
-            undefined
+            logicalVars .= plstate
+            -- Non-deterministically choose the next interpretation
+            interp' <- msum $ map return (rtInterpretation rt)
+            liftIO $ putStrLn $ "*** Constructing with interp " ++ show interp'
+            -- Assert that we are in this interpretation
+            st1 <- consumeValueExpr (siState interp')
+            forM_ (siConditions interp') consumePure
+            regions . ix rid %= (\r -> r {regState = Just st1, regDirty = True})
+            consumeAssrt (siInterp interp')
+            liftIO $ putStrLn $ "*** Constructed with interp " ++ show interp'
+        logicalVars .= savedLVars
+        openRegions .= oldRegions
     where
         toSet :: (Foldable f, Ord v) => f v -> Set.Set v
         toSet = Set.fromList . toList
+
+missingRegionHandler :: (SymExMonad r s m) => m ()
+missingRegionHandler = retry (return ()) handler
+    where
+        handler (MissingRegionByType rtid params st s) = Just $ createRegionWithParams rtid params st
+        handler _ = Nothing
 
 data ExitMode = EMReturn (Maybe (ValueExpression VariableID)) | EMContinuation
 
