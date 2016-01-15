@@ -8,7 +8,7 @@ import Data.Maybe
 import qualified Data.Map as Map
 import Control.Lens hiding (pre)
 import qualified Data.Set as Set
-import Data.Foldable (forM_)
+import Data.Foldable (forM_, toList, Foldable)
 
 import Caper.Utils.Alternating
 import Caper.Utils.NondetClasses
@@ -131,12 +131,12 @@ atomicOpenRegion rid ase cont = do
                             -- Assert that we are in this interpretation
                             st1 <- consumeValueExpr (siState interp')
                             forM_ (siConditions interp') consumePure
+                            regions . ix rid %= (\r -> r {regState = Just st1, regDirty = True})
                             consumeAssrt (siInterp interp')
                             justCheck -- This isn't needed, but may result in failing faster
                             -- and that the state is guarantee related
                             guardCond <- generateGuaranteeCondition rt ps rg st0 st1
                             assertTrue guardCond
-                            regions . ix rid %= (\r -> r {regState = Just st1, regDirty = True})
                         liftIO $ putStrLn $ "*** Closed with interp " ++ show interp'
                         logicalVars .= savedLVars'
                         openRegions .= oldRegions
@@ -157,10 +157,43 @@ atomicSymEx :: (SymExMonad r s m) =>
     (m () -> m ())  -- ^Atomic operation (parametrised by continuation 
     -> m ()         -- ^Continuation
      -> m ()
-atomicSymEx ase cont = (ase cont) `mplus` do
+atomicSymEx ase cont = ase cont `mplus` do
             ars <- availableRegions
             msum [ atomicOpenRegion r (atomicSymEx ase) cont | r <- ars] 
 
+createRegionWithParams :: (SymExMonad r s m) =>
+    RTId
+    -- ^ Type of the region to create
+    -> [Expr VariableID]
+    -- ^ Parameters of the region -- variables not in the current context with be existentially quantified
+    -> ValueExpression VariableID
+    -- ^ State of the region -- variables not in the current context with be existentially quantified
+    -> m ()
+createRegionWithParams rtid params st = do
+        rt <- lookupRType rtid
+        check $ do
+            let vars = Set.unions (toSet st : map toSet params)
+            bvars <- use boundVars
+            forM_ (vars `Set.difference` bvars) $ \v ->
+                declareEvar v
+            rid <- newEvar "region"
+            -- Create a logical state holding the region parameters
+            -- It might be worth checking that the expressions have the
+            -- appropriate types, but for now I won't.  Hopefully this
+            -- should've been checked already.
+            
+            plstate <- foldM (\m (pe, (RTDVar parnam, t)) -> do
+                             ev <- letAvar parnam pe
+                             return (Map.insert parnam ev m)) emptyLVars (zip ps (rtParameters rt)) 
+
+
+            oldRegions <- use openRegions
+            openRegions %= (rid:)
+            
+            undefined
+    where
+        toSet :: (Foldable f, Ord v) => f v -> Set.Set v
+        toSet = Set.fromList . toList
 
 data ExitMode = EMReturn (Maybe (ValueExpression VariableID)) | EMContinuation
 
@@ -168,7 +201,7 @@ updateContinuation :: (Monad m) => (ExitMode -> m a) -> m a -> (ExitMode -> m a)
 updateContinuation cont newc EMContinuation = newc
 updateContinuation cont newc r = cont r
 
-variableForVExpr :: (MonadState s m, AssumptionLenses s) => String -> ValueExpression VariableID -> m (VariableID)
+variableForVExpr :: (MonadState s m, AssumptionLenses s) => String -> ValueExpression VariableID -> m VariableID
 -- ^Convert a value expression to a variable.  This takes a string to use as the basis
 -- of the variable name.  If the expression is already a variable, it won't introduce
 -- an additional variable.  Otherwise, it creates a new assumption variable and assumes
