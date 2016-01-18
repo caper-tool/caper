@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE MultiParamTypeClasses, FlexibleContexts #-}
 {- Regions -}
 module Caper.Regions where
 import Prelude hiding (mapM_,mapM,concat,any,foldl,concatMap,foldr)
@@ -24,6 +24,7 @@ import Caper.Logger
 import Caper.Exceptions
 import Caper.ProverDatatypes
 import Caper.Prover -- TODO: move some stuff from Prover to ProverDatatypes?
+import Caper.DeductionFailure
 import Caper.ProverStates
 import Caper.Guards
 import Caper.Transitions
@@ -118,7 +119,7 @@ produceMergeRegion rvar region = do
 -- point to a region.
 consumeRegion :: (MonadState s m, AssertionLenses s, RegionLenses s,
                 MonadReader r m, RTCGetter r,
-                MonadPlus m,
+                MonadPlus m, Failure DeductionFailure m,
                 MonadLogger m) =>
                 RTId                    -- ^Type of the region 
                 -> VariableID           -- ^Identifier variable 
@@ -143,7 +144,8 @@ consumeRegion rtid rid params st = do
                         let crs = filter okRegionType (AM.toRootList regs)
                         (arid, Region _ (Just (RegionInstance _ aparams))
                                                          astate _)
-                                <- chooseFrom crs
+                                <- chooseFrom crs `mplus` 
+                                    (get >>= \s -> failure (MissingRegionByType rtid params st s))
                         -- Bind the identifier
                         assert (EqualityCondition rid arid)
                         bindParams aparams
@@ -281,8 +283,8 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
                         let s v = Map.findWithDefault (error "checkTransitions: variable not found") v subst
                         let isDynVar = (`Set.member` Set.fromList (concatMap toList [prec, post]))
                         -- The list of conditions for the transition rule can be divided into:
-                        -- * Static conditions, which are independent of the state transition; and
-                        -- * Dynamic conditions, which may constrain the state transition (and can only depend on values)
+                        -- - Static conditions, which are independent of the state transition; and
+                        -- - Dynamic conditions, which may constrain the state transition (and can only depend on values)
                         let (dyconds, stconds) = partition (any isDynVar) prd 
                         -- Checking guard compatibility may generate some conditions (as assertions) that may constrain the transition
                         -- However, since parametrised guards are not yet implemented, that actually can't happen (yet!)
@@ -319,8 +321,8 @@ checkGuaranteeTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitio
                         let s v = Map.findWithDefault (error "checkGuaranteeTransitions: variable not found") v subst
                         let isDynVar = (`Set.member` Set.fromList (concatMap toList [prec, post]))
                         -- The list of conditions for the transition rule can be divided into:
-                        -- * Static conditions, which are independent of the state transition; and
-                        -- * Dynamic conditions, which may constrain the state transition (and can only depend on values)
+                        -- - Static conditions, which are independent of the state transition; and
+                        -- - Dynamic conditions, which may constrain the state transition (and can only depend on values)
                         let (dyconds, stconds) = partition (any isDynVar) prd 
                         -- Consuming the guard may generate some conditions (as assertions) that may constrain the transition
                         -- However, since parametrised guards are not yet implemented, that actually can't happen (yet!)

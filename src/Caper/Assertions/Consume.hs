@@ -18,6 +18,7 @@ import qualified Caper.SymbolicState as SS
 import Caper.Regions (RegionLenses)
 import qualified Caper.Regions as R
 import Caper.RegionTypes
+import Caper.DeductionFailure
 import qualified Caper.Guards as G
 import Caper.Assertions.Generate
 import Caper.Assertions.Check
@@ -125,18 +126,19 @@ consumeRegion :: (MonadState s m, AssertionLenses s, RegionLenses s,
                 SymbStateLenses s,
                 MonadReader r m, RTCGetter r,
                 MonadRaise m, MonadLogger m,
-                MonadPlus m) =>
+                MonadPlus m, Failure DeductionFailure m) =>
         RegionAssrt -> m ()
 consumeRegion regn@(Region sp rtn ridv lrps rse) = contextualise regn $
         do
                 rtid <- lookupRTNameE rtn
-                rid <- addContext
-                        (StringContext $ "The region identifier '" ++ ridv ++ "'") $
-                        consumeRegionVariable (Variable sp ridv)
                 params <- mapM consumeAnyExpr lrps
                 checkRegionParams rtid (zip params lrps)
                 st <- consumeValueExpr rse
                 bindVarsAsE st VTValue
+                rid <- addContext
+                        (StringContext $ "The region identifier '" ++ ridv ++ "'") $
+                        consumeRegionVariable (Variable sp ridv) `mplus` 
+                            (get >>= failure . MissingRegionByType rtid params st)
                 R.consumeRegion rtid rid params st
 
 -- |Consume a guard assertion.
@@ -168,7 +170,7 @@ consumePredicate pa = contextualise pa $
 
 consumeSpatial :: (MonadState s m, AssertionLenses s, RegionLenses s,
                 SymbStateLenses s, MonadReader r m, RTCGetter r,
-                MonadRaise m, MonadLogger m, MonadPlus m) =>
+                MonadRaise m, MonadLogger m, MonadPlus m, Failure DeductionFailure m) =>
         SpatialAssrt -> m ()
 consumeSpatial (SARegion a) = consumeRegion a
 consumeSpatial (SAPredicate a) = consumePredicate a
@@ -177,7 +179,7 @@ consumeSpatial (SAGuards a) = consumeGuards a
 
 consumeAssrt :: (MonadState s m, AssertionLenses s, RegionLenses s,
                 SymbStateLenses s, MonadReader r m, RTCGetter r, Provers r,
-                MonadRaise m, MonadLogger m, MonadPlus m, MonadDemonic m,
+                MonadRaise m, MonadLogger m, MonadPlus m, Failure DeductionFailure m, MonadDemonic m,
                 MonadIO m) =>
         Assrt -> m ()
 consumeAssrt (AssrtPure sp a) = consumePure a

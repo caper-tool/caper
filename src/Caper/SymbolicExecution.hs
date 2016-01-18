@@ -1,4 +1,4 @@
-{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, ScopedTypeVariables #-}
+{-# LANGUAGE MultiParamTypeClasses, FlexibleInstances, FlexibleContexts, ScopedTypeVariables #-}
 module Caper.SymbolicExecution where
 
 import Control.Monad.Trans
@@ -8,7 +8,7 @@ import Data.Maybe
 import qualified Data.Map as Map
 import Control.Lens hiding (pre)
 import qualified Data.Set as Set
-import Data.Foldable (forM_)
+import Data.Foldable (forM_, toList, Foldable)
 
 import Caper.Utils.Alternating
 import Caper.Utils.NondetClasses
@@ -28,6 +28,7 @@ import Caper.Prover
 import Caper.ProverStates
 import Caper.Assertions.Produce
 import Caper.Assertions.Consume
+import Caper.DeductionFailure
 
 {-
     Symbolic execution.
@@ -35,12 +36,14 @@ import Caper.Assertions.Consume
 
 class (MonadRaise m, MonadIO m, MonadLogger m,
         MonadReader r m, Provers r, RTCGetter r, SpecificationContext r,
-        MonadPlus m, MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s r,
+        MonadPlus m, Failure DeductionFailure m, OnFailure DeductionFailure m,
+        MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s r,
         RegionLenses s, MonadDemonic m) => SymExMonad r s m
 
 instance (MonadRaise m, MonadIO m, MonadLogger m,
         MonadReader r m, Provers r, RTCGetter r, SpecificationContext r,
-        MonadPlus m, MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s r,
+        MonadPlus m, Failure DeductionFailure m, OnFailure DeductionFailure m,
+        MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s r,
         RegionLenses s, MonadDemonic m) => SymExMonad r s m
 
 
@@ -128,12 +131,12 @@ atomicOpenRegion rid ase cont = do
                             -- Assert that we are in this interpretation
                             st1 <- consumeValueExpr (siState interp')
                             forM_ (siConditions interp') consumePure
+                            regions . ix rid %= (\r -> r {regState = Just st1, regDirty = True})
                             consumeAssrt (siInterp interp')
                             justCheck -- This isn't needed, but may result in failing faster
                             -- and that the state is guarantee related
                             guardCond <- generateGuaranteeCondition rt ps rg st0 st1
                             assertTrue guardCond
-                            regions . ix rid %= (\r -> r {regState = Just st1, regDirty = True})
                         liftIO $ putStrLn $ "*** Closed with interp " ++ show interp'
                         logicalVars .= savedLVars'
                         openRegions .= oldRegions
@@ -154,10 +157,67 @@ atomicSymEx :: (SymExMonad r s m) =>
     (m () -> m ())  -- ^Atomic operation (parametrised by continuation 
     -> m ()         -- ^Continuation
      -> m ()
-atomicSymEx ase cont = (ase cont) `mplus` do
+atomicSymEx ase cont = ase cont `mplus` do
             ars <- availableRegions
             msum [ atomicOpenRegion r (atomicSymEx ase) cont | r <- ars] 
 
+createRegionWithParams :: (SymExMonad r s m) =>
+    RTId
+    -- ^ Type of the region to create
+    -> [Expr VariableID]
+    -- ^ Parameters of the region excluding the region identifier
+    -- -- variables not in the current context with be existentially quantified
+    -> ValueExpression VariableID
+    -- ^ State of the region -- variables not in the current context with be existentially quantified
+    -> m ()
+createRegionWithParams rtid params st = do
+        rt <- lookupRType rtid
+        oldRegions <- use openRegions
+        savedLVars <- use logicalVars
+        check $ do
+            let vars = Set.unions (toSet st : map toSet params)
+            bvars <- use boundVars
+            forM_ (vars `Set.difference` bvars) $ \v ->
+                declareEvar v
+            rid <- newEvar "region"
+            -- Create a logical state holding the region parameters
+            let (RTDVar ridparam, VTRegionID) = head (rtParameters rt)
+            bindVarAs rid VTRegionID
+            let plstate0 = Map.insert ridparam rid emptyLVars
+            plstate <- foldM (\m (pe, (RTDVar parnam, t)) -> do
+                             ev <- letAvar parnam pe
+                             bindVarAs ev t
+                             return (Map.insert parnam ev m))
+                        plstate0 (zip params (tail $ rtParameters rt))
+            openRegions %= (rid:)
+            logicalVars .= plstate
+            -- Non-deterministically choose the next interpretation
+            interp' <- msum $ map return (rtInterpretation rt)
+            liftIO $ putStrLn $ "*** Constructing with interp " ++ show interp'
+            -- Assert that we are in this interpretation
+            st1 <- consumeValueExpr (siState interp')
+            forM_ (siConditions interp') consumePure
+            regions %= AM.insert rid Region {
+                regDirty = True,
+                regTypeInstance = (Just (RegionInstance rtid params)),
+                regState = (Just st1),
+                regGuards = rtFullGuard rt}
+            consumeAssrt (siInterp interp')
+            liftIO $ putStrLn $ "*** Constructed with interp " ++ show interp'
+        logicalVars .= savedLVars
+        openRegions .= oldRegions
+    where
+        toSet :: (Foldable f, Ord v) => f v -> Set.Set v
+        toSet = Set.fromList . toList
+
+missingRegionHandler :: (SymExMonad r s m) => m ()
+missingRegionHandler = retry (liftIO $ putStrLn "registered missing region handler") handler
+    where
+        handler (MissingRegionByType rtid params st s) = Just $ do
+                liftIO $ putStrLn "invoked missing region handler"
+                createRegionWithParams rtid params st
+                liftIO $ putStrLn "created region"
+        handler _ = Nothing
 
 data ExitMode = EMReturn (Maybe (ValueExpression VariableID)) | EMContinuation
 
@@ -165,7 +225,7 @@ updateContinuation :: (Monad m) => (ExitMode -> m a) -> m a -> (ExitMode -> m a)
 updateContinuation cont newc EMContinuation = newc
 updateContinuation cont newc r = cont r
 
-variableForVExpr :: (MonadState s m, AssumptionLenses s) => String -> ValueExpression VariableID -> m (VariableID)
+variableForVExpr :: (MonadState s m, AssumptionLenses s) => String -> ValueExpression VariableID -> m VariableID
 -- ^Convert a value expression to a variable.  This takes a string to use as the basis
 -- of the variable name.  If the expression is already a variable, it won't introduce
 -- an additional variable.  Otherwise, it creates a new assumption variable and assumes
@@ -245,6 +305,7 @@ symbolicExecute stmt cont = do
                                 forM_ (zip params args) $ \(param, arg) -> do
                                         paramVar <- aexprToVExpr arg >>= variableForVExpr param
                                         logicalVars . at param ?= paramVar
+                                missingRegionHandler
                                 -- Consume the precondition
                                 -- TODO: Eventually it might be good to be lazier about stabilising regions
                                 when stabiliseBeforeConsumePrecondition
@@ -293,6 +354,7 @@ symbolicExecute stmt cont = do
                         savedLVars <- programVarsToLogicalVars
                         when stabiliseBeforeConsumeInvariant stabiliseRegions
                         liftIO $ putStrLn $ "Consuming invariant: " ++ show inv
+                        missingRegionHandler
                         debugState
                         contextualise "Consuming invariant" $
                             check $ consumeAssrt inv
@@ -363,6 +425,7 @@ checkProcedure fd@(FunctionDeclr sp n opre opost args s) =
                             Just rv -> assumeTrue (VAEq (var retVar) rv)
                             _ -> return ()
                         logicalVars %= Map.insert returnVariableName retVar
+                        missingRegionHandler
                         when stabiliseBeforeConsumePostcondition stabiliseRegions
                         debugState
                         check $ consumeAssrt post

@@ -11,6 +11,7 @@ import Data.Foldable
 import Data.Maybe
 
 import Caper.Utils.Alternating
+import Caper.Utils.Failure
 
 import qualified Caper.Parser.AST.Annotation as AST
 import Caper.Parser.AST.Annotation (StateInterpretation(..))
@@ -20,7 +21,6 @@ import Caper.Regions
 import Caper.SymbolicState
 import Caper.Exceptions
 import Caper.Logger
-import Caper.Assertions.Produce
 import Caper.Prover
 import Caper.ProverStates
 import Caper.Assertions.Check
