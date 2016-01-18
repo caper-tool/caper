@@ -283,8 +283,8 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
                         let s v = Map.findWithDefault (error "checkTransitions: variable not found") v subst
                         let isDynVar = (`Set.member` Set.fromList (concatMap toList [prec, post]))
                         -- The list of conditions for the transition rule can be divided into:
-                        -- * Static conditions, which are independent of the state transition; and
-                        -- * Dynamic conditions, which may constrain the state transition (and can only depend on values)
+                        -- - Static conditions, which are independent of the state transition; and
+                        -- - Dynamic conditions, which may constrain the state transition (and can only depend on values)
                         let (dyconds, stconds) = partition (any isDynVar) prd 
                         -- Checking guard compatibility may generate some conditions (as assertions) that may constrain the transition
                         -- However, since parametrised guards are not yet implemented, that actually can't happen (yet!)
@@ -321,8 +321,8 @@ checkGuaranteeTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitio
                         let s v = Map.findWithDefault (error "checkGuaranteeTransitions: variable not found") v subst
                         let isDynVar = (`Set.member` Set.fromList (concatMap toList [prec, post]))
                         -- The list of conditions for the transition rule can be divided into:
-                        -- * Static conditions, which are independent of the state transition; and
-                        -- * Dynamic conditions, which may constrain the state transition (and can only depend on values)
+                        -- - Static conditions, which are independent of the state transition; and
+                        -- - Dynamic conditions, which may constrain the state transition (and can only depend on values)
                         let (dyconds, stconds) = partition (any isDynVar) prd 
                         -- Consuming the guard may generate some conditions (as assertions) that may constrain the transition
                         -- However, since parametrised guards are not yet implemented, that actually can't happen (yet!)
