@@ -16,3 +16,6 @@ foldrFreeM f b0 = foldrFree (\v bm -> bm >>= f v) (return b0)
 
 instance (FreeVariables t v) => FreeVariables [t] v where
         foldrFree f = foldr (flip (foldrFree f))
+        
+instance (FreeVariables t1 v, FreeVariables t2 v) => FreeVariables (t1, t2) v where
+        foldrFree f z (x, y) = foldrFree f (foldrFree f z y) x  

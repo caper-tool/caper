@@ -12,7 +12,7 @@ region SLock(r,x) {
   }
 }
 
-/*
+
 function makeLock()
   requires true;
   ensures SLock(r,ret,0) &*& r@(LOCK[1p]); {
@@ -20,7 +20,7 @@ function makeLock()
     [v] := 0;
     return v;
 }
-*/
+
 
 function lock(x)
   requires SLock(r,x,_) &*& r@(LOCK[p]);
