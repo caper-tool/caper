@@ -82,6 +82,9 @@ rtParamNames :: RegionType -> [String]
 -- ^Get a the list of parameter names for the region type.
 rtParamNames = map (rtdvStr . fst) . rtParameters
 
+rtFullGuard :: RegionType -> Guard VariableID
+rtFullGuard = fullGuard . rtWeakGT
+
 -- StateSpace
 
 -- ssLowerBound and ssUpperBound are the (inclusive) lower

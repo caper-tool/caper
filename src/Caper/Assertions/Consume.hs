@@ -131,13 +131,14 @@ consumeRegion :: (MonadState s m, AssertionLenses s, RegionLenses s,
 consumeRegion regn@(Region sp rtn ridv lrps rse) = contextualise regn $
         do
                 rtid <- lookupRTNameE rtn
-                rid <- addContext
-                        (StringContext $ "The region identifier '" ++ ridv ++ "'") $
-                        consumeRegionVariable (Variable sp ridv)
                 params <- mapM consumeAnyExpr lrps
                 checkRegionParams rtid (zip params lrps)
                 st <- consumeValueExpr rse
                 bindVarsAsE st VTValue
+                rid <- addContext
+                        (StringContext $ "The region identifier '" ++ ridv ++ "'") $
+                        consumeRegionVariable (Variable sp ridv) `mplus` 
+                            (get >>= failure . MissingRegionByType rtid params st)
                 R.consumeRegion rtid rid params st
 
 -- |Consume a guard assertion.
