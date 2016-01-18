@@ -202,9 +202,11 @@ createRegionWithParams rtid params st = do
         toSet = Set.fromList . toList
 
 missingRegionHandler :: (SymExMonad r s m) => m ()
-missingRegionHandler = retry (return ()) handler
+missingRegionHandler = retry (liftIO $ print "foo") handler
     where
-        handler (MissingRegionByType rtid params st s) = Just $ createRegionWithParams rtid params st
+        handler (MissingRegionByType rtid params st s) = Just $ do
+                liftIO $ print "bar"
+                createRegionWithParams rtid params st
         handler _ = Nothing
 
 data ExitMode = EMReturn (Maybe (ValueExpression VariableID)) | EMContinuation
@@ -293,6 +295,7 @@ symbolicExecute stmt cont = do
                                 forM_ (zip params args) $ \(param, arg) -> do
                                         paramVar <- aexprToVExpr arg >>= variableForVExpr param
                                         logicalVars . at param ?= paramVar
+                                missingRegionHandler
                                 -- Consume the precondition
                                 -- TODO: Eventually it might be good to be lazier about stabilising regions
                                 when stabiliseBeforeConsumePrecondition
@@ -341,6 +344,7 @@ symbolicExecute stmt cont = do
                         savedLVars <- programVarsToLogicalVars
                         when stabiliseBeforeConsumeInvariant stabiliseRegions
                         liftIO $ putStrLn $ "Consuming invariant: " ++ show inv
+                        missingRegionHandler
                         debugState
                         contextualise "Consuming invariant" $
                             check $ consumeAssrt inv
@@ -411,6 +415,7 @@ checkProcedure fd@(FunctionDeclr sp n opre opost args s) =
                             Just rv -> assumeTrue (VAEq (var retVar) rv)
                             _ -> return ()
                         logicalVars %= Map.insert returnVariableName retVar
+                        missingRegionHandler
                         when stabiliseBeforeConsumePostcondition stabiliseRegions
                         debugState
                         check $ consumeAssrt post

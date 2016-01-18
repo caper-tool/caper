@@ -17,10 +17,11 @@ class (Monad m, Failure e m) => OnFailure e m where
     -- pass the failure to the function; if this gives a Just, then execute that
     -- followed by the continuation; otherwise stick with the failure.
 
-class (MonadTrans t) => FailureLift t where
-
 instance (Failure e m, Monad m) => Failure e (StateT s m) where
     failure = lift . failure
 
-instance (Failure e m, Monad m) => Failure e (ReaderT s m) where
+instance (Failure e m, Monad m) => Failure e (ReaderT r m) where
     failure = lift . failure
+
+instance (OnFailure e m, Monad m) => OnFailure e (StateT s m) where
+    retry a b = StateT $ \s -> retry (runStateT a s) (\e -> b e >>= Just . flip runStateT s)
