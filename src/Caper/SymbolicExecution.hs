@@ -185,7 +185,7 @@ createRegionWithParams rtid params st = do
             bindVarAs rid VTRegionID
             let plstate0 = Map.insert ridparam rid emptyLVars
             plstate <- foldM (\m (pe, (RTDVar parnam, t)) -> do
-                             ev <- letAvar parnam pe
+                             ev <- letEvar parnam pe
                              bindVarAs ev t
                              return (Map.insert parnam ev m))
                         plstate0 (zip params (tail $ rtParameters rt))

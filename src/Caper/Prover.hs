@@ -77,7 +77,8 @@ module Caper.Prover(
         declareEvar,
         newEvar,
         freshNamedVar,
-        letAvar
+        letAvar,
+        letEvar
         ) where
 import Prelude hiding (sequence,foldl,foldr,mapM_,mapM,elem,notElem,any,all)
 import qualified Data.Map as Map
@@ -509,7 +510,23 @@ letAvar vname e = do
                     v <- newAvar vname
                     assume $ PermissionCondition $ FOFAtom $ PAEq (var v) pe
                     return v
-                 
+
+-- |Bind an assertion variable to an expression.
+-- If the expression is just a variable, then that is used.
+-- Otherwise, it asserts the existence of a variable whose value is equal to the given expression.
+-- PRECONDITION: all variables in the expression are in scope (avars or evars)
+letEvar :: (MonadState s m, AssertionLenses s, MonadLogger m) => String -> Expr VariableID -> m VariableID
+letEvar vname (VariableExpr v) = return v
+letEvar vname (ValueExpr (VEVar v)) = return v
+letEvar vname (ValueExpr ve) = do
+                v <- newEvar vname
+                assert $ ValueCondition $ FOFAtom $ VAEq (var v) ve
+                return v
+letEvar vname (PermissionExpr (PEVar v)) = return v
+letEvar vname (PermissionExpr pe) = do
+                v <- newEvar vname
+                assert $ PermissionCondition $ FOFAtom $ PAEq (var v) pe
+                return v
 
 freshNamedVar :: (MonadState s m, AssumptionLenses s) => String -> m VariableID
 -- ^Generate a fresh named variable with a name similar to the one given.
