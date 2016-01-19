@@ -1,5 +1,5 @@
 // NAME: test fork/join 1
-// RESULT: ACCEPT
+// RESULT: REJECT
 
 region Join(r,x) {
   guards SET;
