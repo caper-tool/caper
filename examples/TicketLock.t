@@ -38,6 +38,6 @@ function lock(x)
 function unlock(x)
   requires TLock(r,x,n) &*& r@(TAKE(n));
   ensures TLock(r,x,_); {
-    v = [x + 1];
+    v := [x + 1];
     [x + 1] := v + 1;
 }
