@@ -399,12 +399,12 @@ pureAssertion = buildExpressionParser pureOperators pureTerm
 pureOperators = [ [Prefix (do { pos <- getPosition; reservedOp "!"; return (NotBAssrt pos            )})          ]
              ]
 
-pureTerm =  parens pureAssertion
+pureTerm =  try (parens pureAssertion)
         <|> (do { pos <- getPosition; reserved "true"; return (ConstBAssrt pos True)})
         <|> (do { pos <- getPosition; reserved "false"; return (ConstBAssrt pos False)})
-        <|> try (binaryVariableAssertion)
+        <|> try (binaryValueAssertion)
         <|> try (binaryPermissionAssertion)
-        <|> binaryValueAssertion
+        <|> binaryVariableAssertion
 
 binaryVariableAssertion =
   do pos <- getPosition
