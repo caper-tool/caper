@@ -97,7 +97,11 @@ pIdentifier =
      return $ s : r
 
 parser :: Parser [Declr]
-parser = whiteSpace >> sequenceOfDeclr
+parser = do
+    whiteSpace
+    decs <- sequenceOfDeclr
+    eof
+    return decs
 
 sequenceOfDeclr :: Parser [Declr]
 sequenceOfDeclr = sepBy declaration whiteSpace
