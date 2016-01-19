@@ -1,4 +1,4 @@
-// NAME: test fork/join 1
+// NAME: test fork/join 3
 // RESULT: REJECT
 
 region Join(r,x) {
