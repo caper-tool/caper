@@ -9,7 +9,7 @@ region TLock(r,x) {
     NEXT{ k | n <= k, k < m } : n ~> m;
   }
 }
-/*
+
 function makeLock()
   requires true;
   ensures TLock(r,ret,0); {
@@ -17,7 +17,7 @@ function makeLock()
     [v + 0] := 0;
     [v + 0] := 0;
     return v;
-}*/
+}
 
 function lock(x)
   requires TLock(r,x,_);

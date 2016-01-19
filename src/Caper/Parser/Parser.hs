@@ -148,6 +148,7 @@ guardDeclarationOperators = [ [Infix  (do { pos <- getPosition; reservedOp "*"; 
 guardDeclarationTerm =  parens guardDeclaration
                     <|> permissionGuardDeclaration
                     <|> namedGuardDeclaration
+                    <|> parametrisedGuardDeclaration
 
 permissionGuardDeclaration =
   do pos <- getPosition
@@ -159,6 +160,12 @@ namedGuardDeclaration =
   do pos <- getPosition
      n   <- identifier
      return $ NamedGD pos n
+
+parametrisedGuardDeclaration =
+  do pos <- getPosition
+     reservedOp "#"
+     n   <- identifier
+     return $ ParametrisedGD pos n
 
 interpretation :: Parser StateInterpretation
 interpretation =
@@ -378,7 +385,7 @@ assertionAux = buildExpressionParser assertionOperators assertionTerm
 assertionOperators = [ [Infix  (do { pos <- getPosition; reservedOp "&*&"; return (AssrtConj pos)}) AssocLeft]
                      ]
 
-assertionTerm =  parens assertion
+assertionTerm =  try (parens assertion)
              <|> try (do { pos <- getPosition; a <- spatialAssertion; return (AssrtSpatial pos a)})
              <|> (do { pos <- getPosition; a <- pureAssertion; return (AssrtPure pos a)})
 
@@ -483,7 +490,10 @@ variablePermission =
      return $ VarPermExpr pos ve
 
 spatialAssertion :: Parser SpatialAssrt
-spatialAssertion =  try regionAssertion
+spatialAssertion =  (try (parens spatialAssertionAux) <|> spatialAssertionAux)
+
+spatialAssertionAux :: Parser SpatialAssrt
+spatialAssertionAux =  try regionAssertion
                 <|> try cellAssertion
                 <|> try predicate
                 <|> guards
@@ -592,6 +602,15 @@ assertionParser = whiteSpace >> assertion
 parseAssertion :: String -> Assrt
 parseAssertion str =
   case parse assertionParser "" str of
+    Left e  -> error $ show e
+    Right r -> r
+
+functionParser :: Parser FunctionDeclr
+functionParser = whiteSpace >> function
+
+parseFunction :: String -> FunctionDeclr
+parseFunction str =
+  case parse functionParser "" str of
     Left e  -> error $ show e
     Right r -> r
 
