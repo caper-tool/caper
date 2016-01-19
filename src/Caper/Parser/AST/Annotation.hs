@@ -197,13 +197,15 @@ instance Show Predicate where
         show (Predicate _ p args) = p ++ "(" ++ intercalate "," (map show args) ++ ")"
 
 -- |Guard assertions
-data Guard = NamedGuard SourcePos String                  -- ^Simple named guard
-           | PermGuard SourcePos String PermExpr          -- ^Guard with permission
-           | ParamGuard SourcePos String [AnyExpr]       -- ^Parametrised guard
+data Guard = NamedGuard SourcePos String                          -- ^Simple named guard
+           | PermGuard SourcePos String PermExpr                  -- ^Guard with permission
+           | ParamGuard SourcePos String [AnyExpr]                -- ^Parametrised guard
+           | ParamSetGuard SourcePos String [AnyExpr] [PureAssrt] -- ^Parametrised set guard
 instance Show Guard where
         show (NamedGuard _ n) = n
         show (PermGuard _ n pe) = n ++ "[" ++ show pe ++ "]"
         show (ParamGuard _ n paras) = n ++ "(" ++ intercalate "," (map show paras) ++ ")"
+        show (ParamSetGuard _ n paras asserts ) = n ++ "{" ++ intercalate "," (map show paras) ++ "|" ++ intercalate "," (map show asserts) ++ "}"
 instance FreeVariables Guard VarExpr where
     foldrFree _ x (NamedGuard{}) = x
     foldrFree f x (PermGuard _ _ pe) = foldrFree f x pe

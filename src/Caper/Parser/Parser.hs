@@ -560,7 +560,10 @@ guard =
      case pe of
        Nothing -> do paras <- optionMaybe $ parens (sepBy anyExpression comma)
                      case paras of
-                       Nothing -> return $ NamedGuard pos n
+                       Nothing -> do param <- optionMaybe $ braces (do { s <- sepBy anyExpression2 comma; reservedOp "|"; c <- sepBy pureAssertion comma; return (s, c) })
+                                     case param of
+                                       Nothing -> return $ NamedGuard pos n
+                                       Just (s, c)  -> return $ ParamSetGuard pos n s c
                        Just m  -> return $ ParamGuard pos n m
        Just l  -> return $ PermGuard pos n l
 
@@ -572,6 +575,13 @@ anyExpression =  try (do { e <- variableExpression; checkNext; return (AnyVar e)
         where
                 checkNext = lookAhead (try (comma <|> semi <|> symbol ")"))
 
+-- |Parse an 'AnyExpr', provided it's followed by ',' or '|'.
+anyExpression2 :: Parser AnyExpr
+anyExpression2 =  try (do { e <- variableExpression; checkNext; return (AnyVar e) })
+              <|> try (do { e <- permissionExpression; checkNext; return (AnyPerm e) })
+              <|> (do { e <- valueExpression; checkNext; return (AnyVal e) })
+        where
+                checkNext = lookAhead (try (comma <|> symbol "|"))
 
 spatialAssertionParser :: Parser SpatialAssrt
 spatialAssertionParser = whiteSpace >> spatialAssertion
@@ -617,7 +627,6 @@ parseFunction str =
   case parse functionParser "" str of
     Left e  -> error $ show e
     Right r -> r
-
 
 parseString :: String -> [Declr]
 parseString str =
