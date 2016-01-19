@@ -186,7 +186,7 @@ consumeAssrt (AssrtPure sp a) = consumePure a
 consumeAssrt (AssrtSpatial sp a) = consumeSpatial a
 consumeAssrt (AssrtConj sp a1 a2) = consumeAssrt a1 >> consumeAssrt a2
 consumeAssrt (AssrtITE sp c a1 a2) =
-  (do
+  ((do
     liftIO $ putStrLn $ "*** case " ++ show c
     producePure c
     succeedIfInconsistent
@@ -195,4 +195,12 @@ consumeAssrt (AssrtITE sp c a1 a2) =
             liftIO $ putStrLn $ "*** case " ++ show (NotBAssrt sp c)
             producePure (NotBAssrt sp c)
             succeedIfInconsistent
-            consumeAssrt a2)
+            consumeAssrt a2)) `mplus`
+  (do
+    liftIO $ putStrLn $ "*** asserting case " ++ show c
+    consumePure c
+    consumeAssrt a1) `mplus`
+  (do
+    liftIO $ putStrLn $ "*** asserting case " ++ show (NotBAssrt sp c)
+    consumePure (NotBAssrt sp c)
+    consumeAssrt a2)
