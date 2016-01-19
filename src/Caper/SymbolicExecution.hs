@@ -337,8 +337,51 @@ symbolicExecute stmt cont = do
                         cont $ EMReturn (Just rtn)
         se (ReturnStmt _ Nothing) = cont $ EMReturn Nothing
         se (SkipStmt _) = cont EMContinuation
-        se (ForkStmt _ pname args) = undefined
-        se (AssertStmt _ assrt) = undefined
+        se (ForkStmt sp pname args) = do
+                        spec <- view (specifications . at pname)
+                        contextualise (DescriptiveContext sp ("In a fork of function '" ++ pname ++ "'")) $ case spec of
+                            Nothing -> raise $ UndeclaredFunctionCall pname
+                            Just (Specification params sprec spost) -> do
+                                -- Check that there are the right number of arguments
+                                unless (length params == length args) $
+                                        raise $ ArgumentCountMismatch (length params) (length args)
+                                -- 'push' the logical variables
+                                savedLVars <- use logicalVars
+                                logicalVars .= emptyLVars
+                                -- Initialise logical variables for the arguments
+                                forM_ (zip params args) $ \(param, arg) -> do
+                                        paramVar <- aexprToVExpr arg >>= variableForVExpr param
+                                        logicalVars . at param ?= paramVar
+                                missingRegionHandler
+                                -- Consume the precondition
+                                -- TODO: Eventually it might be good to be lazier about stabilising regions
+                                when stabiliseBeforeConsumePrecondition
+                                    stabiliseRegions
+                                liftIO $ putStrLn $ "Consuming precondition: " ++ show sprec
+                                debugState
+                                contextualise "Consuming precondition" $
+                                        check $ consumeAssrt sprec
+                                -- Stabilise what remains
+                                stabiliseRegions 
+                                -- 'pop' the logical variables
+                                logicalVars .= savedLVars
+                                -- continue
+                                cont EMContinuation
+        se (AssertStmt sp assrt) = contextualise (DescriptiveContext sp ("In assertion: " ++ show assrt)) $ do
+                liftIO $ putStrLn $ "assert " ++ show assrt
+                debugState
+                savedLVars <- programVarsToLogicalVars
+                when stabiliseBeforeConsumeInvariant stabiliseRegions
+                missingRegionHandler
+                contextualise "Consuming assertion" $
+                    check $ consumeAssrt assrt
+                logicalVars .= savedLVars
+                savedLVars' <- programVarsToLogicalVars
+                contextualise "Producing assertion" $
+                    produceAssrt stabiliseAfterProduceInvariant assrt
+                logicalVars .= savedLVars'
+                debugState
+                cont EMContinuation
         symExLoop sp minv cond body = do
                 -- use True as a default invariant
                 let inv = fromMaybe (AssrtPure sp $ ConstBAssrt sp True) minv

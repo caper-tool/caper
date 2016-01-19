@@ -1,21 +1,5 @@
 // Blocking counter
-/*
-region Counter(r,x) {
-  guards %INCREMENT * OWN;
-  interpretation {
-    n >= 0 | n : x |-> n &*& r@(OWN);
-    n < 0 | n : x |-> -1;
-  }
-  actions {
-    n >= 0, n < m | INCREMENT[_] : n ~> -m;
-    n > 0 | OWN : -n ~> n;
-    // The following actions are for transitive closure
-    n >= 0, n < m | INCREMENT[_] * OWN : n ~> m;
-    n > 0, n < m | INCREMENT[_] * OWN : -n ~> -m;
-    n > 0, n < m | INCREMENT[_] * OWN : -n ~> m;
-  }
-}
-*/
+
 region Counter(r,x) {
   guards %INCREMENT * OWN;
   interpretation {
@@ -42,17 +26,15 @@ function incr_rec(x)
   v := [x];
   if (v = -1) {
     v := incr_rec(x);
-    return v;
   } else {
     b := CAS(x, v, -1);
     if (b = 0) {
       v := incr_rec(x);
-      return v;
     } else {
       [x] := v + 1;
-      return v;
     }
   }
+  return v;
 }
 
 function incr(x)
