@@ -10,16 +10,14 @@ region Counter(r,x) {
   }
 }
 
-/*
 function makeCounter()
-  requires emp;
-  ensures Counter(r,ret,0) * r@INCREMENT[1];
+  requires true;
+  ensures Counter(r,ret,0) &*& r@(INCREMENT[1p]);
 {
     v := alloc(1);
     [v] := 0;
     return v;
 }
-*/
 
 function incr(x)
   requires Counter(r,x,v0) &*& r@(INCREMENT[p]);
