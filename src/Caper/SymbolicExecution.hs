@@ -367,7 +367,21 @@ symbolicExecute stmt cont = do
                                 logicalVars .= savedLVars
                                 -- continue
                                 cont EMContinuation
-        se (AssertStmt _ assrt) = undefined
+        se (AssertStmt sp assrt) = contextualise (DescriptiveContext sp ("In assertion: " ++ show assrt)) $ do
+                liftIO $ putStrLn $ "assert " ++ show assrt
+                debugState
+                savedLVars <- programVarsToLogicalVars
+                when stabiliseBeforeConsumeInvariant stabiliseRegions
+                missingRegionHandler
+                contextualise "Consuming assertion" $
+                    check $ consumeAssrt assrt
+                logicalVars .= savedLVars
+                savedLVars' <- programVarsToLogicalVars
+                contextualise "Producing assertion" $
+                    produceAssrt stabiliseAfterProduceInvariant assrt
+                logicalVars .= savedLVars'
+                debugState
+                cont EMContinuation
         symExLoop sp minv cond body = do
                 -- use True as a default invariant
                 let inv = fromMaybe (AssrtPure sp $ ConstBAssrt sp True) minv
