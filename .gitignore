@@ -11,3 +11,6 @@ docs/design.pdf
 **/SourceGraph/**
 *~
 *.swp
+*.aux
+*.out
+*.log
