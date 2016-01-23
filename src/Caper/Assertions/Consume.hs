@@ -4,6 +4,7 @@ module Caper.Assertions.Consume where
 import Control.Monad.State hiding (state)
 import Control.Monad.Reader
 import Control.Lens hiding (op)
+import qualified Data.Set as Set
 
 import Caper.Utils.Choice
 import Caper.Utils.NondetClasses
@@ -185,7 +186,7 @@ consumeAssrt :: (MonadState s m, AssertionLenses s, RegionLenses s,
 consumeAssrt (AssrtPure sp a) = consumePure a
 consumeAssrt (AssrtSpatial sp a) = consumeSpatial a
 consumeAssrt (AssrtConj sp a1 a2) = consumeAssrt a1 >> consumeAssrt a2
-consumeAssrt (AssrtITE sp c a1 a2) =
+consumeAssrt (AssrtITE sp c a1 a2) = {-
   ((do
     liftIO $ putStrLn $ "*** case " ++ show c
     producePure c
@@ -195,12 +196,32 @@ consumeAssrt (AssrtITE sp c a1 a2) =
             liftIO $ putStrLn $ "*** case " ++ show (NotBAssrt sp c)
             producePure (NotBAssrt sp c)
             succeedIfInconsistent
-            consumeAssrt a2)) `mplus`
-  (do
-    liftIO $ putStrLn $ "*** asserting case " ++ show c
-    consumePure c
-    consumeAssrt a1) `mplus`
-  (do
-    liftIO $ putStrLn $ "*** asserting case " ++ show (NotBAssrt sp c)
-    consumePure (NotBAssrt sp c)
-    consumeAssrt a2)
+            consumeAssrt a2)) `mplus` -}
+      (do
+        liftIO $ putStrLn $ "*** asserting case " ++ show c
+        consumePure c
+        consumeAssrt a1) `mplus`
+      (do
+        liftIO $ putStrLn $ "*** asserting case " ++ show (NotBAssrt sp c)
+        consumePure (NotBAssrt sp c)
+        consumeAssrt a2) `mplus`
+      (do
+        a <- generatePure assumptionVariable c
+        liftIO $ putStrLn $ "*** performing case split"
+        (do
+            liftIO $ putStrLn $ "*** case " ++ show c
+            assumeE a
+            consumeAssrt a1) <#>
+          (do
+            liftIO $ putStrLn $ "*** case " ++ show (NotBAssrt sp c)
+            assumeFalseE a
+            consumeAssrt a2))
+  where
+    assumptionVariable (Variable _ vname) = do
+        v <- use (SS.logicalVars . at vname)
+        case v of
+            Nothing -> mzero
+            (Just x) -> do
+                    avs <- use assumptionVars
+                    if Set.member x avs then return x else mzero
+    assumptionVariable (WildCard _) = mzero

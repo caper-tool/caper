@@ -149,8 +149,11 @@ checkStateInterpretationStability params si =
                     assertEqual state0 state1
                     -- Assert the conditions
                     forM_ (siConditions si) consumePure
+                    debugState
                     -- Consume the concrete state
                     consumeAssrt (siInterp si)
+                    debugState
+                    use logicalVars >>= liftIO . putStrLn . show
         when (isNothing r) $
             raise UnstableStateInterpretation
 
