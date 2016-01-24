@@ -370,7 +370,13 @@ relation =  (reservedOp "=" >> return Equal)
         <|> (reservedOp "<=" >> return LessOrEqual)
 
 assertion :: Parser Assrt
-assertion = try (iteAssertion)
+assertion =
+  do pos <- getPosition
+     a   <- assertion2
+     return $ refineAssertion $ a
+
+assertion2 :: Parser Assrt
+assertion2 = try (iteAssertion)
          <|> assertionAux
 
 iteAssertion :: Parser Assrt
@@ -389,7 +395,7 @@ assertionAux = buildExpressionParser assertionOperators assertionTerm
 assertionOperators = [ [Infix  (do { pos <- getPosition; reservedOp "&*&"; return (AssrtConj pos)}) AssocLeft]
                      ]
 
-assertionTerm =  try (parens assertion)
+assertionTerm =  try (parens assertion2)
              <|> try (do { pos <- getPosition; a <- spatialAssertion; return (AssrtSpatial pos a)})
              <|> (do { pos <- getPosition; a <- pureAssertion; return (AssrtPure pos a)})
 
@@ -402,9 +408,9 @@ pureOperators = [ [Prefix (do { pos <- getPosition; reservedOp "!"; return (NotB
 pureTerm =  try (parens pureAssertion)
         <|> (do { pos <- getPosition; reserved "true"; return (ConstBAssrt pos True)})
         <|> (do { pos <- getPosition; reserved "false"; return (ConstBAssrt pos False)})
-        <|> try (binaryValueAssertion)
-        <|> try (binaryPermissionAssertion)
-        <|> binaryVariableAssertion
+        <|> try (do { a <- binaryValueAssertion; notFollowedBy (symbol "p"); return a })
+        <|> binaryPermissionAssertion
+        <|> binaryValueAssertion
 
 binaryVariableAssertion =
   do pos <- getPosition
@@ -582,6 +588,22 @@ anyExpression2 =  try (do { e <- variableExpression; checkNext; return (AnyVar e
               <|> (do { e <- valueExpression; checkNext; return (AnyVal e) })
         where
                 checkNext = lookAhead (try (comma <|> symbol "|"))
+
+
+refineAssertion (AssrtPure pos pa)      = AssrtPure pos (refinePureAssertion pa)
+refineAssertion a@(AssrtSpatial pos sa) = a
+refineAssertion (AssrtConj pos a1 a2)   = AssrtConj pos (refineAssertion a1) (refineAssertion a2)
+refineAssertion (AssrtITE pos pa a1 a2) = AssrtITE pos (refinePureAssertion pa) (refineAssertion a1) (refineAssertion a2)
+
+refinePureAssertion (NotBAssrt pos pe) = NotBAssrt pos (refinePureAssertion pe)
+refinePureAssertion (BinaryPermAssrt pos (PermEquality br) (VarPermExpr _ e1) (VarPermExpr _ e2)) = (BinaryVarAssrt pos br e1 e2)
+refinePureAssertion (BinaryValAssrt pos (ValEquality br) (VarValExpr _ e1) (VarValExpr _ e2)) = (BinaryVarAssrt pos br e1 e2)
+refinePureAssertion a = a
+--refinePureAssertion a@(BinaryVarAssrt pos br e1 e2) = a
+--refinePureAssertion a@(BinaryValAssrt pos br e1 e2) = a
+
+refine refineVariableExpression a@(Variable pos s) = a
+refine refineVariableExpression a@(WildCard pos) = a
 
 spatialAssertionParser :: Parser SpatialAssrt
 spatialAssertionParser = whiteSpace >> spatialAssertion
