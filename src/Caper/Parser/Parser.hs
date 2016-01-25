@@ -408,7 +408,7 @@ pureOperators = [ [Prefix (do { pos <- getPosition; reservedOp "!"; return (NotB
 pureTerm =  try (parens pureAssertion)
         <|> (do { pos <- getPosition; reserved "true"; return (ConstBAssrt pos True)})
         <|> (do { pos <- getPosition; reserved "false"; return (ConstBAssrt pos False)})
-        <|> try (do { a <- binaryValueAssertion; notFollowedBy (symbol "p"); return a })
+        <|> try (do { a <- binaryValueAssertion; notFollowedBy (symbol "p" <|> symbol "$"); return a })
         <|> binaryPermissionAssertion
         <|> binaryValueAssertion
 
