@@ -504,9 +504,9 @@ spatialAssertion =  (try (parens spatialAssertionAux) <|> spatialAssertionAux)
 
 spatialAssertionAux :: Parser SpatialAssrt
 spatialAssertionAux =  try regionAssertion
-                <|> try cellAssertion
-                <|> try predicate
-                <|> guards
+                   <|> try cellAssertion
+                   <|> try predicate
+                   <|> guards
 
 regionAssertion :: Parser SpatialAssrt
 regionAssertion =
@@ -555,8 +555,12 @@ guards =
   do pos   <- getPosition
      ident <- identifier
      reservedOp "@"
-     gds   <- parens (sepBy guard (reservedOp "*"))
+     gds   <- guardAux
      return $ SAGuards $ Guards pos ident gds
+
+guardAux :: Parser [Guard]
+guardAux =  parens (sepBy guard (reservedOp "*"))
+        <|> (do { g <- guard; return [g] })
 
 guard :: Parser Guard
 guard =
