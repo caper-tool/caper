@@ -85,7 +85,7 @@ caperCommand (CLVerify file) = do
         print declrs
         let funDecs = functionDeclrs declrs
         provers <- initProvers
-        result <- runOutLogger $ filterLogger logNotProver $ flip runReaderT [StringContext $ "File: \"" ++ file ++ "\"."] $ runRaiseT $ do
+        result <- runOutLogger $ {- filterLogger logNotProver $ -} flip runReaderT [StringContext $ "File: \"" ++ file ++ "\"."] $ runRaiseT $ do
             procSpecs <- declrsToProcedureSpecs funDecs
             rtc <- hoist (withReaderT (ProverContext provers)) $ declrsToRegionTypeContext declrs
             liftIO $ print rtc 

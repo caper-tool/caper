@@ -108,8 +108,16 @@ generateCellPred genvar (CellBlock sp e1 e2) = do
 --
 -- TODO: it might be nice if produceGuards and consumeGuards went via this.
 generateGuard :: forall m v. (MonadRaise m, Monad m) =>
-            (VarExpr -> m v) -> [Guard] -> m (G.Guard v)
-generateGuard handler = liftM G.GD . foldM tg' Map.empty
+            (VarExpr -> m v) 
+            -- ^ Variable handler
+            -> (PermissionExpression v -> m ())
+            -- ^ Handler for permission expressions (assert or assume non-zero)
+            -> (PermissionExpression v -> PermissionExpression v -> m ())
+            -- ^ Handler for disjointness of permission expressions
+            -> [Guard]
+            -- ^ Guard AST 
+            -> m (G.Guard v)
+generateGuard handler peh disjh = liftM G.GD . foldM tg' Map.empty
     where
         tg' g grd = contextualise grd $ tg g grd
         tg :: Map.Map String (G.GuardParameters v) -> Guard -> m (Map.Map String (G.GuardParameters v))
@@ -123,12 +131,17 @@ generateGuard handler = liftM G.GD . foldM tg' Map.empty
                             return $ Map.insert gname (G.PermissionGP pexp) g
                         (Just (G.PermissionGP pe0)) -> do
                             pexp <- gpe pe
+                            disjh pe0 pexp
                             return $ Map.insert gname
                                         (G.PermissionGP (PESum pe0 pexp)) g
                         _ -> raise $ IncompatibleGuardOccurrences gname
         tg g (ParamGuard{}) = raise $ SyntaxNotImplemented "parametrised guards"
+        tg g (ParamSetGuard{}) = raise $ SyntaxNotImplemented "parametrised guards"
         gpe :: PermExpr -> m (PermissionExpression v)
-        gpe = generatePermissionExpr handler
+        gpe pe = do
+            pexp <- generatePermissionExpr handler pe
+            peh pexp
+            return pexp
 
 
 

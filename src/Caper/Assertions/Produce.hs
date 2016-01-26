@@ -129,10 +129,13 @@ produceGuards gg@(Guards sp ridv gds) = contextualise gg $
                         rrid <- produceVariable (Variable sp ridv)
                         addContext (StringContext $ "The region identifier '" ++ ridv ++ "'") $
                                 bindVarAsE rrid VTRegionID
-                        guards <- generateGuard produceVariable gds
+                        guards <- generateGuard produceVariable permExprHandler permDisjHandler gds
 --                        guards <- liftM G.GD $ foldlM mkGuards Map.empty gds
                         R.produceMergeRegion rrid $
                                 R.Region False Nothing Nothing guards
+        where
+            permExprHandler pe = assumeFalse $ PAEq pe PEZero
+            permDisjHandler pe1 pe2 = assumeTrue $ PADis pe1 pe2
 {-        where
                 mkGuards g gd@(NamedGuard _ nm) = contextualise gd $
                         if nm `Map.member` g then

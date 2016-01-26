@@ -122,7 +122,7 @@ data TransitionRule = TransitionRule
 
 instance Show TransitionRule where
         show (TransitionRule gd prd prec post) =
-                show gd ++ " : " ++ show prec ++ " ~> " ++ show post
+                show prd ++ " | " ++ show gd ++ " : " ++ show prec ++ " ~> " ++ show post
 
 instance FreeVariables TransitionRule RTDVar where
     foldrFree f b tr = foldr f (foldr f (foldrFree f (foldr f b (trGuard tr)) (trPredicate tr)) (trPreState tr)) (trPostState tr) 
@@ -132,8 +132,8 @@ actionToTransitionRule params act@(AST.Action _ conds gds prest postst) =
         contextualise act $ do
             -- unless (null conds) $ raise $ SyntaxNotImplemented "predicated transitions"
             (cds, gg, prec, post) <- flip evalStateT freshVars $ do
-                cds <- mapM (generatePure varExprToRTDVar) conds
-                gg <- generateGuard varExprToRTDVar gds
+                cds0 <- mapM (generatePure varExprToRTDVar) conds
+                (gg, cds) <- runStateT (generateGuard (lift . varExprToRTDVar) pehandler pedisj gds) cds0
                 prec <- generateValueExpr varExprToRTDVar prest
                 post <- generateValueExpr varExprToRTDVar postst
                 return (cds, gg,prec,post) 
@@ -144,6 +144,9 @@ actionToTransitionRule params act@(AST.Action _ conds gds prest postst) =
         nextFresh = state (head &&& tail)
         varExprToRTDVar (AST.Variable _ s) = return (RTDVar s)
         varExprToRTDVar (AST.WildCard _) = nextFresh
+        -- For each permission guard, generate a condition that the permission is non-zero
+        pehandler pe = modify (negativeCondition (PAEq pe PEZero) :)
+        pedisj pe1 pe2 = modify (toCondition (PADis pe1 pe2) :)
 
 data RegionTypeContext = RegionTypeContext
         {
@@ -216,11 +219,12 @@ computeStateSpace ss = case constStates ss Set.empty of
                     constStates xs (Set.insert n' s)
                  _ -> Nothing
 
+-- | Check that the guards for the action conform to the guard algebra 
 checkActionsGuards :: (Monad m, MonadRaise m) =>
         AST.TopLevelGuardDeclr -> [AST.Action] -> m ()
 checkActionsGuards tlgd@(AST.SomeGuardDeclr gd) = mapM_ $ \a -> let grd = AST.actionGuard a in
         contextualise a $ do            
-            g <- generateGuard (const (return ())) grd
+            g <- generateGuard (const (return ())) (\_ -> return ()) (\_ _ -> return ()) grd
             unless (checkGuardAtType g (toWeakGuardType gd)) $
                 raise $ GuardInconsistentWithGuardType (show grd) (show tlgd)
 checkActionsGuards tlgd@AST.ZeroGuardDeclr = mapM_ $ \a -> let grd = AST.actionGuard a in
