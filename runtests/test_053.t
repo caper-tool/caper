@@ -1,7 +1,5 @@
-// NAME: Parenthesis peril 4
+// NAME: Parenthesis peril 5
 // RESULT: ACCEPT
-
-// DESCRIPTION: this exercises a parser bug
 
 function foo(x)
         requires x + 1 = y + 1;
