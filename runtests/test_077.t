@@ -10,7 +10,7 @@ region Ra(r, x) {
   }
 }
 
-region Rb(r, x) {
+region Rb(s, x) {
   guards BAR;
   interpretation {
     0 : Ra(r, x, 0);
