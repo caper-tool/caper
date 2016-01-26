@@ -14,7 +14,7 @@ values = z3
 
 [EProver]
 # Path to the eprover executable
-executable = C:\Users\tyoung\Local Documents\eprover\E\PROVER\eprover.exe
+executable = /E/PROVER/eprover
 
 # Timeout for E theorem prover in ms
 # A zero or negative value indicates no timeout
