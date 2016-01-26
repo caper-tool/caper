@@ -1,4 +1,4 @@
-// NAME: Region creation 9
+// NAME: Region creation 11
 // RESULT: REJECT
 
 region Ra(r, x) {
