@@ -1,4 +1,4 @@
-// NAME: Region creation 4
+// NAME: Region creation 6
 // RESULT: REJECT
 
 region Ra(r,x) {
@@ -11,7 +11,7 @@ region Ra(r,x) {
 }
 
 function foo(x)
-  requires x |-> 1;
+  requires x |-> 0 &*& r@(FOO);
   ensures r@(FOO) &*& Ra(r,x,0);
 {
 }
