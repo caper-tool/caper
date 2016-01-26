@@ -20,4 +20,3 @@ function foo(x)
   ensures r@(FOO) &*& Ra(r,x,0);
 {
 }
-
