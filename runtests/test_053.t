@@ -1,4 +1,4 @@
-// NAME: parenthesis peril 4
+// NAME: Parenthesis peril 4
 // RESULT: ACCEPT
 
 // DESCRIPTION: this exercises a parser bug

@@ -1,5 +1,5 @@
 // NAME: Basic conditional test 3
-// RESULT: Reject
+// RESULT: REJECT
 
 /* DESCRIPTION: Test the ?: behaviour
 */
