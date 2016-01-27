@@ -149,6 +149,7 @@ underComputeClosureRelation (StateSpace (Just lower) (Just upper)) gts = do
                         let mx' = runFloyd mx
                         return $ matrixToReflRelation mx' (toInteger lower)
 -- Fallback: identity relation
+-- TODO: should use the relation itself
 underComputeClosureRelation _ _ = return (\x y -> FOFAtom $ VAEq x y)
 
 {-
