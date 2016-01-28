@@ -217,6 +217,9 @@ computeStateSpace ss = case constStates ss Set.empty of
                  (AST.StateInterpretation _ _ (AST.ConstValExpr _ n) _) -> do
                     n' <- intCastMaybe n
                     constStates xs (Set.insert n' s)
+                 (AST.StateInterpretation _ _ (AST.UnaryValExpr _ AST.ValNegation (AST.ConstValExpr _ n)) _) -> do
+                    n' <- intCastMaybe n
+                    constStates xs (Set.insert (-n') s)
                  _ -> Nothing
 
 -- | Check that the guards for the action conform to the guard algebra 
