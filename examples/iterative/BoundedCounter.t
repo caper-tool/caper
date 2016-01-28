@@ -25,16 +25,17 @@ function incr(x)
   requires BCounter(r, x, v0) &*& r@(INCREMENT[p]);
   ensures BCounter(r, x, v1) &*& r@(INCREMENT[p]) &*& (p = 1p ? ret = v0 &*& (v0 < 2 ? v1 = (v0 + 1) : v1 = 0) : true); {
     assert p = 1p ? true : true;
-    v := [x];
-    if (v < 2) {
-        w := v + 1;
-    } else {
-        w := 0;
-    }
-    b := CAS(x, v, w);
-    if (b = 0) {
-        v := incr(x);
-    }
+    do
+      invariant BCounter(r, x, vi) &*& r@(INCREMENT[p]) &*& (p = 1p ? (b = 1 ? v = v0 &*& (v0 < 2 ? vi = (v0 + 1) : vi = 0) : vi = v0) : true)
+    {
+        v := [x];
+        if (v < 2) {
+            w := v + 1;
+        } else {
+            w := 0;
+        }
+        b := CAS(x, v, w);
+    } while (b = 0);
     return v;
 }
 

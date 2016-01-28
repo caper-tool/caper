@@ -24,7 +24,7 @@ function incr(x)
   ensures Counter(r,x,v1) &*& v1 > v0 &*& r@(INCREMENT[p]);
 {
     do 
-        invariant Counter(r,x,vi) &*& r@(INCREMENT[p]) &*& (b = 1 ? vi > v0 : vi >= v0)
+      invariant Counter(r,x,vi) &*& r@(INCREMENT[p]) &*& (b = 1 ? vi > v0 : vi >= v0)
     {
         v := [x];
         b := CAS(x, v, v + 1);
