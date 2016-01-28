@@ -1,4 +1,4 @@
-// Compare-and-swap counter
+// Compare-and-swap Counter
 
 region Counter(r,x) {
   guards %INCREMENT;
@@ -23,12 +23,11 @@ function incr(x)
   requires Counter(r,x,v0) &*& r@(INCREMENT[p]);
   ensures Counter(r,x,v1) &*& v1 > v0 &*& r@(INCREMENT[p]);
 {
-    do 
-        invariant Counter(r,x,vi) &*& r@(INCREMENT[p]) &*& (b = 1 ? vi > v0 : vi >= v0)
-    {
-        v := [x];
-        b := CAS(x, v, v + 1);
-    } while (b = 0);
+    v := [x];
+    b := CAS(x, v, v + 1);
+    if (b = 0) {
+        v := incr(x);
+    }
     return v;
 }
 
