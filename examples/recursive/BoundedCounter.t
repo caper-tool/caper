@@ -20,10 +20,11 @@ function makeCounter()
     [v] := 0;
     return v;
 }
-/*
+
 function incr(x)
   requires BCounter(r, x, v0) &*& r@(INCREMENT[p]);
   ensures BCounter(r, x, v1) &*& r@(INCREMENT[p]) &*& (p = 1p ? ret = v0 &*& (v0 < 2 ? v1 = (v0 + 1) : v1 = 0) : true); {
+    assert p = 1p ? true : true;
     v := [x];
     if (v < 2) {
         w := v + 1;
@@ -36,10 +37,11 @@ function incr(x)
     }
     return v;
 }
-*/
+
 function read(x)
   requires BCounter(r, x, v0) &*& r@(INCREMENT[p]);
   ensures BCounter(r, x, v1) &*& r@(INCREMENT[p]) &*& (p = 1p ? ret = v0 &*& v0 = v1 : true); {
+    assert p = 1p ? true : true;
     v := [x];
     return v;
 }
