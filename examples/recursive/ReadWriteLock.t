@@ -1,4 +1,4 @@
-// Read write lock
+// Read Write Lock
 
 region RWLock(r, x) {
   guards RLOCK1 * RUNLOCK1 * RLOCK2 * RUNLOCK2 * %WLOCK * WUNLOCK;
