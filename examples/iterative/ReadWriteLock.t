@@ -22,7 +22,7 @@ region RWLock(r, x) {
     WUNLOCK : -1 ~> 0;
   }
 }
-/*
+
 function makeLock()
   requires true;
   ensures RWLock(r, ret, 0) &*& r@(RLOCK1 * RLOCK2 * WLOCK[1p]);
@@ -65,20 +65,19 @@ function lockReader1(x)
         }
     } while (b = 0);
 }
-*/
 
 function unlockReader1(x)
   requires RWLock(r, x, n) &*& n > 0 &*& r@RUNLOCK1;
   ensures RWLock(r, x, _);
 {
     do
-      invariant b = 0 ? RWLock(r, x, n) &*& n > 0 &*& r@RUNLOCK1 : RWLock(r, x, _)
+      invariant RWLock(r, x, ni) &*& (b = 0 ? ni > 0 &*& r@RUNLOCK1 : true)
     {
         v := [x];
         b := CAS(x, v, v - 1);
     } while (b = 0);
 }
-/*
+
 function lockReader2(x)
   requires RWLock(r, x, m) &*& r@RLOCK2 &*& m != 2 &*& m != 3;
   ensures RWLock(r, x, n) &*& r@(RLOCK2 * RUNLOCK2) &*& n > 0;
@@ -93,17 +92,16 @@ function lockReader2(x)
             b := 0;
         }
     } while (b = 0);
-}*/
-/*
+}
+
 function unlockReader2(x)
   requires RWLock(r, x, n) &*& n > 0 &*& r@RUNLOCK2;
   ensures RWLock(r, x, _);
 {
     do
-      invariant b = 0 ? RWLock(r, x, n) &*& n > 0 &*& r@RUNLOCK2 : RWLock(r, x, _)
+      invariant RWLock(r, x, ni) &*& (b = 0 ? ni > 0 &*& r@RUNLOCK2 : true)
     {
         v := [x];
         b := CAS(x, v, v - 1);
     } while (b = 0);
 }
-*/
