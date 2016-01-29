@@ -1,62 +1,49 @@
-
-MAC OS X Installation Notes
-===========================
+General Installation Notes
+==========================
 
 Requirements
 ------------
 
-### Z3
+1. The Haskell Platform; versions 7.8.3 and 7.10.3 are currently supported; available from https://www.haskell.org/platform/
+2. The Z3 theorem prover; version 4.3.2 or later; available from https://github.com/Z3Prover/z3/releases
 
-Z3 can be downloaded from: https://github.com/Z3Prover/z3/releases/download/z3-4.4.0/z3-4.4.0-x64-osx-10.10.3.zip
+Set up
+------
 
-Extract the arquive to a directory with path $Z3PATH.
-
-The instructions are located in the README file, in short, go to the directory $Z3PATH and perform the following commands:
-
+This assumes that you are in the Caper root directory, that Z3 is at $Z3PATH and that $Z3PATH/bin is in the system path.
+You may also need $Z3PATH/bin in the path to search for dynamic libraries.  On Linux:
 ```
-   python scripts/mk_make.py
-   cd build
-   make
-   sudo make install
+  export LD_LIBRARY_PATH=$Z3PATH/bin
 ```
-
-Add the bin directory to your PATH, as following
-
+On OS X:
 ```
-export PATH="$Z3PATH/bin:$PATH"
+  export DYLD_LIBRARY_PATH=$Z3PATH/bin
 ```
 
-### Caper
-
-Make sure you have GHC 7.8.3.
-It can be downloaded from: https://www.haskell.org/platform/download/2014.2.0.0/Haskell%20Platform%202014.2.0.0%2064bit.signed.pkg
-
-Go to the Caper directory you just downloaded.
-
-First create a sandbox using the command:
-
+First, create a cabal sandbox for Caper:
 ```
-cabal sandbox init
+  cabal sandbox init
 ```
 
-Install the z3 Haskell bindings as following:
-
+Next, install the dependencies:
 ```
-export DYLD_LIBRARY_PATH=$Z3PATH/bin
-cabal install z3-4.0.0 --extra-include-dirs=$Z3PATH/include --extra-lib-dirs=$Z3PATH/bin
-
+  cabal update
+  cabal install --dependencies-only --extra-include-dirs=$Z3PATH/include --extra-lib-dirs=$Z3PATH/bin
 ```
-
-Finally install the rest of the dependencies
-
+Now build Caper:
 ```
-cabal install sbv-4.4
-cabal install
+  cabal build
 ```
-
-You can now build the whole project using
+Create the configuration file by copying the defaults (optionally editing):
 ```
-cabal build
+  cp config.ini.default config.ini
 ```
 
-You are ready to go!
+Now you can run Caper:
+```
+  dist/build/Caper/Caper examples/recursive/SpinLock.t 
+```
+Or the regression tests:
+```
+  dist/build/RunTests/RunTests
+```
