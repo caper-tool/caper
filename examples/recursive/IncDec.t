@@ -8,6 +8,7 @@ region IncDec(r, x) {
   actions {
     n < m | INC : n ~> m;
     n > m | DEC : n ~> m;
+    INC * DEC : n ~> m;
   }
 }
 
@@ -27,7 +28,7 @@ function increment(x, k)
     v := [x];
     b := CAS(x, v, v + k);
     if (b = 0) {
-        v := increment(x);
+        v := increment(x, k);
     }
     return v;
 }
@@ -39,7 +40,7 @@ function decrement(x, k)
     v := [x];
     b := CAS(x, v, v - k);
     if (b = 0) {
-        v := decrement(x);
+        v := decrement(x, k);
     }
     return v;
 }
