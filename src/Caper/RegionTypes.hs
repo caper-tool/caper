@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, BangPatterns, MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes, BangPatterns, MultiParamTypeClasses, FlexibleContexts #-}
 module Caper.RegionTypes where
 
 import Prelude hiding (notElem, mapM_, foldr)
