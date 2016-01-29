@@ -6,6 +6,10 @@ import Control.Monad.Reader.Class
 import Control.Monad.IO.Class
 import Data.Foldable
 
+import System.IO.Unsafe
+
+import Caper.Utils.MemoIO
+
 import Caper.ProverDatatypes
 import Caper.Prover
 import Caper.Utils.FloydWarshall
@@ -52,7 +56,7 @@ data GuardedTransition vt = GuardedTransition {
         gtGuard :: FOF ValueAtomic vt,
         gtPreState :: ValueExpression vt,
         gtPostState :: ValueExpression vt
-        }
+        } deriving (Eq,Ord)
 gtFreeVars :: Eq vt => GuardedTransition vt -> [vt]
 gtFreeVars gt = foldrFree (\v -> if v `elem` gtBoundVars gt then id else (v :)) [] (gtGuard gt)
 
@@ -124,33 +128,43 @@ matrixToReflRelation mx lower pre post = fmin (pre $=$ post) $ fst $ foldl' op1 
 -- |Compute an overapproximation of the closure of a set of transitions
 --
 -- TODO: rename this
-computeClosureRelation :: (MonadIO m, MonadReader r m, Provers r, Eq v, StringVariable v, MonadLogger m) =>
+computeClosureRelation' :: (MonadIO m, MonadReader r m, Provers r, Eq v, StringVariable v, MonadLogger m) =>
         StateSpace -> [GuardedTransition v] -> m (ValueExpression v -> ValueExpression v -> FOF ValueAtomic v)
 -- Best case scenario: no actions!
-computeClosureRelation _ [] = return (\x y -> FOFAtom $ VAEq x y)
+computeClosureRelation' _ [] = return (\x y -> FOFAtom $ VAEq x y)
 -- Finite state scenario
-computeClosureRelation (StateSpace (Just lower) (Just upper)) gts = do
+computeClosureRelation' (StateSpace (Just lower) (Just upper)) gts = do
                         mx <- computeInitialMatrix lower upper gts
                         -- liftIO $ putStrLn $ show $ fmap (fmap (fmap varToString)) mx
                         let mx' = runFloyd mx
                         return $ matrixToReflRelation mx' (toInteger lower)
 -- Fallback: universal relation
-computeClosureRelation _ _ = return (\x y -> FOFTrue)
+computeClosureRelation' _ _ = return (\x y -> FOFTrue)
 
+{-# NOINLINE computeClosureRelation #-}
+computeClosureRelation :: (MonadIO m, MonadReader r m, Provers r, Eq v, Ord v, StringVariable v, MonadLogger m) =>
+        StateSpace -> [GuardedTransition v] -> m (ValueExpression v -> ValueExpression v -> FOF ValueAtomic v)
+computeClosureRelation = curry $ unsafePerformIO $ memoIO $ uncurry computeClosureRelation'
 
 -- |Compute an underapproximation of the closure of a set of transitions
-underComputeClosureRelation :: (MonadIO m, MonadReader r m, Provers r, Eq v, StringVariable v, MonadLogger m) =>
+underComputeClosureRelation' :: (MonadIO m, MonadReader r m, Provers r, Eq v, StringVariable v, MonadLogger m) =>
         StateSpace -> [GuardedTransition v] -> m (ValueExpression v -> ValueExpression v -> FOF ValueAtomic v)
 -- No actions, so only identities
-underComputeClosureRelation _ [] = return (\x y -> FOFAtom $ VAEq x y)
+underComputeClosureRelation' _ [] = return (\x y -> FOFAtom $ VAEq x y)
 -- Finite state scenario
-underComputeClosureRelation (StateSpace (Just lower) (Just upper)) gts = do
+underComputeClosureRelation' (StateSpace (Just lower) (Just upper)) gts = do
                         mx <- computeInitialMatrix lower upper gts
                         let mx' = runFloyd mx
                         return $ matrixToReflRelation mx' (toInteger lower)
 -- Fallback: identity relation
 -- TODO: should use the relation itself
-underComputeClosureRelation _ _ = return (\x y -> FOFAtom $ VAEq x y)
+underComputeClosureRelation' _ _ = return (\x y -> FOFAtom $ VAEq x y)
+
+{-# NOINLINE underComputeClosureRelation #-}
+underComputeClosureRelation :: (MonadIO m, MonadReader r m, Provers r, Eq v, Ord v, StringVariable v, MonadLogger m) =>
+        StateSpace -> [GuardedTransition v] -> m (ValueExpression v -> ValueExpression v -> FOF ValueAtomic v)
+underComputeClosureRelation = curry $ unsafePerformIO $ memoIO $ uncurry underComputeClosureRelation'
+
 
 {-
 testgts = [ GuardedTransition [VIDNamed "x"]

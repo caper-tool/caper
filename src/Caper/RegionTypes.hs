@@ -93,7 +93,7 @@ rtFullGuard = fullGuard . rtWeakGT
 data StateSpace = StateSpace {
                 ssLowerBound :: Maybe Int,
                 ssUpperBound :: Maybe Int
-                }
+                } deriving (Eq,Ord)
 
 instance Show StateSpace where
         show (StateSpace a b) = "[" ++ maybe "?" show a ++ "-" ++ maybe "?" show b ++ "]"
