@@ -57,13 +57,13 @@ consumeVariable (WildCard _) =
 -- perhaps it would be wise to specialise it.
 consumeRegionVariable :: (MonadState s m, AssertionLenses s, SymbStateLenses s,
         RegionLenses s, MonadPlus m, MonadRaise m) =>
-                VarExpr -> m VariableID
-consumeRegionVariable (Variable _ vname) = do
+                VarExpr -> m VariableID -> m VariableID
+consumeRegionVariable (Variable _ vname) fallback = do
         v <- use (SS.logicalVars . at vname)
         case v of
                 Nothing -> do
                         -- Choose a known region
-                        rv <- chooseFrom =<< R.regionList
+                        rv <- (chooseFrom =<< R.regionList) `mplus` fallback
                         SS.logicalVars . at vname ?= rv
                         return rv
                 Just x -> do
@@ -71,7 +71,7 @@ consumeRegionVariable (Variable _ vname) = do
                         -- bound then we try to unify with known regions.
                         bindVarAsE x VTRegionID
                         return x
-consumeRegionVariable (WildCard _) = chooseFrom =<< R.regionList
+consumeRegionVariable (WildCard _) fallback = (chooseFrom =<< R.regionList) `mplus` fallback
 
 consumeValueExpr :: (MonadState s m, AssertionLenses s, SymbStateLenses s,
         MonadRaise m) =>
@@ -138,7 +138,7 @@ consumeRegion regn@(Region sp rtn ridv lrps rse) = contextualise regn $
                 bindVarsAsE st VTValue
                 rid <- addContext
                         (StringContext $ "The region identifier '" ++ ridv ++ "'") $
-                        consumeRegionVariable (Variable sp ridv) `mplus` 
+                        consumeRegionVariable (Variable sp ridv)
                             (get >>= failure . MissingRegionByType rtid params st)
                 R.consumeRegion rtid rid params st
 
@@ -151,7 +151,7 @@ consumeGuards :: (MonadState s m, AssertionLenses s, RegionLenses s,
 consumeGuards gg@(Guards sp ridv gds) = contextualise gg $
         do
                 rid <- addContext (StringContext $ "The region identifier '" ++ ridv ++ "'") $
-                        consumeRegionVariable (Variable sp ridv)
+                        consumeRegionVariable (Variable sp ridv) mzero
                 region <- liftMaybe =<< preuse (R.regions . ix rid) -- Backtracks if no such region
                 consumeWith <- case R.regTypeInstance region of
                         Just ri -> liftM (G.consumeGuard . rtGuardType)

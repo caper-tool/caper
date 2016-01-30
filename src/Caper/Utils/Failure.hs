@@ -17,6 +17,13 @@ class (Monad m, Failure e m) => OnFailure e m where
     -- pass the failure to the function; if this gives a Just, then execute that
     -- followed by the continuation; otherwise stick with the failure.
 
+multiRetry :: (OnFailure e m) => Int -> m a -> (e -> Maybe (m a)) -> m a
+multiRetry n a h
+    | n <= 0 = a
+    | otherwise = retry a (\f -> do
+                                a' <- h f
+                                return $ multiRetry (n - 1) a' h)
+
 instance (Failure e m, Monad m) => Failure e (StateT s m) where
     failure = lift . failure
 

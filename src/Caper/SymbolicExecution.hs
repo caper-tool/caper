@@ -211,7 +211,7 @@ createRegionWithParams rtid params st = do
         toSet = Set.fromList . toList
 
 missingRegionHandler :: (SymExMonad r s m) => m ()
-missingRegionHandler = retry (liftIO $ putStrLn "registered missing region handler") handler
+missingRegionHandler = multiRetry 2 (liftIO $ putStrLn "registered missing region handler") handler
     where
         handler (MissingRegionByType rtid params st s) = Just $ do
                 liftIO $ putStrLn "invoked missing region handler"

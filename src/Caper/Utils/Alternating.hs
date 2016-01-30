@@ -110,13 +110,13 @@ instance Monad m => MonadDemonic (AlternatingT e m) where
     (<#>) = DemonicChoice
     succeed = Success
     
-runAlternatingT' :: Monad m => AlternatingT e m a -> (Maybe e -> m (Either (Maybe e) [a])) -> m (Either (Maybe e) [a])
-runAlternatingT' NoChoice bt = bt Nothing
+runAlternatingT' :: Monad m => AlternatingT e m a -> ([e] -> m (Either [e] [a])) -> m (Either [e] [a])
+runAlternatingT' NoChoice bt = bt []
 runAlternatingT' (Result a) _ = return $ Right [a]
 runAlternatingT' (Lazy k) bt = do
                             a <- k
                             runAlternatingT' a bt 
-runAlternatingT' (AngelicChoice x y) bt = runAlternatingT' x (\_ -> runAlternatingT' y bt)
+runAlternatingT' (AngelicChoice x y) bt = runAlternatingT' x (\e -> runAlternatingT' y (\e' -> bt (e <|> e')))
 runAlternatingT' (DemonicChoice x y) bt = do
                             r0 <- runAlternatingT' x (return . Left)
                             case r0 of
@@ -144,14 +144,10 @@ runAlternatingT' (OrElse x y z) bt = do
                     Right rs' -> foo aa (rs ++ rs')  
 runAlternatingT' (Cut x) bt = runAlternatingT' x (return . Left)
 runAlternatingT' Success bt = return (Right [])
-runAlternatingT' (Failure e) bt = bt (Just e)
+runAlternatingT' (Failure e) bt = bt [e]
 runAlternatingT' (Retry x h) bt = runAlternatingT' x bt'
         where
-            bt' Nothing = bt Nothing
-            bt' (Just e) = case h e of
-                            Just y -> runAlternatingT' y bt
-                            Nothing -> bt (Just e)
-
+            bt' es = runAlternatingT' (msum [maybe (Failure e) id (h e) | e <- es]) bt
 
 runAlternatingT :: Monad m => AlternatingT e m a -> m (Maybe [a])
 runAlternatingT a = liftM (either (const Nothing) Just) $ runAlternatingT' a (return . Left)
