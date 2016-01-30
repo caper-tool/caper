@@ -206,6 +206,7 @@ cannotAliasStrong r1 r2
                     case (regs ^? ix r1, regs ^? ix r2) of
                         (Just reg1, Just reg2) -> restoring $ do
                                 _ <- mergeRegions reg1 reg2
+                                assume (EqualityCondition r1 r2)
                                 c <- isConsistent
                                 return (c == Just False)
                         _ -> return False
