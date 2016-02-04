@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, ScopedTypeVariables, MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts, ScopedTypeVariables, MultiParamTypeClasses, FlexibleInstances #-}
 module Caper.Assertions.Consume where
 
 import Control.Monad.State hiding (state)
@@ -6,13 +6,14 @@ import Control.Monad.Reader
 import Control.Lens hiding (op)
 import qualified Data.Set as Set
 
-import Caper.Utils.Choice
+-- import Caper.Utils.Choice
 import Caper.Utils.NondetClasses
 import Caper.Utils.AliasingMap ()
 import Caper.Logger
 import Caper.Exceptions
 import Caper.ProverDatatypes
 import Caper.Prover
+import Caper.ProverStates
 import Caper.Parser.AST
 import Caper.SymbolicState (SymbStateLenses)
 import qualified Caper.SymbolicState as SS
@@ -23,7 +24,18 @@ import Caper.DeductionFailure
 import qualified Caper.Guards as G
 import Caper.Assertions.Generate
 import Caper.Assertions.Check
-import Caper.Assertions.Produce
+-- import Caper.Assertions.Produce
+
+
+class (MonadState s m, AssertionLenses s, RegionLenses s, SymbStateLenses s,
+    MonadReader r m, RTCGetter r, Provers r, DebugState s r,
+    MonadRaise m, MonadLogger m, MonadPlus m, Failure DeductionFailure m, MonadDemonic m,
+    MonadIO m) => ConsumeMonad r s m
+
+instance (MonadState s m, AssertionLenses s, RegionLenses s, SymbStateLenses s,
+    MonadReader r m, RTCGetter r, Provers r, DebugState s r,
+    MonadRaise m, MonadLogger m, MonadPlus m, Failure DeductionFailure m, MonadDemonic m,
+    MonadIO m) => ConsumeMonad r s m
 
 {-
         At some point, this whole module should probably be rewritten.
@@ -123,14 +135,12 @@ consumeCell :: (MonadPlus m, MonadState s m, AssertionLenses s,
 consumeCell p = generateCellPred consumeVariable p >>= SS.consumePred
 
 -- |Consume a region assertion.
-consumeRegion :: (MonadState s m, AssertionLenses s, RegionLenses s,
-                SymbStateLenses s,
-                MonadReader r m, RTCGetter r,
-                MonadRaise m, MonadLogger m,
-                MonadPlus m, Failure DeductionFailure m) =>
+consumeRegion :: (ConsumeMonad r s m) =>
         RegionAssrt -> m ()
 consumeRegion regn@(Region sp rtn ridv lrps rse) = contextualise regn $
         do
+                logEvent $ InfoEvent $ "Consuming region: " ++ show regn
+                debugState 
                 rtid <- lookupRTNameE rtn
                 params <- mapM consumeAnyExpr lrps
                 checkRegionParams rtid (zip params lrps)
@@ -140,13 +150,12 @@ consumeRegion regn@(Region sp rtn ridv lrps rse) = contextualise regn $
                         (StringContext $ "The region identifier '" ++ ridv ++ "'") $
                         consumeRegionVariable (Variable sp ridv)
                             (get >>= failure . MissingRegionByType rtid params st)
+                logEvent $ InfoEvent $ "...: " ++ show rtid ++ ", " ++ show rid ++ show params ++ " " ++ show st
                 R.consumeRegion rtid rid params st
+                logEvent $ InfoEvent $ "Consumed region: " ++ show regn 
 
 -- |Consume a guard assertion.
-consumeGuards :: (MonadState s m, AssertionLenses s, RegionLenses s,
-                SymbStateLenses s,
-                MonadReader r m, RTCGetter r,
-                MonadLogger m, MonadRaise m, MonadPlus m) =>
+consumeGuards :: (ConsumeMonad r s m) =>
         Guards -> m ()
 consumeGuards gg@(Guards sp ridv gds) = contextualise gg $
         do
@@ -164,24 +173,19 @@ consumeGuards gg@(Guards sp ridv gds) = contextualise gg $
                 g1 <- foldM cw g0 gds
                 R.regions . ix rid .= region {R.regDirty = True, R.regGuards = g1}
 
-consumePredicate :: (MonadState s m, AssertionLenses s, MonadRaise m) =>
+consumePredicate :: (ConsumeMonad r s m) =>
         Predicate -> m ()
 consumePredicate pa = contextualise pa $
         raise $ SyntaxNotImplemented "predicates"
 
-consumeSpatial :: (MonadState s m, AssertionLenses s, RegionLenses s,
-                SymbStateLenses s, MonadReader r m, RTCGetter r,
-                MonadRaise m, MonadLogger m, MonadPlus m, Failure DeductionFailure m) =>
+consumeSpatial :: (ConsumeMonad r s m) =>
         SpatialAssrt -> m ()
 consumeSpatial (SARegion a) = consumeRegion a
 consumeSpatial (SAPredicate a) = consumePredicate a
 consumeSpatial (SACell a) = consumeCell a
 consumeSpatial (SAGuards a) = consumeGuards a
 
-consumeAssrt :: (MonadState s m, AssertionLenses s, RegionLenses s,
-                SymbStateLenses s, MonadReader r m, RTCGetter r, Provers r,
-                MonadRaise m, MonadLogger m, MonadPlus m, Failure DeductionFailure m, MonadDemonic m,
-                MonadIO m) =>
+consumeAssrt :: (ConsumeMonad r s m) =>
         Assrt -> m ()
 consumeAssrt (AssrtPure sp a) = consumePure a
 consumeAssrt (AssrtSpatial sp a) = consumeSpatial a

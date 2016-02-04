@@ -13,3 +13,6 @@ import Caper.Prover
 
 data DeductionFailure =
     forall s. (AssertionLenses s) => MissingRegionByType RTId [Expr VariableID] (ValueExpression VariableID) s
+
+instance Show DeductionFailure where
+    show (MissingRegionByType tid exps ve _) = "MissingRegion: " ++ show tid 

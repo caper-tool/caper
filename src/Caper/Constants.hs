@@ -11,7 +11,8 @@ module Caper.Constants(
     returnVariableName,
     defaultPreconditionBool,
     defaultPostconditionBool,
-    programVariableSupersedesLogicalVariable
+    programVariableSupersedesLogicalVariable,
+    regionConstructionLimit
 )
  where
 
@@ -75,3 +76,9 @@ defaultPostconditionBool = False
 -- variable of the same name when consuming an invariant or assertion
 programVariableSupersedesLogicalVariable :: Bool
 programVariableSupersedesLogicalVariable = True
+
+-- |This limits how many regions may be constructed in consuming an
+-- assertion.  Setting this too high may slow down failing proof
+-- searches without benefit.
+regionConstructionLimit :: Int
+regionConstructionLimit = 2

@@ -38,13 +38,12 @@ class (MonadRaise m, MonadIO m, MonadLogger m,
         MonadReader r m, Provers r, RTCGetter r, SpecificationContext r,
         MonadPlus m, Failure DeductionFailure m, OnFailure DeductionFailure m,
         MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s r,
-        RegionLenses s, MonadDemonic m) => SymExMonad r s m
+        RegionLenses s, MonadDemonic m, DebugState (WithAssertions s) r) => SymExMonad r s m
 
 instance (MonadRaise m, MonadIO m, MonadLogger m,
         MonadReader r m, Provers r, RTCGetter r, SpecificationContext r,
         MonadPlus m, Failure DeductionFailure m, OnFailure DeductionFailure m,
-        MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s r,
-        RegionLenses s, MonadDemonic m) => SymExMonad r s m
+        MonadState SymbState m, MonadDemonic m) => SymExMonad r SymbState m
 
 
 writtenLocals :: Stmt -> Set.Set String
@@ -174,7 +173,7 @@ createRegionWithParams rtid params st = do
         rt <- lookupRType rtid
         oldRegions <- use openRegions
         savedLVars <- use logicalVars
-        check $ do
+        interp' <- check $ do
             let vars = Set.unions (toSet st : map toSet params)
             bvars <- use boundVars
             forM_ (vars `Set.difference` bvars) $ \v ->
@@ -203,7 +202,8 @@ createRegionWithParams rtid params st = do
                 regState = (Just st1),
                 regGuards = rtFullGuard rt}
             consumeAssrt (siInterp interp')
-            liftIO $ putStrLn $ "*** Constructed with interp " ++ show interp'
+            return interp'
+        liftIO $ putStrLn $ "*** Constructed with interp " ++ show interp'
         logicalVars .= savedLVars
         openRegions .= oldRegions
     where
@@ -211,12 +211,15 @@ createRegionWithParams rtid params st = do
         toSet = Set.fromList . toList
 
 missingRegionHandler :: (SymExMonad r s m) => m ()
-missingRegionHandler = multiRetry 2 (liftIO $ putStrLn "registered missing region handler") handler
+missingRegionHandler = --retry (liftIO $ putStrLn "registered missing region handler") handler >> retry (return ()) handler
+        (liftIO $ putStrLn "registered missing region handler") >> multiRetry regionConstructionLimit handler
     where
         handler (MissingRegionByType rtid params st s) = Just $ do
                 liftIO $ putStrLn "invoked missing region handler"
+                debugState
                 createRegionWithParams rtid params st
                 liftIO $ putStrLn "created region"
+                debugState
         handler _ = Nothing
 
 data ExitMode = EMReturn (Maybe (ValueExpression VariableID)) | EMContinuation
@@ -446,7 +449,7 @@ checkProcedure ::
         FunctionDeclr -> m Bool
 checkProcedure fd@(FunctionDeclr sp n opre opost args s) =
         contextualise fd $ contextualise ("Checking procedure '" ++ n ++ "'") $ do
-            verRes <- runAlternatingT $ flip evalStateT (emptySymbStateWithVars args) $ do
+            verRes <- runAlternatingTD $ flip evalStateT (emptySymbStateWithVars args) $ do
                 -- Produce the precondition
                 logEvent $ InfoEvent $ "Producing precondition: " ++ show pre
                 contextualise "Producing precondition" $ produceAssrt

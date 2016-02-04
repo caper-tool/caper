@@ -13,7 +13,7 @@ flag z3ffi
 
 executable Caper
   main-is:         Caper.hs
-  build-depends:
+  build-depends:   
                    base >=4.6,
                    containers ==0.5.*,
                    control-monad-exception ==0.11.*,
@@ -39,14 +39,8 @@ executable Caper
                    argparser >=0.3.4,
                    int-cast
   hs-source-dirs:  src
-  -- -threaded is needed for use of the E theorem prover
   ghc-options:     -Wall -fno-warn-unused-matches -rtsopts -threaded
-
-  if flag(z3ffi)
-    build-depends:  z3 >=4.0.0
-    cpp-options:    -Dz3ffi
-    other-modules:  Caper.Provers.Values.Z3, Caper.Provers.Permissions.SMT
-  other-modules:
+  other-modules:   
                    Caper.Assertions.Check,
                    Caper.Assertions.Consume,
                    Caper.Assertions.Generate,
@@ -97,8 +91,13 @@ executable Caper
                    Caper.Utils.SimilarStrings,
                    Caper.DeductionFailure
 
+  if flag(z3ffi)
+    build-depends:  z3 >=4.0.0
+    cpp-options:    -Dz3ffi
+    other-modules:  Caper.Provers.Values.Z3, Caper.Provers.Permissions.SMT
+
 executable Interpreter
-  build-depends:
+  build-depends:   
                    base >= 4,
                    parsec >=3.1 && <3.2,
                    mtl >=2.1.2,
@@ -108,7 +107,7 @@ executable Interpreter
   hs-source-dirs:  src
   ghc-options:     -W -rtsopts
   main-is:         Interpreter.hs
-  other-modules:
+  other-modules:   
                    Caper.ExceptionContext,
                    Caper.FreeVariables,
                    Caper.Interpreter.Environment,
@@ -120,7 +119,7 @@ executable Interpreter
                    Caper.Parser.Parser
 
 executable RunTests
-  build-depends:
+  build-depends:   
                    base >= 4,
                    template-haskell >=2.8,
                    directory >= 1.2,
@@ -131,3 +130,4 @@ executable RunTests
                    containers >= 0.5
   hs-source-dirs:  Tests
   main-is:         RunTests.hs
+
