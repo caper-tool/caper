@@ -18,6 +18,7 @@ import qualified Data.Map as Map
 
 import Caper.FreeVariables
 
+{-# ANN module "HLint: ignore Eta reduce" #-}
 
 class Refreshable v where
         freshen :: v -> [v]
@@ -35,11 +36,15 @@ freshSub rvs wrtvs = \v -> Map.findWithDefault v v (foldl frshmp Map.empty rvs)
                 frshmp mp v = if Map.member v mp then mp else
                                 Map.insert v (head [vs | vs <- freshen v, vs `notElem` wrtvs]) mp
 
-data Literal a v = LPos (a v) | LNeg (a v) deriving (Functor, Foldable, Traversable)
+data Literal a v = LPos (a v) | LNeg (a v) deriving (Functor, Foldable, Traversable, Eq, Ord)
 
 instance Show (a v) => Show (Literal a v) where
         show (LPos x) = show x
         show (LNeg x) = "¬ " ++ show x
+
+instance FreeVariables (a v) v => FreeVariables (Literal a v) v where
+    foldrFree f x (LPos e) = foldrFree f x e
+    foldrFree f x (LNeg e) = foldrFree f x e
 
 data PermissionExpression v = PEFull
                         | PEZero
@@ -291,34 +296,20 @@ class ExpressionCASub c e where
         exprCASub :: (Refreshable v, Eq v) => (v -> e v) -> c v -> c v
         exprCASub' :: (Refreshable w, Eq v, Eq w, StringVariable v, StringVariable w) => (v -> e w) -> c v -> c w
 
-instance (ExpressionSub a e, Functor a, Foldable a, Functor e, Monad e) => ExpressionCASub (FOF a) e where
-        exprCASub s0 = unhelpSub . helpSub (fmap Right . s0) 
-            where
-                -- helpSub :: (v -> e (Either v v)) -> FOF a v -> FOF a (Either v v)
-                helpSub s (FOFForAll v p) = FOFForAll (Left v) (helpSub (\x -> if x == v then return $ Left v else s x) p)
-                helpSub s (FOFExists v p) = FOFExists (Left v) (helpSub (\x -> if x == v then return $ Left v else s x) p)
-                helpSub s (FOFAtom a) = FOFAtom (exprSub s a)
-                helpSub s (FOFAnd p1 p2) = FOFAnd (helpSub s p1) (helpSub s p2)
-                helpSub s (FOFOr p1 p2) = FOFOr (helpSub s p1) (helpSub s p2)
-                helpSub s (FOFImpl p1 p2) = FOFImpl (helpSub s p1) (helpSub s p2)
-                helpSub s (FOFNot p) = FOFNot (helpSub s p)
-                helpSub _ FOFFalse = FOFFalse
-                helpSub _ FOFTrue = FOFTrue
-                unhelpSub :: forall b. (Eq b, Refreshable b) => FOF a (Either b b) -> FOF a b 
-                unhelpSub f = fmap refresh f
-                        where
-                                refresh :: Either b b -> b   
-                                refresh (Left v) = head $ filter (\x -> not $ freeIn (Right x :: Either b b) f) ( v : freshen v )
-                                refresh (Right v) = v
-        exprCASub' s0 = unhelpSub . helpSub (fmap Right . s0)
-            where
-                -- straight :: v -> w
-                straight = varFromString . varToString 
-                -- helpSub :: (v -> e (Either v v)) -> FOF a v -> FOF a (Either v v)
+instance ExpressionCASub c e => ExpressionCASub (Literal c) e where
+        exprCASub s (LPos c) = LPos $ exprCASub s c
+        exprCASub s (LNeg c) = LNeg $ exprCASub s c
+        exprCASub' s (LPos c) = LPos $ exprCASub' s c
+        exprCASub' s (LNeg c) = LNeg $ exprCASub' s c
+
+helpFOFSub :: forall a e v w. (ExpressionSub a e, Functor a, Foldable a, Functor e, Monad e, Refreshable w, Eq v, Eq w)
+    => (v -> w) -> (v -> e (Either w w)) -> FOF a v -> FOF a (Either w w)
+helpFOFSub straight = helpSub
+        where
                 helpSub s (FOFForAll v p) = let v' = Left (straight v) in 
-                        FOFForAll v' (helpSub (\x -> if x == v then return $ v' else s x) p)
+                        FOFForAll v' (helpSub (\x -> if x == v then return v' else s x) p)
                 helpSub s (FOFExists v p) = let v' = Left (straight v) in
-                        FOFExists v' (helpSub (\x -> if x == v then return $ v' else s x) p)
+                        FOFExists v' (helpSub (\x -> if x == v then return v' else s x) p)
                 helpSub s (FOFAtom a) = FOFAtom (exprSub s a)
                 helpSub s (FOFAnd p1 p2) = FOFAnd (helpSub s p1) (helpSub s p2)
                 helpSub s (FOFOr p1 p2) = FOFOr (helpSub s p1) (helpSub s p2)
@@ -326,12 +317,18 @@ instance (ExpressionSub a e, Functor a, Foldable a, Functor e, Monad e) => Expre
                 helpSub s (FOFNot p) = FOFNot (helpSub s p)
                 helpSub _ FOFFalse = FOFFalse
                 helpSub _ FOFTrue = FOFTrue
-                unhelpSub :: forall b. (Eq b, Refreshable b) => FOF a (Either b b) -> FOF a b 
-                unhelpSub f = fmap refresh f
-                        where
-                                refresh :: Either b b -> b   
-                                refresh (Left v) = head $ filter (\x -> not $ freeIn (Right x :: Either b b) f) ( v : freshen v )
-                                refresh (Right v) = v
+
+refreshLefts :: (Eq b, Refreshable b, FreeVariables (a (Either b b)) (Either b b), Functor a) =>
+        a (Either b b) -> a b
+refreshLefts f = fmap refresh f
+    where
+            refresh (Left v) = head $ filter (\x -> not $ freeIn (Right x) f) (v : freshen v)
+            refresh (Right v) = v
+
+
+instance (ExpressionSub a e, Functor a, Foldable a, Functor e, Monad e) => ExpressionCASub (FOF a) e where
+        exprCASub s0 = refreshLefts . helpFOFSub id (fmap Right . s0) 
+        exprCASub' s0 = refreshLefts . helpFOFSub (varFromString . varToString) (fmap Right . s0)
 
 
 ($=$) :: (ValueExpressionCastable a v, ValueExpressionCastable b v) => a v -> b v -> FOF ValueAtomic v
@@ -345,11 +342,53 @@ instance (ExpressionSub a e, Functor a, Foldable a, Functor e, Monad e) => Expre
 
 infix 4 $=$, $/=$, $<$, $<=$
 
+-- |'SetExpression's represent sets of values. 
+data SetExpression v =
+        SetBuilder v (FOF ValueAtomic v)
+        | SetSingleton (ValueExpression v)
+            deriving (Eq, Ord, Functor, Foldable)
+
+instance Show v => Show (SetExpression v) where
+    show (SetBuilder v e) = "{ " ++ show v ++ " | " ++ show e ++ " }"
+    show (SetSingleton e) = "{ " ++ show e ++ " }"
+
+instance FreeVariables (SetExpression v) v where
+    foldrFree f x (SetBuilder v' cond) = foldrFree (\v -> if v == v' then id else f v) x cond
+    foldrFree f x (SetSingleton e) = foldr f x e
+    
+instance (ExpressionSub ValueExpression e, Functor e, Monad e) => ExpressionCASub SetExpression e where
+    exprCASub s (SetBuilder v e) = refreshLefts $ SetBuilder (Left v)
+                                (helpFOFSub id (\x -> if x == v then return (Left v) else (fmap Right . s) x) e)
+    exprCASub s (SetSingleton e) = SetSingleton $ exprSub s e
+    exprCASub' s (SetBuilder v e) = let v' = (Left $ varFromString $ varToString v) in
+                refreshLefts $ SetBuilder v'
+                                (helpFOFSub (varFromString . varToString) (\x -> if x == v then return v' else (fmap Right . s) x) e)
+    exprCASub' s (SetSingleton e) = SetSingleton $ exprSub s e
+
+
+-- |The empty set.
+emptySet :: StringVariable v => SetExpression v
+emptySet = SetBuilder (varFromString "_") FOFFalse
+
+data SetAssertion v = SubsetEq (SetExpression v) (SetExpression v) deriving (Eq, Ord, Foldable)
+
+instance (ExpressionCASub SetExpression e) => ExpressionCASub SetAssertion e where
+    exprCASub s (SubsetEq s1 s2) = SubsetEq (exprCASub s s1) (exprCASub s s2)
+    exprCASub' s (SubsetEq s1 s2) = SubsetEq (exprCASub' s s1) (exprCASub' s s2)
+    
+
+instance Show v => Show (SetAssertion v) where
+    show (SubsetEq e1 e2) = show e1 ++ " <= " ++ show e2
+
+instance FreeVariables (SetAssertion v) v where
+    foldrFree f x (SubsetEq e1 e2) = foldrFree f (foldrFree f x e2) e1
+
 -- |'Condition's are the basic assertions and assumptions that are handled by the provers.
 data Condition v = PermissionCondition (FOF PermissionAtomic v)
                 | ValueCondition (FOF ValueAtomic v)
                 | EqualityCondition v v
                 | DisequalityCondition v v
+                | SetCondition (Literal SetAssertion v)
                 deriving (Eq, Ord, Foldable)
 
 
@@ -374,6 +413,7 @@ instance ConditionProp Condition where
         negativeCondition (ValueCondition f) = ValueCondition (FOFNot f)
         negativeCondition (EqualityCondition e1 e2) = DisequalityCondition e1 e2
         negativeCondition (DisequalityCondition e1 e2) = EqualityCondition e1 e2
+        negativeCondition (SetCondition sc) = negativeCondition sc
 
 -- |The inconsistent condition.
 condFalse :: forall v. Condition v
@@ -397,6 +437,10 @@ instance ConditionProp PermissionAtomic where
 instance ConditionProp ValueAtomic where
         toCondition = toCondition . FOFAtom
         negativeCondition = negativeCondition . FOFAtom
+
+instance ConditionProp SetAssertion where
+        toCondition = SetCondition . LPos
+        negativeCondition = SetCondition . LNeg
 
 instance ConditionProp c => ConditionProp (Literal c) where
         toCondition (LPos c) = toCondition c
@@ -500,6 +544,7 @@ instance FreeVariables (Condition v) v where
         foldrFree f x (ValueCondition fof) = foldrFree f x fof
         foldrFree f x (EqualityCondition a b) = foldr f x [a,b]
         foldrFree f x (DisequalityCondition a b) = foldr f x [a,b]
+        foldrFree f x (SetCondition sc) = foldrFree f x sc
         
 
 instance Show v => Show (Condition v) where
@@ -507,16 +552,19 @@ instance Show v => Show (Condition v) where
         show (ValueCondition va) = show va
         show (EqualityCondition v1 v2) = show v1 ++ " = " ++ show v2
         show (DisequalityCondition v1 v2) = show v1 ++ " != " ++ show v2
+        show (SetCondition sc) = show sc
 
 instance ExpressionCASub Condition Expr where
         exprCASub s (PermissionCondition pc) = PermissionCondition $ exprCASub s pc
         exprCASub s (ValueCondition vc) = ValueCondition $ exprCASub s vc
         exprCASub s (EqualityCondition v1 v2) = exprEquality (s v1) (s v2)
         exprCASub s (DisequalityCondition v1 v2) = negativeCondition $ exprEquality (s v1) (s v2)
+        exprCASub s (SetCondition sc) = SetCondition $ exprCASub s sc
         exprCASub' s (PermissionCondition pc) = PermissionCondition $ exprCASub' s pc
         exprCASub' s (ValueCondition vc) = ValueCondition $ exprCASub' s vc
         exprCASub' s (EqualityCondition v1 v2) = exprEquality (s v1) (s v2)
         exprCASub' s (DisequalityCondition v1 v2) = negativeCondition $ exprEquality (s v1) (s v2)
+        exprCASub' s (SetCondition sc) = SetCondition $ exprCASub' s sc
 
 makeEquality :: v -> Expr v -> Condition v
 -- ^Given a variable and an expression, generate a condition that

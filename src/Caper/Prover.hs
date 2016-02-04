@@ -7,10 +7,8 @@
 {-# LANGUAGE BangPatterns #-}
 module Caper.Prover(
         -- * Assumptions
-        --Assumptions,
         BindingContext,
         AssumptionLenses(..),
-        --emptyAssumptions,
         ProverM,
         -- ** Variable type bindings
         boundVars,
@@ -37,12 +35,7 @@ module Caper.Prover(
         whenConsistent,
         succeedIfInconsistent,
         -- * Assertions
-        --Assertions,
         AssertionLenses(..),
-        --emptyAssertions,
-        --WithAssertions,
-        --withAssrBase,
-        --emptyWithAssertions,
         -- ** Display
         showAssertions,
         printAssertions,
@@ -86,24 +79,16 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Control.Monad.State hiding (mapM_,mapM)
 import Control.Monad.Reader
-import Control.Monad.RWS
-import Control.Monad.Trans.Maybe
 import Control.Monad.Exception
 import Control.Applicative
-import Data.Maybe
 import Data.Foldable
---import Data.Traversable
---import Data.Typeable
---import Control.Monad hiding (mapM_,mapM)
 import Control.Lens
 import Data.List (intercalate)
 
 import Caper.Utils.NondetClasses
 
 import Caper.ProverDatatypes
---import Caper.ValueProver
 import qualified Caper.TypingContext as TC
---import Caper.FirstOrder
 import Caper.Exceptions
 import Caper.Logger
 
@@ -246,6 +231,9 @@ assume c@(EqualityCondition v1 v2) = do
 assume c@(DisequalityCondition v1 v2) = do
                         unifyEqVars v1 v2
                         addAssumption c
+assume c@(SetCondition _) = do
+                        bindVarsAs (freeVariables c) VTValue
+                        addAssumption c
 
 -- TODO: make this succeed faster
 -- |Assume a contradiction.
@@ -276,6 +264,9 @@ assumeE c@(EqualityCondition v1 v2) = do
                         addAssumption c
 assumeE c@(DisequalityCondition v1 v2) = do
                         unifyEqVarsE v1 v2
+                        addAssumption c
+assumeE c@(SetCondition _) = do
+                        bindVarsAsE (freeVariables c) VTValue
                         addAssumption c
 
 -- |Assume a condition to be true.  May raise an exception.
@@ -316,7 +307,15 @@ treatAsValueJT (TC.JustType t) = treatAsValueJ (Just t)
 treatAsValueJT TC.Undetermined = treatAsValueJ Nothing
 treatAsValueJT _ = False
 
-valueConditions :: (Ord v) => TC.TContext v VariableType -> [Condition v] -> [FOF ValueAtomic v]
+setAssertionToValueFOF :: (Ord v, Refreshable v) => SetAssertion v -> FOF ValueAtomic v
+setAssertionToValueFOF (SubsetEq (SetSingleton e1) (SetSingleton e2)) = e1 $=$ e1
+setAssertionToValueFOF (SubsetEq (SetSingleton e) (SetBuilder v a)) = exprCASub (\v' -> if v == v' then e else var v') a
+setAssertionToValueFOF (SubsetEq (SetBuilder v a) s2) = FOFForAll v $ FOFImpl a
+                                    (case s2 of
+                                        SetSingleton e -> FOFAtom $ VAEq (var v) e
+                                        SetBuilder v' a' -> exprCASub (\v'' -> if v' == v'' then VEVar v else VEVar v'') a') 
+
+valueConditions :: (Ord v, Refreshable v) => TC.TContext v VariableType -> [Condition v] -> [FOF ValueAtomic v]
 valueConditions tc [] = []
 valueConditions tc (EqualityCondition v1 v2 : xs) =
                 if treatAsValueJT (TC.lookup v1 tc) then
@@ -329,6 +328,8 @@ valueConditions tc (DisequalityCondition v1 v2 : xs) =
                 else
                         valueConditions tc xs
 valueConditions tc (ValueCondition cass : xs) = cass : valueConditions tc xs
+valueConditions tc (SetCondition (LPos sa) : xs) = setAssertionToValueFOF sa : valueConditions tc xs
+valueConditions tc (SetCondition (LNeg sa) : xs) = FOFNot (setAssertionToValueFOF sa) : valueConditions tc xs  
 valueConditions tc (_ : xs) = valueConditions tc xs
 
 valueAssumptions :: (AssumptionLenses a) => a -> [FOF ValueAtomic VariableID]
@@ -583,6 +584,9 @@ assert c@(EqualityCondition v1 v2) = do
 assert c@(DisequalityCondition v1 v2) = do
                         eUnifyEqVars v1 v2
                         assertions %= (c :)
+assert c@(SetCondition _) = do
+                        eBindVarsAs (freeVariables c) VTValue
+                        assertions %= (c :)
 
 assertE :: (MonadState s m, MonadLogger m, MonadRaise m, AssertionLenses s) =>
         Condition VariableID -> m ()
@@ -601,7 +605,9 @@ assertE c@(EqualityCondition v1 v2) = do
 assertE c@(DisequalityCondition v1 v2) = do
                         eUnifyEqVarsE v1 v2
                         assertions %= (c :)
-
+assertE c@(SetCondition _) = do
+                        eBindVarsAsE (freeVariables c) VTValue
+                        assertions %= (c :)
 
 -- |Assert that two expressions are equal.
 assertEqual :: (ProverExpression e, MonadState s m, AssertionLenses s,
