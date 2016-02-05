@@ -346,7 +346,7 @@ infix 4 $=$, $/=$, $<$, $<=$
 data SetExpression v =
         SetBuilder v (FOF ValueAtomic v)
         | SetSingleton (ValueExpression v)
-            deriving (Eq, Ord, Functor, Foldable)
+            deriving (Eq, Ord, Functor, Foldable, Traversable)
 
 instance Show v => Show (SetExpression v) where
     show (SetBuilder v e) = "{ " ++ show v ++ " | " ++ show e ++ " }"
@@ -365,10 +365,33 @@ instance (ExpressionSub ValueExpression e, Functor e, Monad e) => ExpressionCASu
                                 (helpFOFSub (varFromString . varToString) (\x -> if x == v then return v' else (fmap Right . s) x) e)
     exprCASub' s (SetSingleton e) = SetSingleton $ exprSub s e
 
-
 -- |The empty set.
 emptySet :: StringVariable v => SetExpression v
 emptySet = SetBuilder (varFromString "_") FOFFalse
+
+toSetBuilder :: (StringVariable v) => SetExpression v -> SetExpression v
+toSetBuilder se = SetBuilder v c
+        where
+            (v, c) = case se of
+                SetBuilder v0 c0 -> (v0, c0)
+                SetSingleton e -> let v0 = varFromString "_" in (v0, FOFAtom $ VAEq (var v0) e)
+
+setUnion :: (StringVariable v, Refreshable v, Eq v) => SetExpression v -> SetExpression v -> SetExpression v
+setUnion a0 b0 = case (toSetBuilder a0, toSetBuilder b0) of
+        ss@(SetBuilder va ca, SetBuilder vb cb) ->
+            let v = head [vv | vv <- freshen va, not (freeIn vv ss)] in  
+            SetBuilder v (FOFOr (exprCASub (\v' -> VEVar $ if v == va then v else v') ca)
+                                (exprCASub (\v' -> VEVar $ if v == vb then v else v') cb)) 
+        _ -> undefined
+
+setIntersection :: (StringVariable v, Refreshable v, Eq v) => SetExpression v -> SetExpression v -> SetExpression v
+setIntersection a0 b0 = case (toSetBuilder a0, toSetBuilder b0) of
+        ss@(SetBuilder va ca, SetBuilder vb cb) ->
+            let v = head [vv | vv <- freshen va, not (freeIn vv ss)] in  
+            SetBuilder v (FOFAnd (exprCASub (\v' -> VEVar $ if v == va then v else v') ca)
+                                (exprCASub (\v' -> VEVar $ if v == vb then v else v') cb)) 
+        _ -> undefined
+
 
 data SetAssertion v = SubsetEq (SetExpression v) (SetExpression v) deriving (Eq, Ord, Foldable)
 

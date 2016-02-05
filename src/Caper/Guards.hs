@@ -30,7 +30,7 @@ import Caper.Exceptions
 data GuardParameterType =
                 UniqueGPT
                 | PermissionGPT
---                | ValueGPT
+                | ValueGPT
                 deriving (Eq,Ord,Show)
 
 -- INVARIANT : instances of WeakGuardType must be non-empty
@@ -44,7 +44,7 @@ validateGuardDeclr (SomeGuardDeclr gt) = contextualise gt $ do
         where
                 vgt s (NamedGD _ n) = checkFresh s n
                 vgt s (PermissionGD _ n) = checkFresh s n
---                vgt s (ParametrisedGT n) = checkFresh s n
+                vgt s (ParametrisedGD _ n) = checkFresh s n
                 vgt s (ProductGD _ gt1 gt2) = do
                                                 s1 <- vgt s gt1
                                                 vgt s1 gt2
@@ -61,7 +61,7 @@ validateGuardDeclr (SomeGuardDeclr gt) = contextualise gt $ do
 toWeakGuardType :: GuardDeclr -> WeakGuardType
 toWeakGuardType (NamedGD _ n) = Set.singleton $ Map.singleton n UniqueGPT
 toWeakGuardType (PermissionGD _ n) = Set.singleton $ Map.singleton n PermissionGPT
---toWeakGuardType (ParametrisedGD n) = Set.singleton $ Map.singleton n ValueGPT
+toWeakGuardType (ParametrisedGD _ n) = Set.singleton $ Map.singleton n ValueGPT
 toWeakGuardType (ProductGD _ gt1 gt2) = mixWith Map.union (toWeakGuardType gt1) (toWeakGuardType gt2)
 toWeakGuardType (SumGD _ gt1 gt2) = Set.union (toWeakGuardType gt1) (toWeakGuardType gt2)
 
@@ -72,7 +72,7 @@ topLevelToWeakGuardType (SomeGuardDeclr gt) = toWeakGuardType gt
 
 
 data GuardParameters v = NoGP | PermissionGP (PermissionExpression v)
- --- | Parameters [ValueExpression] | CoParameters [ValueExpression] [ValueExpression]
+    | ParameterGP (SetExpression v)
         deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
 newtype Guard v = GD (Map.Map String (GuardParameters v)) deriving (Eq,Ord,Functor,Foldable,Traversable)
@@ -84,15 +84,17 @@ instance Show v => Show (Guard v) where
         show (GD mp) = doshow (Map.toList mp)
                 where
                         doshow [] = "0"
-                        doshow ll = intercalate " $ " (map showone ll)
+                        doshow ll = intercalate " * " (map showone ll)
                         showone (s, NoGP) = s
                         showone (s, PermissionGP perm) = s ++ "[" ++ show perm ++ "]"
+                        showone (s, ParameterGP st) = s ++ show st 
 
 guardLift :: (Map.Map String (GuardParameters t)
                -> Map.Map String (GuardParameters v))
                -> Guard t -> Guard v
 guardLift f (GD x) = GD (f x)
 
+{-
 instance ExpressionSub GuardParameters PermissionExpression where
         exprSub _ NoGP = NoGP
         exprSub s (PermissionGP pe) = PermissionGP (exprSub s pe)
@@ -107,7 +109,7 @@ instance ExpressionSub GuardParameters Expr where
 
 instance ExpressionSub Guard Expr where
         exprSub s (GD g) = GD $ Map.map (exprSub s) g
-
+-}
 
 checkGuardAtType :: Guard v -> WeakGuardType -> Bool
 checkGuardAtType (GD g)
