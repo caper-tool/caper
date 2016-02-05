@@ -20,21 +20,34 @@ function makeLock()
     return v;
 }
 
+function incr(x)
+  requires TLock(r, x, _);
+  ensures TLock(r, x, n) &*& r@TAKE(ret) &*& ret >= n;
+{
+    t := [x + 0];
+    b := CAS(x + 0, t, t + 1);
+    if (b = 0) {
+        t := incr(x);
+    }
+    return t;
+}
+
+function wait(x, t)
+    requires TLock(r, x, n) &*& r@TAKE(t) &*& t >= n;
+    ensures TLock(r, x, t) &*& r@TAKE(t);
+{
+    v := [x + 1];
+    if (v < t) {
+        wait(x, t);
+    }
+}
+
 function lock(x)
   requires TLock(r, x, _);
   ensures TLock(r, x, n) &*& r@TAKE(n);
 {
-    do 
-        invariant TLock(r, x, ni) &*& (b = 1 ? r@TAKE(t) &*& t >= ni : true)
-    {
-        t := [x + 0];
-        b := CAS(x + 0, t, t + 1);
-    } while (b = 0);
-    do
-        invariant TLock(r, x, ni) &*& r@TAKE(t) &*& t >= ni
-    {
-        v := [x + 1];
-    } while(v < t);
+    t := incr(x);
+    wait(x, t);    
 }
 
 function unlock(x)
