@@ -294,7 +294,7 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
                                 -- assume the static conditions
                                 mapM_ (assume . exprCASub' s) stconds
                                 -- combine guards
-                                gd' <- mergeGuards gd (exprSub s trgd)
+                                gd' <- mergeGuards gd (exprCASub' s trgd)
                                 assms <- use assumptions
                                 -- check the guard matches the guard type
                                 if checkGuardAtType gd' (topLevelToWeakGuardType $ rtGuardType rt) then
@@ -334,7 +334,7 @@ checkGuaranteeTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitio
                                 case rtGuardType rt of
                                     ZeroGuardDeclr -> return ()
                                     SomeGuardDeclr gdec -> do
-                                            _ <- guardEntailment gdec gd (exprSub s trgd)
+                                            _ <- guardEntailment gdec gd (exprCASub' s trgd)
                                             return ()
                                 justCheck
                         case transitionImpossible of

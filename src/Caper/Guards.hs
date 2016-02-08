@@ -94,6 +94,18 @@ guardLift :: (Map.Map String (GuardParameters t)
                -> Guard t -> Guard v
 guardLift f (GD x) = GD (f x)
 
+instance ExpressionCASub GuardParameters Expr where
+    exprCASub _ NoGP = NoGP
+    exprCASub s (PermissionGP pe) = PermissionGP (exprSub s pe)
+    exprCASub s (ParameterGP st) = ParameterGP (exprCASub s st)
+    exprCASub' _ NoGP = NoGP
+    exprCASub' s (PermissionGP pe) = PermissionGP (exprSub s pe)
+    exprCASub' s (ParameterGP st) = ParameterGP (exprCASub' s st)
+
+instance ExpressionCASub Guard Expr where
+    exprCASub s (GD g) = GD $ Map.map (exprCASub s) g
+    exprCASub' s (GD g) = GD $ Map.map (exprCASub' s) g
+
 {-
 instance ExpressionSub GuardParameters PermissionExpression where
         exprSub _ NoGP = NoGP

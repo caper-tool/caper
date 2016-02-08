@@ -301,12 +301,12 @@ checkForClosure rt tr1 tr2 = flip evalStateT emptyAssumptions $ do
         whenConsistent $ do
             -- Otherwise, compute (conservatively) the upper bound of the two guards 
             grd <- conservativeGuardLUBTL (rtGuardType rt)
-                    (exprSub (sub pmap1) (trGuard tr1)) (exprSub (sub pmap2) (trGuard tr2))
+                    (exprCASub' (sub pmap1) (trGuard tr1)) (exprCASub' (sub pmap2) (trGuard tr2))
             -- Try to find a third transition that subsumes the sequencing.
             msum $ flip map (rtTransitionSystem rt) $ \tr3 -> check $ do
                 pmap3 <- transParams newEvar pmap tr3
                 mapM_ (assert . exprCASub' (sub pmap3)) (trPredicate tr3)
-                _ <- guardEntailmentTL (rtGuardType rt) grd (exprSub (sub pmap3) (trGuard tr3))
+                _ <- guardEntailmentTL (rtGuardType rt) grd (exprCASub' (sub pmap3) (trGuard tr3))
                 assertTrue $ exprSub (sub pmap1) (trPreState tr1) $=$ exprSub (sub pmap3) (trPreState tr3)
                 assertTrue $ exprSub (sub pmap2) (trPostState tr2) $=$ exprSub (sub pmap3) (trPostState tr3)
     where
