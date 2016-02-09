@@ -104,20 +104,18 @@ generateCellPred genvar (CellBlock sp e1 e2) = do
                 return (PCells, [ValueExpr ve1, ValueExpr ve2])
 
 -- |Convert a list of AST guards to the map-based internal representation of
--- guards.
+-- guards.  For practical purposes, this works like producing the guard.
 --
 -- TODO: it might be nice if produceGuards and consumeGuards went via this.
 generateGuard :: forall m v. (MonadRaise m, Monad m) =>
             (VarExpr -> m v) 
             -- ^ Variable handler
-            -> (PermissionExpression v -> m ())
-            -- ^ Handler for permission expressions (assert or assume non-zero)
-            -> (PermissionExpression v -> PermissionExpression v -> m ())
-            -- ^ Handler for disjointness of permission expressions
+            -> (Condition v -> m ())
+            -- ^ Handler for conditions
             -> [Guard]
             -- ^ Guard AST 
             -> m (G.Guard v)
-generateGuard handler peh disjh = liftM G.GD . foldM tg' Map.empty
+generateGuard handler condh = liftM G.GD . foldM tg' Map.empty
     where
         tg' g grd = contextualise grd $ tg g grd
         tg :: Map.Map String (G.GuardParameters v) -> Guard -> m (Map.Map String (G.GuardParameters v))
@@ -131,16 +129,19 @@ generateGuard handler peh disjh = liftM G.GD . foldM tg' Map.empty
                             return $ Map.insert gname (G.PermissionGP pexp) g
                         (Just (G.PermissionGP pe0)) -> do
                             pexp <- gpe pe
-                            disjh pe0 pexp
+                            condh $ toCondition $ PADis pe0 pexp
                             return $ Map.insert gname
                                         (G.PermissionGP (PESum pe0 pexp)) g
                         _ -> raise $ IncompatibleGuardOccurrences gname
-        tg g (ParamGuard{}) = raise $ SyntaxNotImplemented "parametrised guards"
+        tg g (ParamGuard _ gname [e]) = do
+                    v <- generateValueExpr handler e
+                    undefined
+        tg g (ParamGuard _ gname _) = raise $ SyntaxNotImplemented "guards with multiple parameters"
         tg g (ParamSetGuard{}) = raise $ SyntaxNotImplemented "parametrised guards"
         gpe :: PermExpr -> m (PermissionExpression v)
         gpe pe = do
             pexp <- generatePermissionExpr handler pe
-            peh pexp
+            condh $ negativeCondition $ PAEq pexp PEZero
             return pexp
 
 

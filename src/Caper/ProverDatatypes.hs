@@ -369,6 +369,10 @@ instance (ExpressionSub ValueExpression e, Functor e, Monad e) => ExpressionCASu
 emptySet :: StringVariable v => SetExpression v
 emptySet = SetBuilder (varFromString "_") FOFFalse
 
+-- |The set of all values.
+fullSet :: StringVariable v => SetExpression v
+fullSet = SetBuilder (varFromString "_") FOFTrue
+
 toSetBuilder :: (StringVariable v) => SetExpression v -> SetExpression v
 toSetBuilder se = SetBuilder v c
         where
@@ -392,6 +396,13 @@ setIntersection a0 b0 = case (toSetBuilder a0, toSetBuilder b0) of
                                 (exprCASub (\v' -> VEVar $ if v == vb then v else v') cb)) 
         _ -> undefined
 
+setDifference :: (StringVariable v, Refreshable v, Eq v) => SetExpression v -> SetExpression v -> SetExpression v
+setDifference a0 b0 = case (toSetBuilder a0, toSetBuilder b0) of
+        ss@(SetBuilder va ca, SetBuilder vb cb) ->
+            let v = head [vv | vv <- freshen va, not (freeIn vv ss)] in  
+            SetBuilder v (FOFAnd (exprCASub (\v' -> VEVar $ if v == va then v else v') ca)
+                                (FOFNot $ exprCASub (\v' -> VEVar $ if v == vb then v else v') cb)) 
+        _ -> undefined
 
 data SetAssertion v = SubsetEq (SetExpression v) (SetExpression v) deriving (Eq, Ord, Foldable)
 

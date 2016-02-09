@@ -106,23 +106,6 @@ instance ExpressionCASub Guard Expr where
     exprCASub s (GD g) = GD $ Map.map (exprCASub s) g
     exprCASub' s (GD g) = GD $ Map.map (exprCASub' s) g
 
-{-
-instance ExpressionSub GuardParameters PermissionExpression where
-        exprSub _ NoGP = NoGP
-        exprSub s (PermissionGP pe) = PermissionGP (exprSub s pe)
-
-instance ExpressionSub Guard PermissionExpression where
-        exprSub s (GD g) = GD $ Map.map (exprSub s) g
-
--- This is duplicated code, but to avoid that would need UndecidableInstances
-instance ExpressionSub GuardParameters Expr where
-        exprSub _ NoGP = NoGP
-        exprSub s (PermissionGP pe) = PermissionGP (exprSub s pe)
-
-instance ExpressionSub Guard Expr where
-        exprSub s (GD g) = GD $ Map.map (exprSub s) g
--}
-
 checkGuardAtType :: Guard v -> WeakGuardType -> Bool
 checkGuardAtType (GD g)
   = Set.fold (\ m b -> b || Map.foldWithKey (matchin m) True g) False
@@ -132,19 +115,18 @@ checkGuardAtType (GD g)
                                 (Just x) -> matchup p x
                 matchup NoGP UniqueGPT = True
                 matchup (PermissionGP _) PermissionGPT = True
---                matchup (Parameters _) ValueGPT = True
---                matchup (CoParameters _ _) ValueGPT = True
+                matchup (ParameterGP _) ValueGPT = True
                 matchup _ _ = False
 
-gtToG :: GuardParameterType -> GuardParameters v
+gtToG :: StringVariable v => GuardParameterType -> GuardParameters v
 gtToG UniqueGPT = NoGP
 gtToG PermissionGPT = PermissionGP PEFull
---gtToG ValueGPT = CoParameters [] []
+gtToG ValueGPT = ParameterGP fullSet
 
-fullGuard :: WeakGuardType -> Guard v
+fullGuard :: StringVariable v => WeakGuardType -> Guard v
 fullGuard gt = GD $ Map.map gtToG (Set.findMin gt)
 
-fullGuards :: WeakGuardType -> [Guard v]
+fullGuards :: StringVariable v => WeakGuardType -> [Guard v]
 fullGuards = Prelude.map (GD . Map.map gtToG) . Set.toList
 
 
@@ -168,6 +150,11 @@ mergeGuards (GD g1) (GD g2) = liftM GD $ sequence (Map.unionWith unionop (fmap r
                                                 assumeFalse $ PAEq perm2 PEZero
                                                 assumeTrue $ PADis perm1 perm2
                                                 return $ PermissionGP $ PESum perm1 perm2
+                                        (ParameterGP s1, ParameterGP s2) -> do
+                                                -- Assume the intersection is empty (disjointness)
+                                                assumeTrue $ SubsetEq (setIntersection s1 s2) emptySet
+                                                -- and return the union
+                                                return $ ParameterGP $ setUnion s1 s2
                                         _ -> do
                                                 assumeContradiction
                                                 -- Since we've assumed false, it shouldn't
@@ -179,11 +166,12 @@ mergeGuards (GD g1) (GD g2) = liftM GD $ sequence (Map.unionWith unionop (fmap r
 matchesGuardDeclr :: GuardDeclr -> Guard v -> Bool
 matchesGuardDeclr (NamedGD _ n) (GD g) = Map.member n g
 matchesGuardDeclr (PermissionGD _ n) (GD g) = Map.member n g
+matchesGuardDeclr (ParametrisedGD _ n) (GD g) = Map.member n g
 matchesGuardDeclr (ProductGD _ t1 t2) g = matchesGuardDeclr t1 g || matchesGuardDeclr t2 g
 matchesGuardDeclr (SumGD _ t1 t2) g = matchesGuardDeclr t1 g || matchesGuardDeclr t2 g
 
 
-guardEquivalence :: GuardDeclr -> Guard v1 -> Guard v2 -> (Guard v3, Guard v4)
+guardEquivalence :: StringVariable v => GuardDeclr -> Guard v -> Guard v -> (Guard v, Guard v)
 -- ^Given a 'GuardDeclr' and a pair of guards, find a pair of guards that
 -- could be used to rewrite the first to entail the second.
 -- This assumes the guards conform to the guard type.
@@ -200,18 +188,19 @@ guardEquivalence (SumGD _ gta1 gta2) gd1 gd2 =
                                         _ -> (GD Map.empty, GD Map.empty)
                 where
                         ma = matchesGuardDeclr
-                        fgf :: GuardDeclr -> Guard v -> Guard w
+                        -- fgf :: GuardDeclr -> Guard v -> Guard w
                         fgf (NamedGD _ n) _ = GD $ Map.singleton n NoGP
                         fgf (PermissionGD _ n) _ = GD $ Map.singleton n (PermissionGP PEFull)
+                        fgf (ParametrisedGD _ n) _ = GD $ Map.singleton n (ParameterGP fullSet)
                         fgf (ProductGD _ gt1 gt2) g = guardJoin (fgf gt1 g) (fgf gt2 g)
                         fgf (SumGD _ gt1 gt2) g = if ma gt2 g then fgf gt2 g else fgf gt1 g
-
 guardEquivalence _ _ _ = (GD Map.empty, GD Map.empty)
 
 
 sameGuardParametersType :: GuardParameters v -> GuardParameters w -> Maybe (GuardParameters v)
 sameGuardParametersType NoGP NoGP = Nothing
 sameGuardParametersType (PermissionGP _) (PermissionGP _) = Nothing
+sameGuardParametersType (ParameterGP _) (ParameterGP _) = Nothing
 sameGuardParametersType a _ = Just a
 
 subtractPE :: (MonadPlus m, MonadState s m, AssertionLenses s, MonadLogger m) =>
@@ -240,7 +229,10 @@ subtractGP :: (MonadPlus m, MonadState s m, AssertionLenses s, MonadLogger m) =>
                 m (Maybe (GuardParameters VariableID))
 subtractGP NoGP NoGP = return Nothing
 subtractGP (PermissionGP p1) (PermissionGP p2) =
-                liftM (liftM PermissionGP) $ subtractPE p1 p2
+                liftM (fmap PermissionGP) $ subtractPE p1 p2
+subtractGP (ParameterGP s1) (ParameterGP s2) = do
+                assertTrue $ SubsetEq s2 s1
+                return $ Just $ ParameterGP $ setDifference s1 s2
 subtractGP _ _ = mzero
 
 guardPrimitiveEntailmentM :: (MonadPlus m, MonadState s m, AssertionLenses s,
@@ -253,12 +245,15 @@ guardPrimitiveEntailmentM (GD g1) (GD g2) = if Map.null $ Map.differenceWith sam
                         let k = Map.intersectionWith (,) g1 g2
                         r <- mapM subtrct k
                         return $ Map.union (Map.mapMaybe id r) rest
+                subtrct = uncurry subtractGP
+                {-
                 subtrct :: (MonadPlus m, MonadState s m, AssertionLenses s,
                         MonadLogger m) =>
                         (GuardParameters VariableID, GuardParameters VariableID) -> m (Maybe (GuardParameters VariableID))
                 subtrct (NoGP, NoGP) = return Nothing
                 subtrct (PermissionGP pe1, PermissionGP pe2) = liftM (fmap PermissionGP) $ subtractPE pe1 pe2
                 subtrct _ = mzero -- Should be impossible
+                -}
 
 
 guardEntailment :: (MonadPlus m, MonadState s m, AssertionLenses s,
@@ -327,6 +322,13 @@ conservativeGuardLUB (PermissionGD _ n) g1@(GD g1m) g2@(GD g2m) =
                                     assumeTrue $ PALte p2 p
                                     return (GD $ Map.singleton n (PermissionGP p))
                                 _ -> error "conservativeGuardLUB: guard does not match expected type."
+conservativeGuardLUB (ParametrisedGD _ n) g1@(GD g1m) g2@(GD g2m) =
+                            case (Map.lookup n g1m, Map.lookup n g2m) of
+                                (Nothing, _) -> return g2
+                                (_, Nothing) -> return g1
+                                (Just (ParameterGP s1), Just (ParameterGP s2)) ->
+                                    return $ GD $ Map.singleton n $ ParameterGP $ setUnion s1 s2
+                                _ -> error "conservativeGuardLUB: guard does not match expected type."
 conservativeGuardLUB (ProductGD _ gd1 gd2) g1 g2 = do
                             (GD gg1) <- conservativeGuardLUB gd1 (res gd1 g1) (res gd1 g2)
                             (GD gg2) <- conservativeGuardLUB gd2 (res gd2 g1) (res gd2 g2)
@@ -336,6 +338,7 @@ conservativeGuardLUB (ProductGD _ gd1 gd2) g1 g2 = do
                         res gd (GD g) = GD $ Map.intersection g (gdnames gd) 
                         gdnames (NamedGD _ n) = Map.singleton n ()
                         gdnames (PermissionGD _ n) = Map.singleton n ()
+                        gdnames (ParametrisedGD _ n) = Map.singleton n ()
                         gdnames (ProductGD _ gda gdb) = Map.union (gdnames gda) (gdnames gdb)
                         gdnames (SumGD _ gda gdb) = Map.union (gdnames gda) (gdnames gdb)
 conservativeGuardLUB (SumGD _ gd1 gd2) g1 g2 = 
