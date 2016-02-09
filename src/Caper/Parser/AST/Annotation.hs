@@ -200,7 +200,7 @@ instance Show Predicate where
 data Guard = NamedGuard SourcePos String                          -- ^Simple named guard
            | PermGuard SourcePos String PermExpr                  -- ^Guard with permission
            | ParamGuard SourcePos String [ValExpr]                -- ^Parametrised guard
-           | ParamSetGuard SourcePos String [String] [PureAssrt] -- ^Parametrised set guard
+           | ParamSetGuard SourcePos String [String] [PureAssrt]  -- ^Parametrised set guard
 instance Show Guard where
         show (NamedGuard _ n) = n
         show (PermGuard _ n pe) = n ++ "[" ++ show pe ++ "]"
