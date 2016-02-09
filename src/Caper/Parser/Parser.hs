@@ -412,13 +412,6 @@ pureTerm =  try (parens pureAssertion)
         <|> binaryPermissionAssertion
         <|> binaryValueAssertion
 
-binaryVariableAssertion =
-  do pos <- getPosition
-     e1  <- variableExpression
-     br  <- equalityRelation
-     e2  <- variableExpression
-     return $ BinaryVarAssrt pos br e1 e2
-
 equalityRelation =  (reservedOp "=" >> return EqualRel)
                 <|> (reservedOp "!=" >> return NotEqualRel)
 
@@ -568,9 +561,9 @@ guard =
      n   <- identifier
      pe <- optionMaybe $ brackets permissionExpression
      case pe of
-       Nothing -> do paras <- optionMaybe $ parens (sepBy anyExpression comma)
+       Nothing -> do paras <- optionMaybe $ parens (sepBy1 valueExpression comma)
                      case paras of
-                       Nothing -> do param <- optionMaybe $ braces (do { s <- sepBy anyExpression2 comma; reservedOp "|"; c <- sepBy pureAssertion comma; return (s, c) })
+                       Nothing -> do param <- optionMaybe $ braces (do { s <- sepBy1 identifier comma; reservedOp "|"; c <- sepBy1 pureAssertion comma; return (s, c) })
                                      case param of
                                        Nothing -> return $ NamedGuard pos n
                                        Just (s, c)  -> return $ ParamSetGuard pos n s c
@@ -605,9 +598,6 @@ refinePureAssertion (BinaryValAssrt pos (ValEquality br) (VarValExpr _ e1) (VarV
 refinePureAssertion a = a
 --refinePureAssertion a@(BinaryVarAssrt pos br e1 e2) = a
 --refinePureAssertion a@(BinaryValAssrt pos br e1 e2) = a
-
-refine refineVariableExpression a@(Variable pos s) = a
-refine refineVariableExpression a@(WildCard pos) = a
 
 spatialAssertionParser :: Parser SpatialAssrt
 spatialAssertionParser = whiteSpace >> spatialAssertion
