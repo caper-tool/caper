@@ -47,7 +47,8 @@ instance Show RTDVar where
 instance StringVariable RTDVar where
         varToString (RTDVar s) = s
         varFromString = RTDVar
-
+instance Refreshable RTDVar where
+        freshen (RTDVar s) = map RTDVar (freshen s) 
 
 data RegionType = RegionType
         {
@@ -133,7 +134,7 @@ actionToTransitionRule params act@(AST.Action _ conds gds prest postst) =
             -- unless (null conds) $ raise $ SyntaxNotImplemented "predicated transitions"
             (cds, gg, prec, post) <- flip evalStateT freshVars $ do
                 cds0 <- mapM (generatePure varExprToRTDVar) conds
-                (gg, cds) <- runStateT (generateGuard (lift . varExprToRTDVar) pehandler pedisj gds) cds0
+                (gg, cds) <- runStateT (generateGuard (lift . varExprToRTDVar) (modify . (:)) gds) cds0
                 prec <- generateValueExpr varExprToRTDVar prest
                 post <- generateValueExpr varExprToRTDVar postst
                 return (cds, gg,prec,post) 

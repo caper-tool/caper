@@ -107,7 +107,7 @@ generateCellPred genvar (CellBlock sp e1 e2) = do
 -- guards.  For practical purposes, this works like producing the guard.
 --
 -- TODO: it might be nice if produceGuards and consumeGuards went via this.
-generateGuard :: forall m v. (MonadRaise m, Monad m) =>
+generateGuard :: forall m v. (MonadRaise m, Monad m, Refreshable v, StringVariable v, Eq v) =>
             (VarExpr -> m v) 
             -- ^ Variable handler
             -> (Condition v -> m ())
@@ -135,7 +135,13 @@ generateGuard handler condh = liftM G.GD . foldM tg' Map.empty
                         _ -> raise $ IncompatibleGuardOccurrences gname
         tg g (ParamGuard _ gname [e]) = do
                     v <- generateValueExpr handler e
-                    undefined
+                    let s = SetSingleton v
+                    case Map.lookup gname g of
+                        Nothing -> return $ Map.insert gname (G.ParameterGP s) g
+                        Just (G.ParameterGP s0) -> do
+                            condh $ toCondition $ SubsetEq (setIntersection s0 s) emptySet
+                            return $ Map.insert gname (G.ParameterGP (setUnion s0 s)) g
+                        _ -> raise $ IncompatibleGuardOccurrences gname                            
         tg g (ParamGuard _ gname _) = raise $ SyntaxNotImplemented "guards with multiple parameters"
         tg g (ParamSetGuard{}) = raise $ SyntaxNotImplemented "parametrised guards"
         gpe :: PermExpr -> m (PermissionExpression v)
