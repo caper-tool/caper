@@ -307,35 +307,13 @@ treatAsValueJT (TC.JustType t) = treatAsValueJ (Just t)
 treatAsValueJT TC.Undetermined = treatAsValueJ Nothing
 treatAsValueJT _ = False
 
-setAssertionToValueFOF :: (Ord v, Refreshable v) => SetAssertion v -> FOF ValueAtomic v
-setAssertionToValueFOF (SubsetEq (SetSingleton e1) (SetSingleton e2)) = e1 $=$ e1
-setAssertionToValueFOF (SubsetEq (SetSingleton e) (SetBuilder v a)) = exprCASub (\v' -> if v == v' then e else var v') a
-setAssertionToValueFOF (SubsetEq (SetBuilder v a) s2) = FOFForAll v $ FOFImpl a
-                                    (case s2 of
-                                        SetSingleton e -> FOFAtom $ VAEq (var v) e
-                                        SetBuilder v' a' -> exprCASub (\v'' -> if v' == v'' then VEVar v else VEVar v'') a') 
-
-valueConditions :: (Ord v, Refreshable v) => TC.TContext v VariableType -> [Condition v] -> [FOF ValueAtomic v]
-valueConditions tc [] = []
-valueConditions tc (EqualityCondition v1 v2 : xs) =
-                if treatAsValueJT (TC.lookup v1 tc) then
-                        (FOFAtom $ VAEq (var v1) (var v2)) : valueConditions tc xs
-                else
-                        valueConditions tc xs
-valueConditions tc (DisequalityCondition v1 v2 : xs) =
-                if treatAsValueJT (TC.lookup v1 tc) then
-                        (FOFNot $ FOFAtom $ VAEq (var v1) (var v2)) : valueConditions tc xs
-                else
-                        valueConditions tc xs
-valueConditions tc (ValueCondition cass : xs) = cass : valueConditions tc xs
-valueConditions tc (SetCondition (LPos sa) : xs) = setAssertionToValueFOF sa : valueConditions tc xs
-valueConditions tc (SetCondition (LNeg sa) : xs) = FOFNot (setAssertionToValueFOF sa) : valueConditions tc xs  
-valueConditions tc (_ : xs) = valueConditions tc xs
+varIsVal :: BindingContext -> VariableID -> Bool
+varIsVal bdgs v = treatAsValueJT (TC.lookup v bdgs)
 
 valueAssumptions :: (AssumptionLenses a) => a -> [FOF ValueAtomic VariableID]
 -- ^Extract the assumptions pertaining to values (integers).
 -- Equality assumptions where the variable type is indeterminate are treated as value assumptions.
-valueAssumptions ass = valueConditions (ass ^. bindings) (ass ^. assumptions)
+valueAssumptions ass = valueConditions (varIsVal (ass ^. bindings)) (ass ^. assumptions)
 
 valueVariables :: (AssumptionLenses a) => a -> [VariableID]
 -- ^Return a list of value variables; variables with no other type are treated as value variables.
@@ -704,8 +682,8 @@ checkAssertions = do
                 return False
             else do
                 -- Check the value assertions
-                let lvalueAssumptions = valueConditions bdgs asms
-                let valueAssertions = valueConditions bdgs asts
+                let lvalueAssumptions = valueConditions (varIsVal bdgs) asms
+                let valueAssertions = valueConditions (varIsVal bdgs) asts
                 vevs <- use valueEvars
                 vavs <- use valueAvars
                 let vasst = foldr FOFExists (foldr FOFAnd FOFTrue valueAssertions) vevs
