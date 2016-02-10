@@ -37,7 +37,14 @@ toPredicate s0 = toPredicate' s0 . pNormalise
 
 valueCheck :: (Eq v, Show v, Refreshable v) => Maybe Int -> FOF ValueAtomic v -> IO (Maybe Bool)
 valueCheck timeout f = 
-        isTheorem timeout $ toPredicate (\v -> error $ "Unquantified variable " ++ show v ++ " in formula:\n" ++ show f) f
+        doProof $ toPredicate (\v -> error $ "Unquantified variable " ++ show v ++ " in formula:\n" ++ show f) f
+    where
+        doProof p = do
+            r <- proveWith defaultSMTCfg{timeOut = timeout} p
+            case r of
+                ThmResult (Unsatisfiable _) -> return $ Just True
+                ThmResult (Satisfiable _ _) -> return $ Just False
+                _ -> return Nothing
 
 valueProverInfo :: IO String
 valueProverInfo =
