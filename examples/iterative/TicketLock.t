@@ -12,33 +12,33 @@ region TLock(r, x) {
 
 function makeLock()
   requires true;
-  ensures TLock(r, ret, 0);
+  ensures TLock(r, ret, _);
 {
     v := alloc(2);
     [v + 0] := 0;
-    [v + 0] := 0;
+    [v + 1] := 0;
     return v;
 }
 
 function lock(x)
   requires TLock(r, x, _);
-  ensures TLock(r, x, n) &*& r@TAKE(n);
+  ensures TLock(r, x, n) &*& r@NEXT(n);
 {
     do 
-        invariant TLock(r, x, ni) &*& (b = 1 ? r@TAKE(t) &*& t >= ni : true)
+        invariant TLock(r, x, ni) &*& (b = 1 ? r@NEXT(t) &*& t >= ni : true)
     {
         t := [x + 0];
         b := CAS(x + 0, t, t + 1);
     } while (b = 0);
     do
-        invariant TLock(r, x, ni) &*& r@TAKE(t) &*& t >= ni
+        invariant TLock(r, x, ni) &*& r@NEXT(t) &*& t >= ni
     {
         v := [x + 1];
     } while(v < t);
 }
 
 function unlock(x)
-  requires TLock(r, x, n) &*& r@TAKE(n);
+  requires TLock(r, x, n) &*& r@NEXT(n);
   ensures TLock(r, x, _);
 {
     v := [x + 1];
