@@ -1,5 +1,5 @@
 // NAME: Parse parameterised guard 4
-// RESULT: REJECT
+// RESULT: ERROR
 
 region Ra(r, x) {
   guards #G;

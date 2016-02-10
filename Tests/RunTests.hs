@@ -46,12 +46,13 @@ testFile rmap name = do
             exitCode <- lastExitCode
             let res = if exitCode == 0
                         then if ck (strip $ last $ lines out) then Passed else Failed
-                        else Errored
+                        else if ck (strip $ last $ lines out) then Passed else Errored
             echoR res
             return $ Map.alter (Just . (+1) . fromMaybe 0) res rmap
     case unpack testRes of
         ('A':_) -> runCheck (=="ACCEPTED")
         ('R':_) -> runCheck (=="REJECTED")
+        ('E':_) -> runCheck (\x -> not (x == "ACCEPTED" || x == "REJECTED"))
         _ -> do
             echoR Skipped
             return $ Map.alter (Just . (+1) . fromMaybe 0) Skipped rmap
