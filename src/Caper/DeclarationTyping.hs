@@ -3,12 +3,12 @@ module Caper.DeclarationTyping (
         typeDeclarations
 ) where
 
-import Prelude hiding (mapM_,foldl)
+import Prelude hiding (mapM_,foldl,elem)
 import qualified Data.Map as Map
 import Data.Map(Map)
 import Data.Foldable
 import Control.Monad.State hiding (mapM_)
-import Data.List hiding (foldl)
+import Data.List hiding (foldl,elem)
 import Control.Lens.Indexed
 
 -- import Debug.Trace
