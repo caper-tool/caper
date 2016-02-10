@@ -223,5 +223,8 @@ typeAssrt decCounts resVar resArg = ta
                 tg (NamedGuard _ _) = return ()
                 tg (PermGuard _ _ pe) = mapM_
                         (typeVarExprAs VTPermission resVar) (freeL pe)
-                tg (ParamGuard _ _ args) = raise $ SyntaxNotImplemented
-                                "parametrised guards"
+                tg (ParamGuard _ _ args) = mapM_ (typeVarExprAs VTValue resVar) (freeL args)
+                tg (ParamSetGuard _ _ vs pas) = mapM_ (typeVarExprAs VTValue resVar) (filter notbnd $ freeL pas)
+                        where
+                          notbnd (Variable _ v) = not $ v `elem` vs
+                          notbnd _ = False -- might as well throw away wildcards immediately
