@@ -371,41 +371,41 @@ instance (ExpressionSub ValueExpression e, Functor e, Monad e) => ExpressionCASu
 
 -- |The empty set.
 emptySet :: StringVariable v => SetExpression v
-emptySet = SetBuilder (varFromString "_") FOFFalse
+emptySet = SetBuilder (varFromString "n") FOFFalse
 
 -- |The set of all values.
 fullSet :: StringVariable v => SetExpression v
-fullSet = SetBuilder (varFromString "_") FOFTrue
+fullSet = SetBuilder (varFromString "n") FOFTrue
 
 toSetBuilder :: (StringVariable v) => SetExpression v -> SetExpression v
 toSetBuilder se = SetBuilder v c
         where
             (v, c) = case se of
                 SetBuilder v0 c0 -> (v0, c0)
-                SetSingleton e -> let v0 = varFromString "_" in (v0, FOFAtom $ VAEq (var v0) e)
+                SetSingleton e -> let v0 = varFromString "n" in (v0, FOFAtom $ VAEq (var v0) e)
 
 setUnion :: (StringVariable v, Refreshable v, Eq v) => SetExpression v -> SetExpression v -> SetExpression v
 setUnion a0 b0 = case (toSetBuilder a0, toSetBuilder b0) of
         ss@(SetBuilder va ca, SetBuilder vb cb) ->
-            let v = head [vv | vv <- freshen va, not (freeIn vv ss)] in  
-            SetBuilder v (FOFOr (exprCASub (\v' -> VEVar $ if v == va then v else v') ca)
-                                (exprCASub (\v' -> VEVar $ if v == vb then v else v') cb)) 
+            let v = head [vv | vv <- va : freshen va, not (freeIn vv ss)] in  
+            SetBuilder v (FOFOr (exprCASub (\v' -> VEVar $ if v' == va then v else v') ca)
+                                (exprCASub (\v' -> VEVar $ if v' == vb then v else v') cb)) 
         _ -> undefined
 
 setIntersection :: (StringVariable v, Refreshable v, Eq v) => SetExpression v -> SetExpression v -> SetExpression v
 setIntersection a0 b0 = case (toSetBuilder a0, toSetBuilder b0) of
         ss@(SetBuilder va ca, SetBuilder vb cb) ->
-            let v = head [vv | vv <- freshen va, not (freeIn vv ss)] in  
-            SetBuilder v (FOFAnd (exprCASub (\v' -> VEVar $ if v == va then v else v') ca)
-                                (exprCASub (\v' -> VEVar $ if v == vb then v else v') cb)) 
+            let v = head [vv | vv <- va : freshen va, not (freeIn vv ss)] in  
+            SetBuilder v (FOFAnd (exprCASub (\v' -> VEVar $ if v' == va then v else v') ca)
+                                (exprCASub (\v' -> VEVar $ if v' == vb then v else v') cb)) 
         _ -> undefined
 
 setDifference :: (StringVariable v, Refreshable v, Eq v) => SetExpression v -> SetExpression v -> SetExpression v
 setDifference a0 b0 = case (toSetBuilder a0, toSetBuilder b0) of
         ss@(SetBuilder va ca, SetBuilder vb cb) ->
-            let v = head [vv | vv <- freshen va, not (freeIn vv ss)] in  
-            SetBuilder v (FOFAnd (exprCASub (\v' -> VEVar $ if v == va then v else v') ca)
-                                (FOFNot $ exprCASub (\v' -> VEVar $ if v == vb then v else v') cb)) 
+            let v = head [vv | vv <- va : freshen va, not (freeIn vv ss)] in  
+            SetBuilder v (FOFAnd (exprCASub (\v' -> VEVar $ if v' == va then v else v') ca)
+                                (FOFNot $ exprCASub (\v' -> VEVar $ if v' == vb then v else v') cb)) 
         _ -> undefined
 
 data SetAssertion v = SubsetEq (SetExpression v) (SetExpression v) deriving (Eq, Ord, Foldable)
