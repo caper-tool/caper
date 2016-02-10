@@ -26,6 +26,10 @@ class Refreshable v where
 instance Refreshable String where
         freshen s = [ s ++ show x | x <- [0 :: Int ..] ]
 
+instance Refreshable v => Refreshable (Either v v) where
+        freshen (Left vr) = map Left (freshen vr)
+        freshen (Right vr) = map Right (freshen vr)
+
 freshSub :: (Refreshable v, Eq v, Ord v, Foldable f, Foldable g) => f v -> g v -> v -> v
 -- ^Given a collection of variables to refresh, and a colletion that they
 -- should be fresh with respect to, produces a function that substitutes
@@ -606,4 +610,31 @@ makeEquality :: v -> Expr v -> Condition v
 makeEquality v (PermissionExpr pe) = PermissionCondition $ FOFAtom $ PAEq (var v) pe
 makeEquality v (ValueExpr ve) = ValueCondition $ FOFAtom $ VAEq (var v) ve
 makeEquality v (VariableExpr ve) = EqualityCondition v ve
+
+setAssertionToValueFOF :: (Ord v, Refreshable v) => SetAssertion v -> FOF ValueAtomic v
+setAssertionToValueFOF (SubsetEq (SetSingleton e1) (SetSingleton e2)) = e1 $=$ e1
+setAssertionToValueFOF (SubsetEq (SetSingleton e) (SetBuilder v a)) = exprCASub (\v' -> if v == v' then e else var v') a
+setAssertionToValueFOF (SubsetEq (SetBuilder v a) s2) = FOFForAll v $ FOFImpl a
+                                    (case s2 of
+                                        SetSingleton e -> FOFAtom $ VAEq (var v) e
+                                        SetBuilder v' a' -> exprCASub (\v'' -> if v' == v'' then VEVar v else VEVar v'') a') 
+
+-- |Pull out the value conditions from a list of conditions; the first argument is used to
+-- determine if a given variable should be treated as a value variable.
+valueConditions :: (Ord v, Refreshable v) => (v -> Bool) -> [Condition v] -> [FOF ValueAtomic v]
+valueConditions tav [] = []
+valueConditions tav (EqualityCondition v1 v2 : xs) =
+                if tav v1 then
+                        (FOFAtom $ VAEq (var v1) (var v2)) : valueConditions tav xs
+                else
+                        valueConditions tav xs
+valueConditions tav (DisequalityCondition v1 v2 : xs) =
+                if tav v1 then
+                        (FOFNot $ FOFAtom $ VAEq (var v1) (var v2)) : valueConditions tav xs
+                else
+                        valueConditions tav xs
+valueConditions tav (ValueCondition cass : xs) = cass : valueConditions tav xs
+valueConditions tav (SetCondition (LPos sa) : xs) = setAssertionToValueFOF sa : valueConditions tav xs
+valueConditions tav (SetCondition (LNeg sa) : xs) = FOFNot (setAssertionToValueFOF sa) : valueConditions tav xs  
+valueConditions tav (_ : xs) = valueConditions tav xs
 

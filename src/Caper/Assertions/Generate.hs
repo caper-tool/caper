@@ -3,6 +3,7 @@ module Caper.Assertions.Generate where
 
 import Control.Monad.State hiding (state)
 import qualified Data.Map as Map
+import Control.Lens.Fold
 
 import Caper.Utils.AliasingMap ()
 import Caper.Exceptions
@@ -107,7 +108,7 @@ generateCellPred genvar (CellBlock sp e1 e2) = do
 -- guards.  For practical purposes, this works like producing the guard.
 --
 -- TODO: it might be nice if produceGuards and consumeGuards went via this.
-generateGuard :: forall m v. (MonadRaise m, Monad m, Refreshable v, StringVariable v, Eq v) =>
+generateGuard :: forall m v. (MonadRaise m, Monad m, Refreshable v, StringVariable v, Eq v, Ord v) =>
             (VarExpr -> m v) 
             -- ^ Variable handler
             -> (Condition v -> m ())
@@ -143,7 +144,25 @@ generateGuard handler condh = liftM G.GD . foldM tg' Map.empty
                             return $ Map.insert gname (G.ParameterGP (setUnion s0 s)) g
                         _ -> raise $ IncompatibleGuardOccurrences gname                            
         tg g (ParamGuard _ gname _) = raise $ SyntaxNotImplemented "guards with multiple parameters"
-        tg g (ParamSetGuard{}) = raise $ SyntaxNotImplemented "parametrised guards"
+        tg g (ParamSetGuard _ gname [v] pcs) = do
+                    let v' :: Either v v = Left $ varFromString v
+                    let handler' vv@(Variable _ s) = if s == v then
+                                                        return v'
+                                                     else
+                                                        liftM Right $ handler vv
+                        handler' vv = liftM Right $ handler vv
+                    cs <- mapM (generatePure handler') pcs
+                    let vcs = valueConditions (const True) cs
+                    unless (length cs == length vcs) $
+                      raise $ SyntaxNotImplemented "permission/non-value conditions in set expressions" -- TODO: This should probably be a different exception
+                    let s = refreshLefts $ SetBuilder v' (foldBy FOFAnd FOFTrue vcs)
+                    case Map.lookup gname g of
+                        Nothing -> return $ Map.insert gname (G.ParameterGP s) g
+                        Just (G.ParameterGP s0) -> do
+                            condh $ toCondition $ SubsetEq (setIntersection s0 s) emptySet
+                            return $ Map.insert gname (G.ParameterGP (setUnion s0 s)) g
+                        _ -> raise $ IncompatibleGuardOccurrences gname
+        tg g(ParamSetGuard _ _ _ _) = raise $ SyntaxNotImplemented "guards with multiple parameters"
         gpe :: PermExpr -> m (PermissionExpression v)
         gpe pe = do
             pexp <- generatePermissionExpr handler pe
@@ -159,8 +178,26 @@ guardToNameParam _ (NamedGuard _ nm) = return (nm, G.NoGP)
 guardToNameParam genv gd@(PermGuard _ nm pe) = contextualise gd $ do
                                 ppe <- generatePermissionExpr genv pe
                                 return (nm, G.PermissionGP ppe)
-guardToNameParam genv gd@(ParamGuard {}) = contextualise gd $
-                        raise $ SyntaxNotImplemented "parametrised guards"
+guardToNameParam genv gd@(ParamGuard _ nm [e]) = contextualise gd $ do
+                                ve <- generateValueExpr genv e
+                                return (nm, G.ParameterGP (SetSingleton ve))
+guardToNameParam genv gd@(ParamGuard _ _ _) = contextualise gd $                              
+                        raise $ SyntaxNotImplemented "guards with multiple parameters"
+guardToNameParam genv gd@(ParamSetGuard _ gname [v] pcs) = contextualise gd $ do
+                    let v' = Left $ varFromString v
+                    let handler' vv@(Variable _ s) = if s == v then
+                                                        return v'
+                                                     else
+                                                        liftM Right $ genv vv
+                        handler' vv = liftM Right $ genv vv
+                    cs <- mapM (generatePure handler') pcs
+                    let vcs = valueConditions (const True) cs
+                    unless (length cs == length vcs) $
+                      raise $ SyntaxNotImplemented "permission/non-value conditions in set expressions" -- TODO: This should probably be a different exception
+                    let s = refreshLefts $ SetBuilder v' (foldBy FOFAnd FOFTrue vcs)
+                    return (gname, G.ParameterGP s)
+guardToNameParam genv gd@(ParamSetGuard _ _ _ _) = contextualise gd $                              
+                        raise $ SyntaxNotImplemented "guards with multiple parameters"
 
 generatePure :: (MonadRaise m, Monad m) =>
             (VarExpr -> m v) -> PureAssrt -> m (Condition v)
