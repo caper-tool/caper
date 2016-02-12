@@ -27,7 +27,7 @@ syn keyword caperRegAn interpretation
 syn keyword caperRegAn actions
 
 syn region caperAnnotation start='\s' end=';' contained
-syn keyword caperAnnotationDeclaration requires ensures nextgroup=caperAnnotation
+syn keyword caperAnnotationDeclaration requires ensures invariant assert nextgroup=caperAnnotation
 syn keyword caperToplevelDeclaration region
 syn keyword caperToplevelDeclaration predicate
 

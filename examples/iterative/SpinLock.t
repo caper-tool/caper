@@ -26,7 +26,7 @@ function lock(x)
   requires SLock(r,x,_) &*& r@(LOCK[p]);
   ensures SLock(r,x,1) &*& r@(LOCK[p] * UNLOCK); {
     do
-        invariant b = 0 ? SLock(r,x,_) &*& r@(LOCK[p]) : SLock(r,x,1) &*& r@(LOCK[p] * UNLOCK)
+        invariant b = 0 ? SLock(r,x,_) &*& r@(LOCK[p]) : SLock(r,x,1) &*& r@(LOCK[p] * UNLOCK);
     {
         b := CAS(x, 0, 1);
     } while (b = 0);

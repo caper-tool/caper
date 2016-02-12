@@ -32,7 +32,7 @@ function wait(x)
   ensures Join(r, x, 1);
 {
     do
-      invariant Join(r, x, w) &*& (v = 0 ? w >= 0 : w = 1)
+      invariant Join(r, x, w) &*& (v = 0 ? w >= 0 : w = 1);
     {
         v := [x];
     } while (v = 0);

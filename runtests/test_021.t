@@ -9,7 +9,7 @@ function foo(x)
   ensures ret <= 0;
 {
   while (x > 0)
-  invariant true
+  invariant true;
   {
     x := -1;
   }

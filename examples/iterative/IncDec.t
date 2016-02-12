@@ -26,7 +26,7 @@ function increment(x, k)
   ensures IncDec(r, x, v1) &*& r@INC &*& v1 <= v0 + k;
 {
     do
-      invariant IncDec(r, x, vi) &*& r@INC &*& k > 0 &*& (b = 0 ? vi <= v0 : vi <= v0 + k)
+      invariant IncDec(r, x, vi) &*& r@INC &*& k > 0 &*& (b = 0 ? vi <= v0 : vi <= v0 + k);
     {
         v := [x];
         b := CAS(x, v, v + k);
@@ -39,7 +39,7 @@ function decrement(x, k)
   ensures IncDec(r, x, v1) &*& r@DEC &*& v1 >= v0 - k;
 {
     do
-      invariant IncDec(r, x, vi) &*& r@DEC &*& k > 0 &*& (b = 0 ? vi >= v0 : vi >= v0 - k)
+      invariant IncDec(r, x, vi) &*& r@DEC &*& k > 0 &*& (b = 0 ? vi >= v0 : vi >= v0 - k);
     {
         v := [x];
         b := CAS(x, v, v - k);

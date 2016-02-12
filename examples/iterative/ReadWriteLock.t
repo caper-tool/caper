@@ -37,7 +37,7 @@ function lockWriter(x)
   ensures RWLock(r, x, -1) &*& r@(WLOCK[p] * WUNLOCK);
 {
     do
-      invariant r@WLOCK[p] &*& (b = 0 ? RWLock(r, x, _) : RWLock(r, x, -1) &*& r@WUNLOCK)
+      invariant r@WLOCK[p] &*& (b = 0 ? RWLock(r, x, _) : RWLock(r, x, -1) &*& r@WUNLOCK);
     {
         b := CAS(x, 0, -1);
     } while (b = 0);
@@ -55,7 +55,7 @@ function lockReader1(x)
   ensures RWLock(r, x, n) &*& r@(RLOCK1 * RUNLOCK1) &*& n > 0;
 {
     do
-      invariant RWLock(r, x, mi) &*& r@RLOCK1 &*& (b = 0 ? mi != 1 &*& mi != 3 : mi > 0 &*& r@RUNLOCK1)
+      invariant RWLock(r, x, mi) &*& r@RLOCK1 &*& (b = 0 ? mi != 1 &*& mi != 3 : mi > 0 &*& r@RUNLOCK1);
     {
         v := [x];
         if (v >= 0) {
@@ -71,7 +71,7 @@ function unlockReader1(x)
   ensures RWLock(r, x, _);
 {
     do
-      invariant RWLock(r, x, ni) &*& (b = 0 ? ni > 0 &*& r@RUNLOCK1 : true)
+      invariant RWLock(r, x, ni) &*& (b = 0 ? ni > 0 &*& r@RUNLOCK1 : true);
     {
         v := [x];
         b := CAS(x, v, v - 1);
@@ -83,7 +83,7 @@ function lockReader2(x)
   ensures RWLock(r, x, n) &*& r@(RLOCK2 * RUNLOCK2) &*& n > 0;
 {
     do
-      invariant RWLock(r, x, mi) &*& r@RLOCK2 &*& (b = 0 ? mi != 2 &*& mi != 3 : mi > 0 &*& r@RUNLOCK2)
+      invariant RWLock(r, x, mi) &*& r@RLOCK2 &*& (b = 0 ? mi != 2 &*& mi != 3 : mi > 0 &*& r@RUNLOCK2);
     {
         v := [x];
         if (v >= 0) {
@@ -99,7 +99,7 @@ function unlockReader2(x)
   ensures RWLock(r, x, _);
 {
     do
-      invariant RWLock(r, x, ni) &*& (b = 0 ? ni > 0 &*& r@RUNLOCK2 : true)
+      invariant RWLock(r, x, ni) &*& (b = 0 ? ni > 0 &*& r@RUNLOCK2 : true);
     {
         v := [x];
         b := CAS(x, v, v - 1);

@@ -230,7 +230,7 @@ whileStatement =
   do pos  <- getPosition
      reserved "while"
      cond <- parens bExpression
-     inv <- optionMaybe $ reserved "invariant" *> assertion
+     inv <- optionMaybe $ (do { reserved "invariant"; a <- assertion; semi; return a})
      stmt <- braces sequenceOfStmt
      return $ WhileStmt pos inv cond stmt
 
@@ -238,7 +238,7 @@ doWhileStatement :: Parser Stmt
 doWhileStatement =
   do pos  <- getPosition
      reserved "do"
-     inv <- optionMaybe $ reserved "invariant" *> assertion
+     inv <- optionMaybe $ (do { reserved "invariant"; a <- assertion; semi; return a})
      stmt <- braces sequenceOfStmt
      reserved "while"
      cond <- parens bExpression

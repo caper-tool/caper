@@ -24,7 +24,7 @@ function incr(x)
   ensures Counter(r,x,v1) &*& v1 > v0 &*& r@(INCREMENT[p]);
 {
     do
-      invariant Counter(r,x,vi) &*& r@(INCREMENT[p]) &*& vi >= v0 &*& (b = 0 ? true : r@(OWN) &*& v = vi)
+      invariant Counter(r,x,vi) &*& r@(INCREMENT[p]) &*& vi >= v0 &*& (b = 0 ? true : r@(OWN) &*& v = vi);
     {
         v := [x];
         if (v = -1) {
@@ -42,7 +42,7 @@ function read(x)
   ensures Counter(r,x,v1) &*& ret >= v0 &*& ret <= v1;
 {
     do
-      invariant Counter(r,x,vi) &*& vi >= v0 &*& (v >= 0 ? v0 <= v &*& v <= vi : v = -1)
+      invariant Counter(r,x,vi) &*& vi >= v0 &*& (v >= 0 ? v0 <= v &*& v <= vi : v = -1);
     {
         v := [x];
     } while (v = -1);
