@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+	<!--
+		TextWrangler codeless language module for Caper files.
+		To install, copy here:
+	
+			~/Library/Application Support/TextWrangler/Language Modules/
+		
+			and relaunch TextWrangler.
+	-->
+	<dict>
+		<key>BBEditDocumentType</key>
+		<string>CodelessLanguageModule</string>
+		<key>BBLMLanguageDisplayName</key>
+		<string>Caper</string>
+		<key>BBLMLanguageCode</key>
+		<string>Cape</string>
+		<key>BBLMSuffixMap</key>
+		<array>
+			<dict>
+				<key>BBLMLanguageSuffix</key>
+				<string>.t</string>
+			</dict>
+		</array>
+		<key>BBLMIsCaseSensitive</key>
+		<true/>
+		<key>BBLMScansFunctions</key>
+		<false/>
+		<key>BBLMColorsSyntax</key>
+		<true/>
+		<key>BBLMKeywordList</key>
+		<array>
+			<string>if</string>
+			<string>else</string>
+			<string>while</string>
+			<string>do</string>
+			<string>skip</string>
+			<string>true</string>
+			<string>false</string>
+			<string>not</string>
+			<string>and</string>
+			<string>or</string>
+			<string>return</string>
+			<string>function</string>
+			<string>fork</string>
+			<string>requires</string>
+			<string>ensures</string>
+			<string>invariant</string>
+			<string>assert</string>
+			<string>region</string>
+			<string>guards</string>
+			<string>interpretation</string>
+			<string>actions</string>
+			<string>predicate</string>
+			<string>alloc</string>
+			<string>CAS</string>
+		</array>
+		<key>Language Features</key>
+		<dict>
+			<key>Identifier and Keyword Characters</key>
+			<string>ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_</string>
+			<key>Open Block Comments</key>
+			<string>/*</string>
+			<key>Close Block Comments</key>
+			<string>*/</string>
+			<key>Open Line Comments</key>
+			<string>//</string>
+			<key>Open Parameter Lists</key>
+			<string>(</string>
+			<key>Close Parameter Lists</key>
+			<string>)</string>
+			<key>Prefix for Functions</key>
+			<string>function</string>
+			<key>Prefix for Procedures</key>
+			<string>function</string>
+			<key>Open Statement Blocks</key>
+			<string>{</string>
+			<key>Close Statement Blocks</key>
+			<string>}</string>
+		</dict>
+	</dict>
+</plist>
