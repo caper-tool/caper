@@ -25,7 +25,7 @@ function lock(x)
   ensures TLock(r, x, n) &*& r@NEXT(n);
 {
     do 
-        invariant TLock(r, x, ni) &*& (b = 1 ? r@NEXT(t) &*& t >= ni : true);
+        invariant TLock(r, x, ni) &*& (b = 0 ? true : r@NEXT(t) &*& t >= ni);
     {
         t := [x + 0];
         b := CAS(x + 0, t, t + 1);
@@ -34,7 +34,7 @@ function lock(x)
         invariant TLock(r, x, ni) &*& r@NEXT(t) &*& t >= ni;
     {
         v := [x + 1];
-    } while(v < t);
+    } while(true);
 }
 
 function unlock(x)
