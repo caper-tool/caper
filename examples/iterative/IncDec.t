@@ -25,12 +25,12 @@ function increment(x, k)
   requires IncDec(r, x, v0) &*& r@INC &*& k > 0;
   ensures IncDec(r, x, v1) &*& r@INC &*& v1 <= v0 + k;
 {
-    do
-      invariant IncDec(r, x, vi) &*& r@INC &*& k > 0 &*& (b = 0 ? vi <= v0 : vi <= v0 + k);
-    {
+    do {
         v := [x];
         b := CAS(x, v, v + k);
-    } while (b = 0);
+    }
+      invariant IncDec(r, x, vi) &*& r@INC &*& k > 0 &*& (b = 0 ? vi <= v0 : vi <= v0 + k);
+    while (b = 0);
     return v;
 }
 
@@ -38,12 +38,12 @@ function decrement(x, k)
   requires IncDec(r, x, v0) &*& r@DEC &*& k > 0;
   ensures IncDec(r, x, v1) &*& r@DEC &*& v1 >= v0 - k;
 {
-    do
-      invariant IncDec(r, x, vi) &*& r@DEC &*& k > 0 &*& (b = 0 ? vi >= v0 : vi >= v0 - k);
-    {
+    do {
         v := [x];
         b := CAS(x, v, v - k);
-    } while (b = 0);
+    }
+      invariant IncDec(r, x, vi) &*& r@DEC &*& k > 0 &*& (b = 0 ? vi >= v0 : vi >= v0 - k);
+    while (b = 0);
     return v;
 }
 
