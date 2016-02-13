@@ -238,8 +238,8 @@ doWhileStatement :: Parser Stmt
 doWhileStatement =
   do pos  <- getPosition
      reserved "do"
-     inv <- optionMaybe $ (do { reserved "invariant"; a <- assertion; semi; return a})
      stmt <- braces sequenceOfStmt
+     inv <- optionMaybe $ (do { reserved "invariant"; a <- assertion; semi; return a})
      reserved "while"
      cond <- parens bExpression
      semi
