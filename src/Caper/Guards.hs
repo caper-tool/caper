@@ -6,7 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Caper.Guards where
-import Prelude hiding (mapM,sequence,foldl,mapM_,concatMap)
+import Prelude hiding (mapM,sequence,foldl,mapM_,concatMap,foldr)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Control.Monad hiding (mapM,sequence)
