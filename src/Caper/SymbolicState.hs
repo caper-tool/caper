@@ -253,7 +253,7 @@ consumePredicate p = do
 -- |Remove all resources (predicate and region), returning an operation
 -- that will restore them. 
 frame :: (MonadState s m, SymbStateLenses s, AssumptionLenses s, RegionLenses s,
-        MonadReader r m, RTCGetter r, Provers r,
+        MonadReader r m, RTCGetter r, Provers r, DebugState s r,
         MonadLogger m, MonadRaise m, MonadIO m) =>
         m (m ())
 frame = do

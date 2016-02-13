@@ -24,6 +24,7 @@ import Caper.Prover
 import Caper.Utils.NondetClasses
 import Caper.Utils.Mix
 import Caper.Exceptions
+import Caper.FreeVariables
 
 
 
@@ -75,7 +76,15 @@ data GuardParameters v = NoGP | PermissionGP (PermissionExpression v)
     | ParameterGP (SetExpression v)
         deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
+instance FreeVariables (GuardParameters v) v where
+  foldrFree f x NoGP = x
+  foldrFree f x (PermissionGP pe) = foldr f x pe
+  foldrFree f x (ParameterGP s) = foldrFree f x s
+
 newtype Guard v = GD (Map.Map String (GuardParameters v)) deriving (Eq,Ord,Functor,Foldable,Traversable)
+
+instance FreeVariables (Guard v) v where
+  foldrFree f x (GD mp) = Map.foldr (flip $ foldrFree f) x mp
 
 emptyGuard :: Guard v
 emptyGuard = GD Map.empty

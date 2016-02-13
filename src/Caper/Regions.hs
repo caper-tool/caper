@@ -28,6 +28,7 @@ import Caper.DeductionFailure
 import Caper.ProverStates
 import Caper.Guards
 import Caper.Transitions
+import Caper.FirstOrder
 
 import Debug.Trace
 
@@ -213,7 +214,7 @@ cannotAliasStrong r1 r2
                         
 
 -- |Stabilise all regions
-stabiliseRegions :: (ProverM s r m, RegionLenses s, RTCGetter r, MonadRaise m) =>
+stabiliseRegions :: (ProverM s r m, RegionLenses s, RTCGetter r, DebugState s r, MonadRaise m) =>
                         m ()
 stabiliseRegions = do
                         regs <- use regions
@@ -230,7 +231,7 @@ stabiliseRegion reg = if regDirty reg then
                                 return reg -}
 
 -- Stabilise a region
-stabiliseRegion :: (ProverM s r m, RTCGetter r, MonadRaise m) =>
+stabiliseRegion :: (ProverM s r m, RTCGetter r, DebugState s r, MonadRaise m) =>
                         Region -> m Region
 -- Not dirty, so nothing to do!
 stabiliseRegion
@@ -270,7 +271,7 @@ stabiliseRegion r = return $ r {regDirty = False, regState = Nothing}
 
 -- |Determine a list of possible environment (rely) transitions for a given
 -- parametrised region type and guard.
-checkTransitions :: (ProverM s r m, MonadRaise m) => RegionType -> [Expr VariableID] -> Guard VariableID -> m [GuardedTransition VariableID]
+checkTransitions :: (ProverM s r m, DebugState s r, MonadRaise m) => RegionType -> [Expr VariableID] -> Guard VariableID -> m [GuardedTransition VariableID]
 checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem rt)
         where
                 bndVars :: TransitionRule -> Set.Set RTDVar
@@ -279,32 +280,42 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
                 checkTrans tr@(TransitionRule trgd prd prec post) = do
                         -- Compute a binding for fresh variables
                         bvmap <- freshInternals rtdvStr (bndVars tr)
+                        liftIO $ print tr
+                        liftIO $ print $ freeVariables tr
                         let bvars = Map.elems bvmap
                         let subst = Map.union params $ fmap var bvmap
                         let s v = Map.findWithDefault (error "checkTransitions: variable not found") v subst
-                        let isDynVar = (`Set.member` Set.fromList (concatMap toList [prec, post]))
-                        -- The list of conditions for the transition rule can be divided into:
-                        -- - Static conditions, which are independent of the state transition; and
-                        -- - Dynamic conditions, which may constrain the state transition (and can only depend on values)
-                        let (dyconds, stconds) = partition (any isDynVar) prd 
-                        -- Checking guard compatibility may generate some conditions (as assertions) that may constrain the transition
-                        -- However, since parametrised guards are not yet implemented, that actually can't happen (yet!)
                         -- Now have to check if guard is applicable!
                         guardCompat <- hypothetical $ do
-                                -- assume the static conditions
-                                mapM_ (assume . exprCASub' s) stconds
+                                -- assume conditions
+                                mapM_ (assume . exprCASub' s) prd
                                 -- combine guards
                                 gd' <- mergeGuards gd (exprCASub' s trgd)
+                                -- We extract the assumptions that condition the transition.
+                                -- That is, those that have variables which are locally bound for
+                                -- the action, and occur in either the pre- or post-state.
+                                -- These variables are bound to be value variables, and so all such
+                                -- conditions will be value-convertable.
                                 assms <- use assumptions
+                                let isDynVar = (`Set.member` Set.fromList (concatMap toList [prec, post]))
+                                let cvars = Map.elems $ Map.filterWithKey (\k _ -> isDynVar k) bvmap
+                                let isCvar = (`Set.member` Set.fromList cvars)
+                                let cassms = filter (any isCvar . freeVariables) assms
                                 -- check the guard matches the guard type
                                 if checkGuardAtType gd' (topLevelToWeakGuardType $ rtGuardType rt) then
                                         -- and is consistent
-                                        isConsistent
+                                        isConsistent >>= \x -> case x of
+                                          Just False -> return $ Left ()
+                                          _ -> return $ Right cassms
                                     else
-                                        return $ Just False
-                        if guardCompat == Just False then return [] else do
-                                cond <- foldlM (\x -> liftM (FOFAnd x . exprCASub' s) . toValueFOF isDynVar) FOFTrue dyconds
-                                return [GuardedTransition bvars cond (exprSub s prec) (exprSub s post)]
+                                        return $ Left ()
+                        case guardCompat of
+                          Left _ -> return []
+                          Right cassms -> do
+                            liftIO $ putStrLn $ "Transition conditions for: " ++ show bvars ++ " " ++ (show (exprSub s prec)) ++ " ~> " ++ show (exprSub s post)
+                            liftIO $ mapM_ print cassms
+                            let cond = foldBy FOFAnd FOFTrue $ valueConditions (const True) cassms
+                            return [GuardedTransition bvars cond (exprSub s prec) (exprSub s post)]
 
 -- |Determine a list of possible thread (guarantee) transitions for a given
 -- parametrised region type and guard.

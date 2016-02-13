@@ -6,7 +6,7 @@ region TLock(r, x) {
     n : x |-> m &*& (x + 1) |-> n &*& r@NEXT{ k | k >= m } &*& m >= n;
   }
   actions {
-    NEXT{ k | n <= k, k < m } : n ~> m;
+    n < m | NEXT{ k | n <= k, k < m } : n ~> m;
   }
 }
 

@@ -323,7 +323,7 @@ checkConsistency :: (Functor a, Foldable a, Show (a String)) => (FOF a String ->
 -- ^Given a first-order prover, check whether a list of assertions (with free variables from a given list) is consistent.
 -- Consistent if the formula ¬(E) x1, ..., xn . P1 /\ ... /\ Pm /\ True is invalid. 
 checkConsistency p vars asss = do
-                        rp <- p $ FOFNot (varToString <$> foldr FOFExists (foldr FOFAnd FOFTrue asss) vars)
+                        rp <- p $ FOFNot (varToString <$> foldr FOFExists (foldBy FOFAnd FOFTrue asss) vars)
                         return $ fmap not rp
 
 isConsistent :: ProverM s r m => m (Maybe Bool)
@@ -676,7 +676,7 @@ checkAssertions = do
         let permissionAssertions = permissionConditions bdgs asts
         pevs <- use permissionEvars
         pavs <- use permissionAvars
-        let passt = foldr FOFExists (foldr FOFAnd FOFTrue permissionAssertions) pevs
+        let passt = foldr FOFExists (foldBy FOFAnd FOFTrue permissionAssertions) pevs
         rp <- permissionCheck $ assumptionContext pavs lpermissionAssumptions passt
         if rp /= Just True then
                 return False
@@ -686,7 +686,7 @@ checkAssertions = do
                 let valueAssertions = valueConditions (varIsVal bdgs) asts
                 vevs <- use valueEvars
                 vavs <- use valueAvars
-                let vasst = foldr FOFExists (foldr FOFAnd FOFTrue valueAssertions) vevs
+                let vasst = foldr FOFExists (foldBy FOFAnd FOFTrue valueAssertions) vevs
                 rv <- valueCheck $ assumptionContext vavs lvalueAssumptions vasst
                 return (rv == Just True)
 

@@ -6,11 +6,10 @@ region TLock(r, x) {
     n : x |-> m &*& (x + 1) |-> n &*& r@NEXT{ k | k >= m } &*& m >= n;
   }
   actions {
-    NEXT{ k | n <= k, k < m } : n ~> m;
+    n < m | NEXT{ k | n <= k, k < m } : n ~> m;
   }
 }
 
-/*
 function makeLock()
   requires true;
   ensures TLock(r, ret, _);
@@ -20,7 +19,7 @@ function makeLock()
     [v + 1] := 0;
     return v;
 }
-*/
+
 function incr(x)
   requires TLock(r, x, _);
   ensures TLock(r, x, n) &*& r@NEXT(ret) &*& ret >= n;
@@ -32,7 +31,7 @@ function incr(x)
     }
     return t;
 }
-/*
+
 function wait(x, t)
     requires TLock(r, x, n) &*& r@NEXT(t) &*& t >= n;
     ensures TLock(r, x, t) &*& r@NEXT(t);
@@ -58,4 +57,3 @@ function unlock(x)
     v := [x + 1];
     [x + 1] := v + 1;
 }
-*/

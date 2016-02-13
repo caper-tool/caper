@@ -140,7 +140,6 @@ consumeRegion :: (ConsumeMonad r s m) =>
 consumeRegion regn@(Region sp rtn ridv lrps rse) = contextualise regn $
         do
                 logEvent $ InfoEvent $ "Consuming region: " ++ show regn
-                debugState 
                 rtid <- lookupRTNameE rtn
                 params <- mapM consumeAnyExpr lrps
                 checkRegionParams rtid (zip params lrps)
@@ -152,6 +151,7 @@ consumeRegion regn@(Region sp rtn ridv lrps rse) = contextualise regn $
                             (get >>= failure . MissingRegionByType rtid params st)
                 logEvent $ InfoEvent $ "...: " ++ show rtid ++ ", " ++ show rid ++ show params ++ " " ++ show st
                 R.consumeRegion rtid rid params st
+                debugState 
                 logEvent $ InfoEvent $ "Consumed region: " ++ show regn 
 
 -- |Consume a guard assertion.

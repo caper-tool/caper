@@ -126,7 +126,7 @@ instance Show TransitionRule where
                 show prd ++ " | " ++ show gd ++ " : " ++ show prec ++ " ~> " ++ show post
 
 instance FreeVariables TransitionRule RTDVar where
-    foldrFree f b tr = foldr f (foldr f (foldrFree f (foldr f b (trGuard tr)) (trPredicate tr)) (trPreState tr)) (trPostState tr) 
+    foldrFree f b tr = foldr f (foldr f (foldrFree f (foldrFree f b (trGuard tr)) (trPredicate tr)) (trPreState tr)) (trPostState tr) 
 
 varExprToRTDVar :: (Monad m) => AST.VarExpr -> StateT [RTDVar] m RTDVar
 varExprToRTDVar (AST.Variable _ s) = return (RTDVar s)

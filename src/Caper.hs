@@ -26,12 +26,14 @@ import Caper.SymbolicExecution
 data CommandLine =
     CLVersion           -- Get version information; test configuration
     | CLVerify {        -- Verify a file
-        verifyFile :: FilePath
+        verifyFile :: FilePath,
+        verbose :: Bool
         }
 
 commandLineParser :: ParserSpec CommandLine
 commandLineParser = CLVerify
     `parsedBy` reqPos "file" `Descr` "source file to verify"
+    `andBy` boolFlag "v" `Descr` "verbose output"
 
 caperSpecialFlags :: [SpecialFlag CommandLine]
 caperSpecialFlags = 
@@ -80,12 +82,13 @@ caperCommand CLVersion = do
                             _ -> putStrLn "*** ERROR: The permissions prover could not prove True."
                     ) `catch` (\e -> putStrLn $ "*** ERROR: Invoking the permissions prover resulted in the following error:\n" ++ show (e :: SomeException))
             ) `catch` (\e -> putStrLn $ "*** ERROR: Failed to initialise provers:\n" ++ show (e :: SomeException))
-caperCommand (CLVerify file) = do
+caperCommand (CLVerify file verb) = do
         declrs <- parseFile file
         print declrs
         let funDecs = functionDeclrs declrs
         provers <- initProvers
-        result <- runOutLogger {-$ filterLogger logNotProver -}$ flip runReaderT [StringContext $ "File: \"" ++ file ++ "\"."] $ runRaiseT $ do
+        let filtLog = filterLogger (if verb then const True else logNotProver)
+        result <- runOutLogger $ filtLog $ flip runReaderT [StringContext $ "File: \"" ++ file ++ "\"."] $ runRaiseT $ do
             procSpecs <- declrsToProcedureSpecs funDecs
             rtc <- hoist (withReaderT (ProverContext provers)) $ declrsToRegionTypeContext declrs
             liftIO $ print rtc 

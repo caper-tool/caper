@@ -44,7 +44,7 @@ data Literal a v = LPos (a v) | LNeg (a v) deriving (Functor, Foldable, Traversa
 
 instance Show (a v) => Show (Literal a v) where
         show (LPos x) = show x
-        show (LNeg x) = "¬ " ++ show x
+        show (LNeg x) = "\xAC " ++ show x
 
 instance FreeVariables (a v) v => FreeVariables (Literal a v) v where
     foldrFree f x (LPos e) = foldrFree f x e
@@ -272,7 +272,7 @@ instance (Show (a v), Show v) => Show (FOF a v) where
         show FOFFalse = "_|_"
         show FOFTrue = "T"
         show (FOFAtom a) = show a
-        show (FOFNot f) = "¬ " ++ show f
+        show (FOFNot f) = "\xAC " ++ show f
         show (FOFAnd f1 f2) = "(" ++ show f1 ++ " /\\ " ++ show f2 ++ ")"
         show (FOFOr f1 f2) = "(" ++ show f1 ++ " \\/ " ++ show f2 ++ ")"
         show (FOFImpl f1 f2) = "(" ++ show f1 ++ " => " ++ show f2 ++ ")"
