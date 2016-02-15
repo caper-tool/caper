@@ -118,11 +118,12 @@ typeAction :: (MonadState (TC.TContext a VariableType) m,
         => (String -> a)
         -> Action
         -> m ()
-typeAction resVar action = do
+typeAction resVar (Action _ cnds grd pre post) = do
         s <- get
-        mapM_ (typePureAssrt resVar) (actionConditions action)
+        mapM_ (typePureAssrt resVar) cnds
+        mapM_ (typeGuard resVar) grd
         mapM_ (typeVarExprAs VTValue resVar) $ freeL
-                [actionPreState action, actionPostState action]
+                [pre, post]
         modify (`TC.intersection` s)
 
 
@@ -157,6 +158,21 @@ typePureAssrt resVar = tpa
                 tpa (BinaryPermAssrt _ _ pe1 pe2) = mapM_
                         (typeVarExprAs VTPermission resVar)
                         (freeL [pe1, pe2])
+
+typeGuard :: forall a m. (MonadState (TC.TContext a VariableType) m,
+        MonadRaise m, Ord a)
+        => (String -> a)
+        -> Guard
+        -> m ()
+typeGuard  resVar (NamedGuard _ _) = return ()
+typeGuard resVar (PermGuard _ _ pe) = mapM_
+        (typeVarExprAs VTPermission resVar) (freeL pe)
+typeGuard resVar (ParamGuard _ _ args) = mapM_ (typeVarExprAs VTValue resVar) (freeL args)
+typeGuard resVar (ParamSetGuard _ _ vs pas) = mapM_ (typeVarExprAs VTValue resVar) (filter notbnd $ freeL pas)
+        where
+          notbnd (Variable _ v) = not $ v `elem` vs
+          notbnd _ = False -- might as well throw away wildcards immediately
+
 
 typeAssrt :: forall a m. (MonadState (TC.TContext a VariableType) m,
         MonadRaise m, Ord a)
@@ -219,12 +235,4 @@ typeAssrt decCounts resVar resArg = ta
                                 mapM_ (typeVarExprAs VTValue resVar)
                                         (freeL ca)
                 ts (SAGuards grds@(Guards _ _ gds)) = contextualise grds $
-                        mapM_ tg gds
-                tg (NamedGuard _ _) = return ()
-                tg (PermGuard _ _ pe) = mapM_
-                        (typeVarExprAs VTPermission resVar) (freeL pe)
-                tg (ParamGuard _ _ args) = mapM_ (typeVarExprAs VTValue resVar) (freeL args)
-                tg (ParamSetGuard _ _ vs pas) = mapM_ (typeVarExprAs VTValue resVar) (filter notbnd $ freeL pas)
-                        where
-                          notbnd (Variable _ v) = not $ v `elem` vs
-                          notbnd _ = False -- might as well throw away wildcards immediately
+                        mapM_ (typeGuard resVar) gds

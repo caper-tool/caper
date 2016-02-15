@@ -1,4 +1,4 @@
-// NAME: Guarantee with parametrised transitions 1
+// NAME: Guarantee with parametrised transitions 5
 // RESULT: REJECT
 
 region Foo(r,x) {
@@ -12,9 +12,9 @@ region Foo(r,x) {
 }
 
 function foo(x, u)
-  requires Foo(r,x,l) &*& r@(FOO(l) * FOO(u));
+  requires Foo(r,x,u-1) &*& r@(FOO{i | l <= i, i <= u}) &*& l + 10 = u;
   ensures true;
 {
-  [x] := u;
+  [x] := u+1;
 }
 

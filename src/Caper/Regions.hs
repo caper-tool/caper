@@ -14,6 +14,7 @@ import Data.Maybe
 import Data.List (partition)
 
 import Caper.Utils.NondetClasses
+import Caper.Utils.Choice
 import Caper.Utils.AliasingMap (AliasMap)
 import qualified Caper.Utils.AliasingMap as AM
 
@@ -295,7 +296,7 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
                                 -- That is, those that have variables which are locally bound for
                                 -- the action, and occur in either the pre- or post-state.
                                 -- These variables are bound to be value variables, and so all such
-                                -- conditions will be value-convertable.
+                                -- conditions will be value-convertible.
                                 assms <- use assumptions
                                 let isDynVar = (`Set.member` Set.fromList (concatMap toList [prec, post]))
                                 let cvars = Map.elems $ Map.filterWithKey (\k _ -> isDynVar k) bvmap
@@ -319,7 +320,7 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
 
 -- |Determine a list of possible thread (guarantee) transitions for a given
 -- parametrised region type and guard.
-checkGuaranteeTransitions :: (ProverM s r m, MonadRaise m) => RegionType -> [Expr VariableID] -> Guard VariableID -> m [GuardedTransition VariableID]
+checkGuaranteeTransitions :: (ProverM (WithAssertions s) r m, AssumptionLenses s, DebugState (WithAssertions s) r, MonadRaise m) => RegionType -> [Expr VariableID] -> Guard VariableID -> m [GuardedTransition VariableID]
 checkGuaranteeTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem rt)
         where
                 bndVars :: TransitionRule -> Set.Set RTDVar
@@ -331,30 +332,49 @@ checkGuaranteeTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitio
                         let bvars = Map.elems bvmap
                         let subst = Map.union params $ fmap var bvmap
                         let s v = Map.findWithDefault (error "checkGuaranteeTransitions: variable not found") v subst
-                        let isDynVar = (`Set.member` Set.fromList (concatMap toList [prec, post]))
                         -- The list of conditions for the transition rule can be divided into:
                         -- - Static conditions, which are independent of the state transition; and
                         -- - Dynamic conditions, which may constrain the state transition (and can only depend on values)
-                        let (dyconds, stconds) = partition (any isDynVar) prd 
+                        -- let (dyconds, stconds) = partition (any isDynVar) prd 
                         -- Consuming the guard may generate some conditions (as assertions) that may constrain the transition
                         -- However, since parametrised guards are not yet implemented, that actually can't happen (yet!)
                         -- Now have to check if guard is available.
-                        transitionImpossible <- liftM isNothing $
-                             get >>= \ss -> runMaybeT $ flip evalStateT (emptyWithAssertions ss) $ do
-                                mapM_ (assert . exprCASub' s) stconds
+                        conds <-
+                             get >>= \ss -> allChoices $ flip evalStateT ss $ do
+                                mapM_ declareEvar bvars
+                                mapM_ (assert . exprCASub' s) prd
                                 case rtGuardType rt of
                                     ZeroGuardDeclr -> return ()
                                     SomeGuardDeclr gdec -> do
                                             _ <- guardEntailment gdec gd (exprCASub' s trgd)
                                             return ()
+                                liftIO $ putStrLn "Entailment for guarantee"
+                                debugState
                                 justCheck
-                        case transitionImpossible of
-                            True -> return []
-                            False -> do
-                                cond <- foldlM (\x -> liftM (FOFAnd x . exprCASub' s) . toValueFOF isDynVar) FOFTrue dyconds
-                                return [GuardedTransition bvars cond (exprSub s prec) (exprSub s post)]
+                                liftIO $ putStrLn "passed"
+                                -- We extract the assertions that condition the transition.
+                                -- That is, those that have variables which are locally bound for
+                                -- the action and occur in either the pre- or post-state.
+                                -- These variables are bound to be value variables, and so all such
+                                -- conditions will be value-convertible.
+                                assrts <- use assertions
+                                let isDynVar = (`Set.member` Set.fromList (concatMap toList [prec, post]))
+                                let cvars = Map.elems $ Map.filterWithKey (\k _ -> isDynVar k) bvmap
+                                let isCvar = (`Set.member` Set.fromList cvars)
+                                let cassrts = filter (any isCvar . freeVariables) assrts
+                                return cassrts
+                        let condToTrans cassrts =
+                                let cond = foldBy FOFAnd FOFTrue $ valueConditions (const True) cassrts in
+                                GuardedTransition bvars cond (exprSub s prec) (exprSub s post)
+                        return (map condToTrans conds)
+                        {-case conds of
+                            Nothing -> return []
+                            Just cassrts -> do
+                                --cond <- foldlM (\x -> liftM (FOFAnd x . exprCASub' s) . toValueFOF isDynVar) FOFTrue dyconds
+                                let cond = foldBy FOFAnd FOFTrue $ valueConditions (const True) cassrts
+                                return [GuardedTransition bvars cond (exprSub s prec) (exprSub s post)] -}
 
-
+{-
 toValueFOF :: (MonadRaise m, Monad m) => (v -> Bool) -> Condition v -> m (FOF ValueAtomic v)
 toValueFOF varTest (ValueCondition v) = return v
 toValueFOF varTest (PermissionCondition pc) = case find varTest pc of
@@ -362,10 +382,11 @@ toValueFOF varTest (PermissionCondition pc) = case find varTest pc of
                                 Just v -> raise $ TypeMismatch VTPermission VTValue
 toValueFOF varTest (EqualityCondition v1 v2) = return $ FOFAtom $ VAEq (var v1) (var v2)
 toValueFOF varTest (DisequalityCondition v1 v2) = return $ FOFNot $ FOFAtom $ VAEq (var v1) (var v2)
+-}
 
 -- |Generate a 'Condition' that captures the fact that two abstract
 -- states must be related by the guarantee for a region.   
-generateGuaranteeCondition :: (ProverM s r m, MonadRaise m) =>
+generateGuaranteeCondition :: (ProverM (WithAssertions s) r m, AssumptionLenses s, DebugState (WithAssertions s) r, MonadRaise m) =>
     RegionType                      -- ^Type of the region
     -> [Expr VariableID]            -- ^Parameters for the region
     -> Guard VariableID             -- ^Guard for the region
@@ -375,6 +396,7 @@ generateGuaranteeCondition :: (ProverM s r m, MonadRaise m) =>
 generateGuaranteeCondition rt params gd st0 st1
     | rtIsTransitive rt = do
         transitions <- checkGuaranteeTransitions rt params gd
+        liftIO $ putStrLn $ "Guarantee transitions: " ++ show transitions
         return $ ValueCondition $ foldl FOFOr (st0 $=$ st1) $ do
             GuardedTransition bvars cond e0 e1 <- transitions
             let c = FOFAnd (FOFAnd (st0 $=$ e0) (st1 $=$ e1)) cond

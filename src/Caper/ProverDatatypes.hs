@@ -31,7 +31,7 @@ instance Refreshable v => Refreshable (Either v v) where
         freshen (Right vr) = map Right (freshen vr)
 
 freshSub :: (Refreshable v, Eq v, Ord v, Foldable f, Foldable g) => f v -> g v -> v -> v
--- ^Given a collection of variables to refresh, and a colletion that they
+-- ^Given a collection of variables to refresh, and a collection that they
 -- should be fresh with respect to, produces a function that substitutes
 -- the old variables for the fresh ones (leaving others alone).  This
 -- substitution should only really be applied to variables in the second collection.
