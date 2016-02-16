@@ -224,7 +224,7 @@ subtractPE l PEZero = return (Just l)
 subtractPE l s = (do -- TODO: frame some permission
                 assertTrue $ PAEq l s
                 justCheck
-                return Nothing) `orElse`
+                return Nothing) `mplus`
         trace "Trying framing" (do
                 ev <- newEvar "perm"
                 let eve = PEVar ev
