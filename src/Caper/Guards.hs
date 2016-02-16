@@ -14,6 +14,7 @@ import Data.Foldable
 import Data.Traversable
 import Data.List (intercalate)
 import Control.Monad.State hiding (mapM_,mapM,sequence)
+import Control.Monad.Reader hiding (mapM_,mapM,sequence)
 import Debug.Trace              -- TODO: get rid of this
 import Control.Lens hiding (op)
 
@@ -153,10 +154,6 @@ mergeGuards (GD g1) (GD g2) = liftM GD $ sequence (Map.unionWith unionop (fmap r
                                 v2 <- p2
                                 case (v1, v2) of
                                         (PermissionGP perm1, PermissionGP perm2) -> do
-                                                -- Assume both contributions are non-zero
-                                                -- WARNING: this assumption is subtle
-                                                assumeFalse $ PAEq perm1 PEZero
-                                                assumeFalse $ PAEq perm2 PEZero
                                                 assumeTrue $ PADis perm1 perm2
                                                 return $ PermissionGP $ PESum perm1 perm2
                                         (ParameterGP s1, ParameterGP s2) -> do
@@ -212,28 +209,32 @@ sameGuardParametersType (PermissionGP _) (PermissionGP _) = Nothing
 sameGuardParametersType (ParameterGP _) (ParameterGP _) = Nothing
 sameGuardParametersType a _ = Just a
 
-subtractPE :: (MonadPlus m, MonadState s m, AssertionLenses s, MonadLogger m) =>
+class (MonadIO m, MonadPlus m, MonadOrElse m, MonadState s m, AssertionLenses s, MonadLogger m,
+    MonadReader r m, Provers r) => GuardCheckMonad s r m
+instance (MonadIO m, MonadPlus m, MonadOrElse m, MonadState s m, AssertionLenses s, MonadLogger m,
+    MonadReader r m, Provers r) => GuardCheckMonad s r m
+
+subtractPE :: GuardCheckMonad s r m =>
         PermissionExpression VariableID -> PermissionExpression VariableID ->
                 m (Maybe (PermissionExpression VariableID))
 subtractPE l PEFull = do
                         assertTrue $ PAEq l PEFull
                         return Nothing
-subtractPE _ PEZero = mzero     -- Having a permission guard at all should imply that it's non-zero, therefore this path can simply fail
+subtractPE l PEZero = return (Just l)
 subtractPE l s = (do -- TODO: frame some permission
                 assertTrue $ PAEq l s
-                return Nothing) `mplus`
+                justCheck
+                return Nothing) `orElse`
         trace "Trying framing" (do
                 ev <- newEvar "perm"
                 let eve = PEVar ev
-                assertFalse $ PAEq s PEZero
-                assertFalse $ PAEq eve PEZero
                 assertTrue $ PAEq l (PESum s eve)
                 return (Just eve))
 
 -- |Given a guard parameter we have, take away a given guard parameter.
 -- If things are of the wrong type, backtrack rather than erroring, because
 -- we might just have picked the wrong region.
-subtractGP :: (MonadPlus m, MonadState s m, AssertionLenses s, MonadLogger m) =>
+subtractGP :: (GuardCheckMonad s r m) =>
         GuardParameters VariableID -> GuardParameters VariableID ->
                 m (Maybe (GuardParameters VariableID))
 subtractGP NoGP NoGP = return Nothing
@@ -244,8 +245,7 @@ subtractGP (ParameterGP s1) (ParameterGP s2) = do
                 return $ Just $ ParameterGP $ setDifference s1 s2
 subtractGP _ _ = mzero
 
-guardPrimitiveEntailmentM :: (MonadPlus m, MonadState s m, AssertionLenses s,
-        MonadLogger m) =>
+guardPrimitiveEntailmentM :: (GuardCheckMonad s r m) =>
                 Guard VariableID -> Guard VariableID -> m (Guard VariableID)
 guardPrimitiveEntailmentM (GD g1) (GD g2) = if Map.null $ Map.differenceWith sameGuardParametersType g2 g1 then liftM GD doGPEM else mzero
         where
@@ -265,8 +265,7 @@ guardPrimitiveEntailmentM (GD g1) (GD g2) = if Map.null $ Map.differenceWith sam
                 -}
 
 
-guardEntailment :: (MonadPlus m, MonadState s m, AssertionLenses s,
-        MonadLogger m) =>
+guardEntailment :: (GuardCheckMonad s r m) =>
                 GuardDeclr -> Guard VariableID -> Guard VariableID ->
                         m (Guard VariableID)
 guardEntailment gt g1 g2 = guardPrimitiveEntailmentM g1 g2 `mplus`
@@ -275,8 +274,7 @@ guardEntailment gt g1 g2 = guardPrimitiveEntailmentM g1 g2 `mplus`
                                 frame1 <- guardPrimitiveEntailmentM g1 gel
                                 guardPrimitiveEntailmentM (guardJoin frame1 ger) g2
 
-guardEntailmentTL :: (MonadPlus m, MonadState s m, AssertionLenses s,
-        MonadLogger m) =>
+guardEntailmentTL :: (GuardCheckMonad s r m) =>
                 TopLevelGuardDeclr -> Guard VariableID -> Guard VariableID ->
                         m (Guard VariableID)
 guardEntailmentTL ZeroGuardDeclr _ _ = return emptyGuard
@@ -284,8 +282,7 @@ guardEntailmentTL (SomeGuardDeclr gt) g1 g2 = guardEntailment gt g1 g2
 
 -- |Try to extract a single guard resource, where we don't know the guard type.
 -- Consequently, no rewriting of guards is possible.
-consumeGuardNoType :: (MonadPlus m, MonadState s m, AssertionLenses s,
-        MonadLogger m) =>
+consumeGuardNoType :: (GuardCheckMonad s r m) =>
                 String -> GuardParameters VariableID ->
                 Guard VariableID -> m (Guard VariableID)
 consumeGuardNoType gname gpara (GD g) = do
@@ -293,8 +290,7 @@ consumeGuardNoType gname gpara (GD g) = do
                         gp' <- subtractGP gp gpara
                         return $ GD $ at gname .~ gp' $ g
 
-consumeGuard' :: (MonadPlus m, MonadState s m, AssertionLenses s,
-        MonadLogger m) =>
+consumeGuard' :: (GuardCheckMonad s r m) =>
                 GuardDeclr ->
                 String -> GuardParameters VariableID ->
                 Guard VariableID -> m (Guard VariableID)
@@ -305,8 +301,7 @@ consumeGuard' gt gname gpara g = consumeGuardNoType gname gpara g `mplus`
                         frame1 <- guardPrimitiveEntailmentM g gel
                         consumeGuardNoType gname gpara (guardJoin frame1 ger)
 
-consumeGuard :: (MonadPlus m, MonadState s m, AssertionLenses s,
-        MonadLogger m) =>
+consumeGuard :: (GuardCheckMonad s r m) =>
                 TopLevelGuardDeclr ->
                 String -> GuardParameters VariableID ->
                 Guard VariableID -> m (Guard VariableID)

@@ -36,13 +36,13 @@ import Caper.DeductionFailure
 
 class (MonadRaise m, MonadIO m, MonadLogger m,
         MonadReader r m, Provers r, RTCGetter r, SpecificationContext r,
-        MonadPlus m, Failure DeductionFailure m, OnFailure DeductionFailure m,
+        MonadPlus m, MonadOrElse m, Failure DeductionFailure m, OnFailure DeductionFailure m,
         MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s r,
         RegionLenses s, MonadDemonic m, DebugState (WithAssertions s) r) => SymExMonad r s m
 
 instance (MonadRaise m, MonadIO m, MonadLogger m,
         MonadReader r m, Provers r, RTCGetter r, SpecificationContext r,
-        MonadPlus m, Failure DeductionFailure m, OnFailure DeductionFailure m,
+        MonadPlus m, MonadOrElse m, Failure DeductionFailure m, OnFailure DeductionFailure m,
         MonadState SymbState m, MonadDemonic m) => SymExMonad r SymbState m
 
 

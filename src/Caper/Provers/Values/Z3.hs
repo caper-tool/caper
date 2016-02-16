@@ -61,6 +61,12 @@ convValueFOF intS s FOFTrue = mkTrue
 
 valueCheck :: (Eq v, Show v) => Maybe Int -> FOF ValueAtomic v -> IO (Maybe Bool)
 valueCheck timeout f = evalZ3With Nothing opts $ do
+                params <- mkParams
+                tmo <- mkStringSymbol "timeout"
+                paramsSetUInt params tmo (case timeout of
+                    Just x -> if x > 0 then toEnum x else 0
+                    Nothing -> 0)
+                solverSetParams params
                 intS <- mkIntSort
                 c <- convValueFOF intS (\v -> error $ "Unquantified variable " ++ show v ++ " in formula:\n" ++ show f) f
                 c' <- mkNot c
@@ -76,9 +82,9 @@ valueCheck timeout f = evalZ3With Nothing opts $ do
                         Unsat -> Just True
                         _ -> Nothing
         where
-                opts = case timeout of
+                opts = stdOpts {- case timeout of
                         (Just x) -> if x > 0 then opt "timeout" x else stdOpts
-                        _ -> stdOpts
+                        _ -> stdOpts -}
 
 valueProverInfo :: IO String
 valueProverInfo = (do

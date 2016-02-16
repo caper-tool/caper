@@ -1,5 +1,5 @@
-// NAME: Guarantee with permissions 5
-// RESULT: ACCEPT
+// NAME: Guarantee with permissions 6
+// RESULT: REJECT
 
 /* DECRIPTION: This tests subtle permission reasoning that
                can affect the guarantee.  An update is allowed
@@ -11,14 +11,13 @@
                perm = 1p, then it would never be possible to
                perform such an action.
 
-               In this example, the condition that perm != 1p is
-               provided by the region interpretation.
+               In this example, the condition is not enforced.
 */
 
 region Foo(r,x,perm) {
   guards %FOO;
   interpretation {
-    n : x |-> n &*& perm != 1p;
+    n : x |-> n;
   }
   actions {
     l < u, perm $ permo = 1p | FOO[permo] : l ~> u;

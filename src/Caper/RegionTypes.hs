@@ -283,7 +283,7 @@ isTransitive rt = do
             liftIO $ putStrLn $ "Transitivity check " ++ show (isJust m) ++ " for region type " ++ show rt
             return (isJust m)
 
-checkForClosure :: (MonadIO m, MonadPlus m, MonadLogger m, MonadReader r m, Provers r) =>
+checkForClosure :: (MonadIO m, MonadPlus m, MonadOrElse m, MonadLogger m, MonadReader r m, Provers r) =>
         RegionType -> TransitionRule -> TransitionRule -> m ()
 checkForClosure rt tr1 tr2 = flip evalStateT emptyAssumptions $ do
         -- Generate parameters for the region
