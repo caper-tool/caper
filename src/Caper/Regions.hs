@@ -219,7 +219,7 @@ stabiliseRegions :: (ProverM s r m, RegionLenses s, RTCGetter r, DebugState s r,
                         m ()
 stabiliseRegions = do
                         regs <- use regions
-                        regs' <- mapM stabiliseRegion regs
+                        regs' <- imapM stabiliseRegion regs
                         regions .= regs'
 
 {-
@@ -233,13 +233,14 @@ stabiliseRegion reg = if regDirty reg then
 
 -- Stabilise a region
 stabiliseRegion :: (ProverM s r m, RTCGetter r, DebugState s r, MonadRaise m) =>
-                        Region -> m Region
+                        VariableID -> Region -> m Region
 -- Not dirty, so nothing to do!
-stabiliseRegion
+stabiliseRegion rid
         reg@(Region False _ _ _) = return reg
 -- Here we know enough about the region that we have to do something
-stabiliseRegion
-        (Region _ rti@(Just (RegionInstance rtid ps)) (Just se) gd) = do
+stabiliseRegion rid
+        (Region _ rti@(Just (RegionInstance rtid ps0)) (Just se) gd) = do
+                        let ps = var rid : ps0
                         -- resolve region type
                         rt <- lookupRType rtid
                         transitions <- (trace $ "Checking transitions: " ++ show rt ++ " " ++ show ps ++ " " ++ show gd) checkTransitions rt ps gd
@@ -268,7 +269,7 @@ stabiliseRegion
 -- In this case, we don't know the region type, or don't know the
 -- region state, in which case we don't know the stabilised region
 -- state.
-stabiliseRegion r = return $ r {regDirty = False, regState = Nothing}
+stabiliseRegion rid r = return $ r {regDirty = False, regState = Nothing}
 
 -- |Determine a list of possible environment (rely) transitions for a given
 -- parametrised region type and guard.
@@ -279,13 +280,14 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
                 bndVars tr = Set.difference (freeVariables tr) (rtParamVars rt)
                 params = Map.fromList $ zip (map fst $ rtParameters rt) ps
                 checkTrans tr@(TransitionRule trgd prd prec post) = do
+                        liftIO $ putStrLn $ "+++ Params " ++ show params
                         -- Compute a binding for fresh variables
                         bvmap <- freshInternals rtdvStr (bndVars tr)
                         liftIO $ print tr
                         liftIO $ print $ freeVariables tr
                         let bvars = Map.elems bvmap
                         let subst = Map.union params $ fmap var bvmap
-                        let s v = Map.findWithDefault (error "checkTransitions: variable not found") v subst
+                        let s v = Map.findWithDefault (error $ "checkTransitions: variable not found: " ++ show v ++ " in " ++ show (Map.toList subst)) v subst
                         -- Now have to check if guard is applicable!
                         guardCompat <- hypothetical $ do
                                 -- assume conditions
@@ -327,6 +329,7 @@ checkGuaranteeTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitio
                 bndVars tr = Set.difference (freeVariables tr) (rtParamVars rt)
                 params = Map.fromList $ zip (map fst $ rtParameters rt) ps
                 checkTrans tr@(TransitionRule trgd prd prec post) = do
+                        liftIO $ putStrLn $ "+++ Params " ++ show params
                         -- Compute a binding for fresh variables
                         bvmap <- freshInternals rtdvStr (bndVars tr)
                         let bvars = Map.elems bvmap
@@ -384,6 +387,31 @@ toValueFOF varTest (EqualityCondition v1 v2) = return $ FOFAtom $ VAEq (var v1) 
 toValueFOF varTest (DisequalityCondition v1 v2) = return $ FOFNot $ FOFAtom $ VAEq (var v1) (var v2)
 -}
 
+{-
+-- |Generate a 'Condition' that captures the fact that two abstract
+-- states must be related by the guarantee for a region.   
+simpleGenerateGuaranteeCondition :: (ProverM (WithAssertions s) r m, AssumptionLenses s, DebugState (WithAssertions s) r, MonadRaise m) =>
+    RegionType                      -- ^Type of the region
+    -> [Expr VariableID]            -- ^Parameters for the region
+    -> Guard VariableID             -- ^Guard for the region
+    -> ValueExpression VariableID   -- ^Old state
+    -> ValueExpression VariableID   -- ^New state
+        -> m (Condition VariableID)
+simpleGenerateGuaranteeCondition rt ps gd st0 st1 = msum (map checkTrans (rtTransitionSystem rt))
+    where
+        bndVars :: TransitionRule -> Set.Set RTDVar
+        bndVars tr = Set.difference (freeVariables tr) (rtParamVars rt)
+        params = Map.fromList $ zip (map fst $ rtParameters rt) ps
+        checkTrans tr@(TransitionRule trgd prd prec post) = do
+            bvmap <- freshInternals rtdvStr (bndVars tr)
+            let bvars = Map.elems bvmap
+            let subst = Map.union params $ fmap var bvmap
+            let s v = Map.findWithDefault (error "checkGuaranteeTransitions: variable not found") v subst
+            assertTrue $ VAEq st0 (exprSub s prec)
+            assertTrue $ VAEq st1 (exprSub s post)
+  -}          
+
+
 -- |Generate a 'Condition' that captures the fact that two abstract
 -- states must be related by the guarantee for a region.   
 generateGuaranteeCondition :: (ProverM (WithAssertions s) r m, AssumptionLenses s, DebugState (WithAssertions s) r, MonadRaise m) =>
@@ -394,7 +422,7 @@ generateGuaranteeCondition :: (ProverM (WithAssertions s) r m, AssumptionLenses 
     -> ValueExpression VariableID   -- ^New state
         -> m (Condition VariableID)
 generateGuaranteeCondition rt params gd st0 st1
-    | rtIsTransitive rt = do
+    | not (isFinite (rtStateSpace rt)) = do
         transitions <- checkGuaranteeTransitions rt params gd
         liftIO $ putStrLn $ "Guarantee transitions: " ++ show transitions
         return $ ValueCondition $ foldl FOFOr (st0 $=$ st1) $ do

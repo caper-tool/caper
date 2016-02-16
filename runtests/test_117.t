@@ -12,7 +12,7 @@ region Foo(r,x,perm) {
 }
 
 function foo(x)
-  requires Foo(r,x,perm,_) &*& r@FOO[1p];
+  requires Foo(r,x,perm,_) &*& r@FOO[1p] &*& perm != 0p;
   ensures true;
 {
   CAS(x,1,2);

@@ -29,12 +29,12 @@ import Caper.Assertions.Check
 
 class (MonadState s m, AssertionLenses s, RegionLenses s, SymbStateLenses s,
     MonadReader r m, RTCGetter r, Provers r, DebugState s r,
-    MonadRaise m, MonadLogger m, MonadPlus m, Failure DeductionFailure m, MonadDemonic m,
+    MonadRaise m, MonadLogger m, MonadPlus m, MonadOrElse m, Failure DeductionFailure m, MonadDemonic m,
     MonadIO m) => ConsumeMonad r s m
 
 instance (MonadState s m, AssertionLenses s, RegionLenses s, SymbStateLenses s,
     MonadReader r m, RTCGetter r, Provers r, DebugState s r,
-    MonadRaise m, MonadLogger m, MonadPlus m, Failure DeductionFailure m, MonadDemonic m,
+    MonadRaise m, MonadLogger m, MonadPlus m, MonadOrElse m, Failure DeductionFailure m, MonadDemonic m,
     MonadIO m) => ConsumeMonad r s m
 
 {-

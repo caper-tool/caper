@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveFunctor, TypeFamilies #-}
+{-# LANGUAGE DeriveFunctor, TypeFamilies, FlexibleInstances, MultiParamTypeClasses #-}
 {- Provide maps with aliasing.
  - The purpose is to support handling of shared regions.
  - Some region variables may be aliases for each other.
@@ -57,6 +57,13 @@ instance (Ord a) => Ixed (AliasMap a b) where
                 Just v -> f v <&> \v' -> overwrite k v' m
                 Nothing -> pure m
 
+instance (Ord a) => FunctorWithIndex a (AliasMap a)
+instance (Ord a) => FoldableWithIndex a (AliasMap a)
+instance (Ord a) => TraversableWithIndex a (AliasMap a) where
+    itraverse f (AliasMap m) = fmap AliasMap (itraverse f' m)
+        where
+            f' i (Left v) = pure (Left v)
+            f' i (Right x) = fmap Right (f i x)
 empty :: AliasMap a b
 empty = AliasMap Map.empty
 

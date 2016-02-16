@@ -16,6 +16,9 @@ attempt :: MonadOrElse m => m () -> m ()
 -- Do the action if possible
 attempt a = orElse a (return ())
 
+instance (MonadPlus m, MonadOrElse m) => MonadOrElse (StateT s m) where
+    orElse (StateT a) (StateT b) = StateT $ \s -> a s `orElse` b s 
+
 class MonadPlus m => MonadCut m where
         -- |Prevent rolling back after computing any witness.
         cut :: m a -> m a
