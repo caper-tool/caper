@@ -20,8 +20,8 @@ function makeCounter()
 }
 
 function incr(x)
-  requires Counter(r, x, v0) &*& r@(INCREMENT[p]);
-  ensures Counter(r, x, v1) &*& v1 > v0 &*& r@(INCREMENT[p]);
+  requires Counter(r, x, v0) &*& r@(INCREMENT[p]) &*& (p = 1p ? true : true);
+  ensures Counter(r, x, v1) &*& v1 > v0 &*& r@(INCREMENT[p]) &*& (p = 1p ? v1 = v0 + 1 : true);
 {
     v := [x];
     b := CAS(x, v, v + 1);
