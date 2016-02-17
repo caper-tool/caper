@@ -1,5 +1,5 @@
 // NAME: Permission guard test 3
-// RESULT: ACCEPT
+// RESULT: REJECT
 
 function foo()
   requires r@GUARD[1p];
