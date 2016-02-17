@@ -169,6 +169,9 @@ consumeGuards gg@(Guards sp ridv gds) = contextualise gg $
                 let g0 = R.regGuards region
                 let cw g gd = do
                         (nm, gp) <- guardToNameParam consumeVariable gd
+                        case gp of
+                            G.PermissionGP perm -> assertFalse $ PAEq perm PEZero
+                            _ -> return ()
                         consumeWith nm gp g
                 g1 <- foldM cw g0 gds
                 R.regions . ix rid .= region {R.regDirty = True, R.regGuards = g1}

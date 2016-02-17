@@ -126,10 +126,12 @@ generateGuard handler condh = liftM G.GD . foldM tg' Map.empty
                     return $ Map.insert gname G.NoGP g
         tg g (PermGuard _ gname pe) = case Map.lookup gname g of
                         Nothing -> do
-                            pexp <- gpe pe
+                            pexp <- generatePermissionExpr handler pe
+                            condh $ negativeCondition $ PAEq pexp PEZero
                             return $ Map.insert gname (G.PermissionGP pexp) g
                         (Just (G.PermissionGP pe0)) -> do
-                            pexp <- gpe pe
+                            pexp <- generatePermissionExpr handler pe
+                            condh $ negativeCondition $ PAEq pexp PEZero
                             condh $ toCondition $ PADis pe0 pexp
                             return $ Map.insert gname
                                         (G.PermissionGP (PESum pe0 pexp)) g
@@ -163,12 +165,6 @@ generateGuard handler condh = liftM G.GD . foldM tg' Map.empty
                             return $ Map.insert gname (G.ParameterGP (setUnion s0 s)) g
                         _ -> raise $ IncompatibleGuardOccurrences gname
         tg g(ParamSetGuard _ _ _ _) = raise $ SyntaxNotImplemented "guards with multiple parameters"
-        gpe :: PermExpr -> m (PermissionExpression v)
-        gpe pe = do
-            pexp <- generatePermissionExpr handler pe
-            condh $ negativeCondition $ PAEq pexp PEZero
-            return pexp
-
 
 
 guardToNameParam :: (Monad m, MonadRaise m) =>
