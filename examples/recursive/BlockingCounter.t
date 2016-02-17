@@ -25,11 +25,11 @@ function incr(x)
 {
   v := [x];
   if (v = -1) {
-    v := incr_rec(x);
+    v := incr(x);
   } else {
     b := CAS(x, v, -1);
     if (b = 0) {
-      v := incr_rec(x);
+      v := incr(x);
     } else {
       [x] := v + 1;
     }
@@ -43,7 +43,7 @@ function read(x)
 {
   v := [x];
   if (v = -1) {
-    v := read_rec(x);
+    v := read(x);
   }
   return v;
 }
