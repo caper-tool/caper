@@ -12,7 +12,7 @@ import Caper.Interpreter.Environment
 import Data.Maybe
 import Data.List
 import Control.Monad.State
-import Control.Monad.Error
+import Control.Monad.Except
 import Control.Concurrent
 import System.IO
 import Text.ParserCombinators.Parsec
@@ -150,8 +150,13 @@ flushStr str = putStr str >> hFlush stdout
 readPrompt :: String -> IO String
 readPrompt prompt = flushStr prompt >> getLine
 
-runInterpreter :: IO ()
-runInterpreter = do env <- emptyEnv
-                    declr <- liftIO $ parseFile "../examples/CASLock.t"
-                    liftIO $ newDeclr env (functionDeclrs declr)
-                    (until_ (== "quit") (readPrompt "> ") . evalAndPrint) env
+runInterpreter :: [String] -> IO () 
+runInterpreter args =
+  do env <- emptyEnv
+     declr <- parseFiles args
+     liftIO $ newDeclr env (functionDeclrs declr)
+     (until_ (== "quit") (readPrompt "> ") . evalAndPrint) env
+
+parseFiles :: [String] -> IO [Declr]
+parseFiles []     = return []
+parseFiles (x:xs) = do { declr1 <- liftIO $ (parseFile x); declr2 <- (parseFiles xs); return $ declr1 ++ declr2 }

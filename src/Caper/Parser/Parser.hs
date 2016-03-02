@@ -19,7 +19,6 @@ import Text.ParserCombinators.Parsec.Expr
 import Text.ParserCombinators.Parsec.Language
 import qualified Text.ParserCombinators.Parsec.Token as Token
 import Caper.Parser.AST
-import Control.Applicative ((*>))
 
 
 languageDef =
@@ -58,6 +57,7 @@ languageDef =
                                      , "]"
                                      , "["
                                      , "0p"
+                                     , "0"
                                      , "1p"
                                      , "#cells"
                                      , "_"
@@ -139,7 +139,7 @@ region =
      return $ RegionDeclr pos var args gds itr act
 
 topLevelGuardDeclaration :: Parser TopLevelGuardDeclr
-topLevelGuardDeclaration =  (do { char '0'; return ZeroGuardDeclr})
+topLevelGuardDeclaration =  (do { reserved "0"; return ZeroGuardDeclr})
                         <|> (do { gds <- guardDeclaration; return $ SomeGuardDeclr gds})
 
 guardDeclaration :: Parser GuardDeclr
@@ -371,8 +371,7 @@ relation =  (reservedOp "=" >> return Equal)
 
 assertion :: Parser Assrt
 assertion =
-  do pos <- getPosition
-     a   <- assertion2
+  do a   <- assertion2
      return $ refineAssertion $ a
 
 assertion2 :: Parser Assrt
@@ -556,19 +555,19 @@ guardAux =  parens (sepBy guard (reservedOp "*"))
         <|> (do { g <- guard; return [g] })
 
 guard :: Parser Guard
-guard =
-  do pos <- getPosition
-     n   <- identifier
-     pe <- optionMaybe $ brackets permissionExpression
-     case pe of
-       Nothing -> do paras <- optionMaybe $ parens (sepBy1 valueExpression comma)
-                     case paras of
-                       Nothing -> do param <- optionMaybe $ braces (do { s <- sepBy1 identifier comma; reservedOp "|"; c <- sepBy1 pureAssertion comma; return (s, c) })
-                                     case param of
-                                       Nothing -> return $ NamedGuard pos n
-                                       Just (s, c)  -> return $ ParamSetGuard pos n s c
-                       Just m  -> return $ ParamGuard pos n m
-       Just l  -> return $ PermGuard pos n l
+guard = try (do { pos <- getPosition; reserved "0"; return (ZeroGuard pos) })
+     <|> do pos <- getPosition
+            n <- identifier
+            pe <- optionMaybe $ brackets permissionExpression
+            case pe of
+              Nothing -> do paras <- optionMaybe $ parens (sepBy1 valueExpression comma)
+                            case paras of
+                              Nothing -> do param <- optionMaybe $ braces (do { s <- sepBy1 identifier comma; reservedOp "|"; c <- sepBy1 pureAssertion comma; return (s, c) })
+                                            case param of
+                                              Nothing -> return $ NamedGuard pos n
+                                              Just (s, c)  -> return $ ParamSetGuard pos n s c
+                              Just m  -> return $ ParamGuard pos n m
+              Just l  -> return $ PermGuard pos n l
 
 -- |Parse an 'AnyExpr', provided it's followed by ',', ';' or ')'.
 anyExpression :: Parser AnyExpr
@@ -578,17 +577,8 @@ anyExpression =  try (do { e <- variableExpression; checkNext; return (AnyVar e)
         where
                 checkNext = lookAhead (try (comma <|> semi <|> symbol ")"))
 
--- |Parse an 'AnyExpr', provided it's followed by ',' or '|'.
-anyExpression2 :: Parser AnyExpr
-anyExpression2 =  try (do { e <- variableExpression; checkNext; return (AnyVar e) })
-              <|> try (do { e <- permissionExpression; checkNext; return (AnyPerm e) })
-              <|> (do { e <- valueExpression; checkNext; return (AnyVal e) })
-        where
-                checkNext = lookAhead (try (comma <|> symbol "|"))
-
-
 refineAssertion (AssrtPure pos pa)      = AssrtPure pos (refinePureAssertion pa)
-refineAssertion a@(AssrtSpatial pos sa) = a
+refineAssertion a@(AssrtSpatial _ _) = a
 refineAssertion (AssrtConj pos a1 a2)   = AssrtConj pos (refineAssertion a1) (refineAssertion a2)
 refineAssertion (AssrtITE pos pa a1 a2) = AssrtITE pos (refinePureAssertion pa) (refineAssertion a1) (refineAssertion a2)
 
@@ -596,15 +586,13 @@ refinePureAssertion (NotBAssrt pos pe) = NotBAssrt pos (refinePureAssertion pe)
 refinePureAssertion (BinaryPermAssrt pos (PermEquality br) (VarPermExpr _ e1) (VarPermExpr _ e2)) = (BinaryVarAssrt pos br e1 e2)
 refinePureAssertion (BinaryValAssrt pos (ValEquality br) (VarValExpr _ e1) (VarValExpr _ e2)) = (BinaryVarAssrt pos br e1 e2)
 refinePureAssertion a = a
---refinePureAssertion a@(BinaryVarAssrt pos br e1 e2) = a
---refinePureAssertion a@(BinaryValAssrt pos br e1 e2) = a
 
-spatialAssertionParser :: Parser SpatialAssrt
-spatialAssertionParser = whiteSpace >> spatialAssertion
+_spatialAssertionParser :: Parser SpatialAssrt
+_spatialAssertionParser = whiteSpace >> spatialAssertion
 
-parseSpatialAssertion :: String -> SpatialAssrt
-parseSpatialAssertion str =
-  case parse spatialAssertionParser "" str of
+_parseSpatialAssertion :: String -> SpatialAssrt
+_parseSpatialAssertion str =
+  case parse _spatialAssertionParser "" str of
     Left e  -> error $ show e
     Right r -> r
 
@@ -617,30 +605,30 @@ parseValueExpression str =
     Left e  -> error $ show e
     Right r -> r
 
-pureAssertionParser :: Parser PureAssrt
-pureAssertionParser = whiteSpace >> pureAssertion
+_pureAssertionParser :: Parser PureAssrt
+_pureAssertionParser = whiteSpace >> pureAssertion
 
-parsePureAssertion :: String -> PureAssrt
-parsePureAssertion str =
-  case parse pureAssertionParser "" str of
+_parsePureAssertion :: String -> PureAssrt
+_parsePureAssertion str =
+  case parse _pureAssertionParser "" str of
     Left e  -> error $ show e
     Right r -> r
 
-assertionParser :: Parser Assrt
-assertionParser = whiteSpace >> assertion
+_assertionParser :: Parser Assrt
+_assertionParser = whiteSpace >> assertion
 
-parseAssertion :: String -> Assrt
-parseAssertion str =
-  case parse assertionParser "" str of
+_parseAssertion :: String -> Assrt
+_parseAssertion str =
+  case parse _assertionParser "" str of
     Left e  -> error $ show e
     Right r -> r
 
-functionParser :: Parser FunctionDeclr
-functionParser = whiteSpace >> function
+_functionParser :: Parser FunctionDeclr
+_functionParser = whiteSpace >> function
 
-parseFunction :: String -> FunctionDeclr
-parseFunction str =
-  case parse functionParser "" str of
+_parseFunction :: String -> FunctionDeclr
+_parseFunction str =
+  case parse _functionParser "" str of
     Left e  -> error $ show e
     Right r -> r
 
