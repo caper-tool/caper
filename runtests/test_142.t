@@ -8,7 +8,7 @@ region Counter(r, x) {
     1 : x |-> 1;
   }
   actions {
-    0 : 0 ~> 1;
+    : 0 ~> 1;
   }
 }
 

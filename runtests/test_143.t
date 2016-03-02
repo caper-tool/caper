@@ -8,13 +8,13 @@ region Counter(r, x) {
     1 : x |-> 1;
   }
   actions {
-    0 : 0 ~> 1;
+    : 0 ~> 1;
   }
 }
 
 function makeCounter()
   requires true;
-  ensures Counter(r, ret, v) &*& v <= 1 &*& r@0;
+  ensures Counter(r, ret, v) &*& v <= 1;
 {
     v := alloc(1);
     [v] := 0;
