@@ -197,19 +197,16 @@ instance Show Predicate where
         show (Predicate _ p args) = p ++ "(" ++ intercalate "," (map show args) ++ ")"
 
 -- |Guard assertions
-data Guard = ZeroGuard SourcePos                                  -- ^Zero guard
-           | NamedGuard SourcePos String                          -- ^Simple named guard
+data Guard = NamedGuard SourcePos String                          -- ^Simple named guard
            | PermGuard SourcePos String PermExpr                  -- ^Guard with permission
            | ParamGuard SourcePos String [ValExpr]                -- ^Parametrised guard
            | ParamSetGuard SourcePos String [String] [PureAssrt]  -- ^Parametrised set guard
 instance Show Guard where
-        show (ZeroGuard _) = "0"
         show (NamedGuard _ n) = n
         show (PermGuard _ n pe) = n ++ "[" ++ show pe ++ "]"
         show (ParamGuard _ n paras) = n ++ "(" ++ intercalate "," (map show paras) ++ ")"
         show (ParamSetGuard _ n paras asserts ) = n ++ "{" ++ intercalate "," paras ++ "|" ++ intercalate "," (map show asserts) ++ "}"
 instance FreeVariables Guard VarExpr where
-    foldrFree _ x (ZeroGuard _) = x
     foldrFree _ x (NamedGuard{}) = x
     foldrFree f x (PermGuard _ _ pe) = foldrFree f x pe
     foldrFree f x (ParamGuard _ _ params) = foldrFree f x params    
@@ -319,8 +316,6 @@ instance Contextual VarExpr where
         toContext (WildCard sp) = DescriptiveContext sp
                 "At the use of a wild-card variable"
 instance Contextual Guard where
-        toContext (ZeroGuard sp) = DescriptiveContext sp $
-                "In a zero guard"
         toContext (NamedGuard sp n) = DescriptiveContext sp $
                 "In a unique guard named '" ++ n ++ "'"
         toContext (PermGuard sp n _) = DescriptiveContext sp $

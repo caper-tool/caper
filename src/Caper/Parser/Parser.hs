@@ -555,19 +555,18 @@ guardAux =  parens (sepBy guard (reservedOp "*"))
         <|> (do { g <- guard; return [g] })
 
 guard :: Parser Guard
-guard = try (do { pos <- getPosition; reserved "0"; return (ZeroGuard pos) })
-     <|> do pos <- getPosition
-            n <- identifier
-            pe <- optionMaybe $ brackets permissionExpression
-            case pe of
-              Nothing -> do paras <- optionMaybe $ parens (sepBy1 valueExpression comma)
-                            case paras of
-                              Nothing -> do param <- optionMaybe $ braces (do { s <- sepBy1 identifier comma; reservedOp "|"; c <- sepBy1 pureAssertion comma; return (s, c) })
-                                            case param of
-                                              Nothing -> return $ NamedGuard pos n
-                                              Just (s, c)  -> return $ ParamSetGuard pos n s c
-                              Just m  -> return $ ParamGuard pos n m
-              Just l  -> return $ PermGuard pos n l
+guard = do pos <- getPosition
+           n <- identifier
+           pe <- optionMaybe $ brackets permissionExpression
+           case pe of
+             Nothing -> do paras <- optionMaybe $ parens (sepBy1 valueExpression comma)
+                           case paras of
+                             Nothing -> do param <- optionMaybe $ braces (do { s <- sepBy1 identifier comma; reservedOp "|"; c <- sepBy1 pureAssertion comma; return (s, c) })
+                                           case param of
+                                             Nothing -> return $ NamedGuard pos n
+                                             Just (s, c)  -> return $ ParamSetGuard pos n s c
+                             Just m  -> return $ ParamGuard pos n m
+             Just l  -> return $ PermGuard pos n l
 
 -- |Parse an 'AnyExpr', provided it's followed by ',', ';' or ')'.
 anyExpression :: Parser AnyExpr
