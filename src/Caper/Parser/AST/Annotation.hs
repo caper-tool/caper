@@ -209,8 +209,7 @@ instance Show Guard where
 instance FreeVariables Guard VarExpr where
     foldrFree _ x (NamedGuard{}) = x
     foldrFree f x (PermGuard _ _ pe) = foldrFree f x pe
-    foldrFree f x (ParamGuard _ _ params) = foldrFree f x params
-    
+    foldrFree f x (ParamGuard _ _ params) = foldrFree f x params    
 
 -- |Guards associated with a region
 data Guards = Guards SourcePos String [Guard]
