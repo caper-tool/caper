@@ -139,6 +139,7 @@ atomicOpenRegion rid ase cont = do
                         liftIO $ putStrLn $ "*** Closed with interp " ++ show interp'
                         logicalVars .= savedLVars'
                         openRegions .= oldRegions
+                        debugState
                         cont
 
 availableRegions :: (SymExMonad r s m) => m [VariableID]

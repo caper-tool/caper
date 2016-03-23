@@ -23,6 +23,12 @@ import Caper.FreeVariables
 class Refreshable v where
         freshen :: v -> [v]
 
+freshWRT :: (Refreshable v, Eq v, Foldable t) => v -> t v -> v
+freshWRT v e = head [vv | vv <- v : freshen v, notElem vv e]
+
+freshWRTFree :: (Refreshable v, Ord v, FreeVariables s v) => v -> s -> v
+freshWRTFree v e = freshWRT v (freeVariables e)
+
 instance Refreshable String where
         freshen s = [ s ++ show x | x <- [0 :: Int ..] ]
 
@@ -377,33 +383,33 @@ emptySet = SetBuilder (varFromString "n") FOFFalse
 fullSet :: StringVariable v => SetExpression v
 fullSet = SetBuilder (varFromString "n") FOFTrue
 
-toSetBuilder :: (StringVariable v) => SetExpression v -> SetExpression v
+toSetBuilder :: (StringVariable v, Refreshable v, Eq v) => SetExpression v -> SetExpression v
 toSetBuilder se = SetBuilder v c
         where
             (v, c) = case se of
                 SetBuilder v0 c0 -> (v0, c0)
-                SetSingleton e -> let v0 = varFromString "n" in (v0, FOFAtom $ VAEq (var v0) e)
+                SetSingleton e -> let v0 = varFromString "n" `freshWRT` e in (v0, FOFAtom $ VAEq (var v0) e)
 
-setUnion :: (StringVariable v, Refreshable v, Eq v) => SetExpression v -> SetExpression v -> SetExpression v
+setUnion :: (StringVariable v, Refreshable v, Ord v) => SetExpression v -> SetExpression v -> SetExpression v
 setUnion a0 b0 = case (toSetBuilder a0, toSetBuilder b0) of
         ss@(SetBuilder va ca, SetBuilder vb cb) ->
-            let v = head [vv | vv <- va : freshen va, not (freeIn vv ss)] in  
+            let v = va `freshWRTFree` ss in  
             SetBuilder v (FOFOr (exprCASub (\v' -> VEVar $ if v' == va then v else v') ca)
                                 (exprCASub (\v' -> VEVar $ if v' == vb then v else v') cb)) 
         _ -> undefined
 
-setIntersection :: (StringVariable v, Refreshable v, Eq v) => SetExpression v -> SetExpression v -> SetExpression v
+setIntersection :: (StringVariable v, Refreshable v, Ord v) => SetExpression v -> SetExpression v -> SetExpression v
 setIntersection a0 b0 = case (toSetBuilder a0, toSetBuilder b0) of
         ss@(SetBuilder va ca, SetBuilder vb cb) ->
-            let v = head [vv | vv <- va : freshen va, not (freeIn vv ss)] in  
+            let v = va `freshWRTFree` ss in  
             SetBuilder v (FOFAnd (exprCASub (\v' -> VEVar $ if v' == va then v else v') ca)
                                 (exprCASub (\v' -> VEVar $ if v' == vb then v else v') cb)) 
         _ -> undefined
 
-setDifference :: (StringVariable v, Refreshable v, Eq v) => SetExpression v -> SetExpression v -> SetExpression v
+setDifference :: (StringVariable v, Refreshable v, Ord v) => SetExpression v -> SetExpression v -> SetExpression v
 setDifference a0 b0 = case (toSetBuilder a0, toSetBuilder b0) of
         ss@(SetBuilder va ca, SetBuilder vb cb) ->
-            let v = head [vv | vv <- va : freshen va, not (freeIn vv ss)] in  
+            let v = va `freshWRTFree` ss in  
             SetBuilder v (FOFAnd (exprCASub (\v' -> VEVar $ if v' == va then v else v') ca)
                                 (FOFNot $ exprCASub (\v' -> VEVar $ if v' == vb then v else v') cb)) 
         _ -> undefined

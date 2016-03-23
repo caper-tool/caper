@@ -243,13 +243,16 @@ stabiliseRegion rid
                         let ps = var rid : ps0
                         -- resolve region type
                         rt <- lookupRType rtid
-                        transitions <- (trace $ "Checking transitions: " ++ show rt ++ " " ++ show ps ++ " " ++ show gd) checkTransitions rt ps gd
+                        liftIO $ putStrLn $ "Checking transitions for region: " ++ show rt ++ " " ++ show ps ++ " " ++ show gd
+                        transitions <- checkTransitions rt ps gd
+                        liftIO $ putStrLn $ "Transitions are: " ++ show transitions
                         -- compute the closure relation
                         tcrel <- rely rt transitions -- computeClosureRelation (rtStateSpace rt) transitions
                         -- create a new state variable
                         newStateVar <- newAvar "state"
                         -- assume it is related to the old state
                         assumeTrue $ tcrel se (var newStateVar)
+                        liftIO $ putStrLn $ "RELY CONDITION : " ++ show (tcrel se (var newStateVar))
                         -- return the clean region with the new state
                         return $ Region
                                 False
@@ -280,11 +283,8 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
                 bndVars tr = Set.difference (freeVariables tr) (rtParamVars rt)
                 params = Map.fromList $ zip (map fst $ rtParameters rt) ps
                 checkTrans tr@(TransitionRule trgd prd prec post) = do
-                        liftIO $ putStrLn $ "+++ Params " ++ show params
                         -- Compute a binding for fresh variables
                         bvmap <- freshInternals rtdvStr (bndVars tr)
-                        liftIO $ print tr
-                        liftIO $ print $ freeVariables tr
                         let bvars = Map.elems bvmap
                         let subst = Map.union params $ fmap var bvmap
                         let s v = Map.findWithDefault (error $ "checkTransitions: variable not found: " ++ show v ++ " in " ++ show (Map.toList subst)) v subst
