@@ -9,5 +9,5 @@ main :: IO ()
 main = do
         args <- getArgs
         putStrLn $ "Caper Interpreter " ++ showVersion version
-        putStrLn $ "Type 'quit' to exit."
+        putStrLn "Type 'quit' to exit."
         runInterpreter args
