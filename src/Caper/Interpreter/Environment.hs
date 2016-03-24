@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 module Caper.Interpreter.Environment where
 
 import Caper.Parser.AST
@@ -7,7 +8,11 @@ import Data.Maybe
 import Control.Concurrent
 import Control.Monad
 import Control.Monad.Trans
+#if MIN_VERSION_mtl(2,2,1)
 import Control.Monad.Except
+#else
+import Control.Monad.Error
+#endif
 import Text.ParserCombinators.Parsec
 
 data EnvError = NotFunction String
@@ -28,7 +33,18 @@ instance Show EnvError where
   show (Default message)                = show message
 
 type ThrowsError = Either EnvError
+#if MIN_VERSION_mtl(2,2,1)
 type IOThrowsError = ExceptT EnvError IO
+runIOThrowsError = runExceptT
+#else
+type IOThrowsError = ErrorT EnvError IO
+runIOThrowsError = runErrorT
+instance Error EnvError where
+  noMsg = Default "An error has occurred"
+  strMsg = Default
+#endif
+runIOThrowsError :: IOThrowsError a -> IO (ThrowsError a)
+
 
 trapError action = catchError action (return . show)
 
@@ -40,12 +56,12 @@ liftThrows (Left err) = throwError err
 liftThrows (Right val) = return val
 
 runIOThrows :: IOThrowsError String -> IO String
-runIOThrows action = liftM extractValue (runExceptT (trapError action))
+runIOThrows action = liftM extractValue (runIOThrowsError (trapError action))
 
 trapErrorFork action = catchError action (\_a -> return ())
 
 runIOThrowsFork :: IOThrowsError () -> IO ()
-runIOThrowsFork action = liftM extractValue (runExceptT (trapErrorFork action))
+runIOThrowsFork action = liftM extractValue (runIOThrowsError (trapErrorFork action))
 
 type Heap = MVar [(Integer, Integer)]
 type Store = [(String, Integer)]
