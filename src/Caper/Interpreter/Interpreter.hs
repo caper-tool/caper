@@ -3,6 +3,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE CPP #-}
 
 module Caper.Interpreter.Interpreter where
 
@@ -12,7 +13,11 @@ import Caper.Interpreter.Environment
 import Data.Maybe
 import Data.List
 import Control.Monad.State
+#if MIN_VERSION_mtl(2,2,1)
 import Control.Monad.Except
+#else
+import Control.Monad.Error
+#endif
 import Control.Concurrent
 import System.IO
 import Text.ParserCombinators.Parsec
