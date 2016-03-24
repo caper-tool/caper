@@ -110,14 +110,19 @@ declaration :: Parser Declr
 declaration =  liftM DeclrFun function
            <|> liftM DeclrReg region
 
+assertionSemi =
+  do a <- assertion
+     semi
+     return a
+
 function :: Parser FunctionDeclr
 function =
   do pos  <- getPosition
      reserved "function"
      var  <- identifier
      args <- parens $ sepBy identifier comma
-     req  <- optionMaybe $ (do { reserved "requires"; a <- assertion; semi; return a})
-     ens  <- optionMaybe $ (do { reserved "ensures"; a <- assertion; semi; return a})
+     req  <- optionMaybe (do { reserved "requires"; assertionSemi})
+     ens  <- optionMaybe (do { reserved "ensures"; assertionSemi})
      stmt <- braces sequenceOfStmt
      return $ FunctionDeclr pos var req ens args stmt
 
@@ -198,7 +203,7 @@ action =
 sequenceOfStmt :: Parser Stmt
 sequenceOfStmt =
   do pos  <- getPosition
-     list <- (sepEndBy statement whiteSpace)
+     list <- sepEndBy statement whiteSpace
      return $ SeqStmt pos list
 
 statement :: Parser Stmt
@@ -230,7 +235,7 @@ whileStatement =
   do pos  <- getPosition
      reserved "while"
      cond <- parens bExpression
-     inv <- optionMaybe $ (do { reserved "invariant"; a <- assertion; semi; return a})
+     inv <- optionMaybe (do { reserved "invariant"; assertionSemi})
      stmt <- braces sequenceOfStmt
      return $ WhileStmt pos inv cond stmt
 
@@ -239,7 +244,7 @@ doWhileStatement =
   do pos  <- getPosition
      reserved "do"
      stmt <- braces sequenceOfStmt
-     inv <- optionMaybe $ (do { reserved "invariant"; a <- assertion; semi; return a})
+     inv <- optionMaybe (do { reserved "invariant"; assertionSemi})
      reserved "while"
      cond <- parens bExpression
      semi
@@ -372,10 +377,10 @@ relation =  (reservedOp "=" >> return Equal)
 assertion :: Parser Assrt
 assertion =
   do a   <- assertion2
-     return $ refineAssertion $ a
+     return $ refineAssertion a
 
 assertion2 :: Parser Assrt
-assertion2 = try (iteAssertion)
+assertion2 = try iteAssertion
          <|> assertionAux
 
 iteAssertion :: Parser Assrt
@@ -492,7 +497,7 @@ variablePermission =
      return $ VarPermExpr pos ve
 
 spatialAssertion :: Parser SpatialAssrt
-spatialAssertion =  (try (parens spatialAssertionAux) <|> spatialAssertionAux)
+spatialAssertion =  try (parens spatialAssertionAux) <|> spatialAssertionAux
 
 spatialAssertionAux :: Parser SpatialAssrt
 spatialAssertionAux =  try regionAssertion
@@ -511,10 +516,10 @@ regionAssertion =
      return $ SARegion (Region pos t v args s)
   where
      remargs = (do
-                arg <- (try $ do
-                        arg <- anyExpression
-                        comma
-                        return arg)
+                arg <- try $ do
+                         arg <- anyExpression
+                         comma
+                         return arg
                 (args',s) <- remargs
                 return (arg : args', s))
         <|> (do
@@ -582,8 +587,8 @@ refineAssertion (AssrtConj pos a1 a2)   = AssrtConj pos (refineAssertion a1) (re
 refineAssertion (AssrtITE pos pa a1 a2) = AssrtITE pos (refinePureAssertion pa) (refineAssertion a1) (refineAssertion a2)
 
 refinePureAssertion (NotBAssrt pos pe) = NotBAssrt pos (refinePureAssertion pe)
-refinePureAssertion (BinaryPermAssrt pos (PermEquality br) (VarPermExpr _ e1) (VarPermExpr _ e2)) = (BinaryVarAssrt pos br e1 e2)
-refinePureAssertion (BinaryValAssrt pos (ValEquality br) (VarValExpr _ e1) (VarValExpr _ e2)) = (BinaryVarAssrt pos br e1 e2)
+refinePureAssertion (BinaryPermAssrt pos (PermEquality br) (VarPermExpr _ e1) (VarPermExpr _ e2)) = BinaryVarAssrt pos br e1 e2
+refinePureAssertion (BinaryValAssrt pos (ValEquality br) (VarValExpr _ e1) (VarValExpr _ e2)) = BinaryVarAssrt pos br e1 e2
 refinePureAssertion a = a
 
 _spatialAssertionParser :: Parser SpatialAssrt

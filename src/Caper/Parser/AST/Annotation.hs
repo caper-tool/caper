@@ -207,7 +207,7 @@ instance Show Guard where
         show (ParamGuard _ n paras) = n ++ "(" ++ intercalate "," (map show paras) ++ ")"
         show (ParamSetGuard _ n paras asserts ) = n ++ "{" ++ intercalate "," paras ++ "|" ++ intercalate "," (map show asserts) ++ "}"
 instance FreeVariables Guard VarExpr where
-    foldrFree _ x (NamedGuard{}) = x
+    foldrFree _ x NamedGuard{} = x
     foldrFree f x (PermGuard _ _ pe) = foldrFree f x pe
     foldrFree f x (ParamGuard _ _ params) = foldrFree f x params    
 
@@ -322,6 +322,8 @@ instance Contextual Guard where
                 "In a permission guard named '" ++ n ++ "'"
         toContext (ParamGuard sp n _) = DescriptiveContext sp $
                 "In a parametrised guard named '" ++ n ++ "'"
+        toContext (ParamSetGuard sp n _ _) = DescriptiveContext sp $
+                "In a set guard named '" ++ n ++ "'"
 instance Contextual Guards where
         toContext (Guards sp rid _) = DescriptiveContext sp $
                 "In a guard assertion for region '" ++ rid ++ "'"
