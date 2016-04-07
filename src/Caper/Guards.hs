@@ -1,7 +1,7 @@
 -- TODO: Clean up and properly document
 {-# LANGUAGE RankNTypes, MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances, TypeSynonymInstances #-}
-{-# LANGUAGE DeriveDataTypeable, FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -364,5 +364,5 @@ conservativeGuardLUB (SumGD _ gd1 gd2) g1 g2 =
 -- PRECONDITION: the guards match the guard type declaration, and the declaration is valid
 conservativeGuardLUBTL :: (MonadState s m, AssumptionLenses s) =>
         TopLevelGuardDeclr -> Guard VariableID -> Guard VariableID -> m (Guard VariableID)
-conservativeGuardLUBTL ZeroGuardDeclr _ _ = return $ emptyGuard
+conservativeGuardLUBTL ZeroGuardDeclr _ _ = return emptyGuard
 conservativeGuardLUBTL (SomeGuardDeclr gd) g1 g2 = conservativeGuardLUB gd g1 g2
