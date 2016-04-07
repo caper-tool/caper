@@ -12,7 +12,7 @@ import Control.Lens hiding (op)
 import Control.Monad.State hiding (mapM_,mapM,msum,forM_)
 import Control.Monad.RWS hiding (mapM_,mapM,msum,forM_)
 import Data.Foldable
-import Data.List (intersperse)
+import Data.List (intercalate)
 import Data.Traversable
 import Data.Maybe
 
@@ -55,7 +55,7 @@ instance Show SymbState where
         show (SymbState p vs lvs prds regs oregs) = "Pure facts:\n" ++ show p 
                 ++ "\nProgram variables:\n" ++ showPVarBindings vs 
                 ++ "Heap:\n" ++ 
-                (concat . intersperse "\n" . 
+                (intercalate "\n" . 
                         map showPredicate . toPredicateList) prds
 
 
@@ -124,7 +124,7 @@ instance RTCGetter r => DebugState SymbState r where
 instance RTCGetter r => DebugState (WithAssertions SymbState) r where
     showState r s@(WithAssertions {_withAssrBase = SymbState p vs lvs prds regs oregs}) =
         "Program variables:\n" ++ showPVarBindings vs 
-        ++ "Heap:\n" ++ (concat . intersperse "\n" . map showPredicate . toPredicateList) prds ++ "\n"
+        ++ "Heap:\n" ++ (intercalate "\n" . map showPredicate . toPredicateList) prds ++ "\n"
         ++ "\nRegions:\n" ++ show iregs
         ++ showAssertions s
         where

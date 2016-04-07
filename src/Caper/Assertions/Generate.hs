@@ -164,7 +164,7 @@ generateGuard handler condh = liftM G.GD . foldM tg' Map.empty
                             condh $ toCondition $ SubsetEq (setIntersection s0 s) emptySet
                             return $ Map.insert gname (G.ParameterGP (setUnion s0 s)) g
                         _ -> raise $ IncompatibleGuardOccurrences gname
-        tg g(ParamSetGuard _ _ _ _) = raise $ SyntaxNotImplemented "guards with multiple parameters"
+        tg g(ParamSetGuard{}) = raise $ SyntaxNotImplemented "guards with multiple parameters"
 
 
 guardToNameParam :: (Monad m, MonadRaise m) =>
@@ -177,7 +177,7 @@ guardToNameParam genv gd@(PermGuard _ nm pe) = contextualise gd $ do
 guardToNameParam genv gd@(ParamGuard _ nm [e]) = contextualise gd $ do
                                 ve <- generateValueExpr genv e
                                 return (nm, G.ParameterGP (SetSingleton ve))
-guardToNameParam genv gd@(ParamGuard _ _ _) = contextualise gd $                              
+guardToNameParam genv gd@(ParamGuard{}) = contextualise gd $                              
                         raise $ SyntaxNotImplemented "guards with multiple parameters"
 guardToNameParam genv gd@(ParamSetGuard _ gname [v] pcs) = contextualise gd $ do
                     let v' = Left $ varFromString v
@@ -192,7 +192,7 @@ guardToNameParam genv gd@(ParamSetGuard _ gname [v] pcs) = contextualise gd $ do
                       raise $ SyntaxNotImplemented "permission/non-value conditions in set expressions" -- TODO: This should probably be a different exception
                     let s = refreshLefts $ SetBuilder v' (foldBy FOFAnd FOFTrue vcs)
                     return (gname, G.ParameterGP s)
-guardToNameParam genv gd@(ParamSetGuard _ _ _ _) = contextualise gd $                              
+guardToNameParam genv gd@(ParamSetGuard{}) = contextualise gd $                              
                         raise $ SyntaxNotImplemented "guards with multiple parameters"
 
 generatePure :: (MonadRaise m, Monad m) =>

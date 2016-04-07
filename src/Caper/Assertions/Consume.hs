@@ -214,7 +214,7 @@ consumeAssrt (AssrtITE sp c a1 a2) = {-
         consumeAssrt a2) `mplus`
       (do
         a <- generatePure assumptionVariable c
-        liftIO $ putStrLn $ "*** performing case split"
+        liftIO $ putStrLn "*** performing case split"
         (do
             liftIO $ putStrLn $ "*** case " ++ show c
             assumeE a

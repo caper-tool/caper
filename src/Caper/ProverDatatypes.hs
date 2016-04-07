@@ -24,7 +24,7 @@ class Refreshable v where
         freshen :: v -> [v]
 
 freshWRT :: (Refreshable v, Eq v, Foldable t) => v -> t v -> v
-freshWRT v e = head [vv | vv <- v : freshen v, notElem vv e]
+freshWRT v e = head [vv | vv <- v : freshen v, vv `notElem` e]
 
 freshWRTFree :: (Refreshable v, Ord v, FreeVariables s v) => v -> s -> v
 freshWRTFree v e = freshWRT v (freeVariables e)

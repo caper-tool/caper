@@ -151,7 +151,7 @@ typePureAssrt resVar = tpa
                         addContext (DescriptiveContext sp $
                                 "In the (dis)equality: '" ++ show a ++ "'") $
                                 unifyR (resVar v1) (resVar v2)
-                tpa (BinaryVarAssrt {}) = return ()
+                tpa BinaryVarAssrt{} = return ()
                 tpa (BinaryValAssrt _ _ ve1 ve2) = mapM_ 
                         (typeVarExprAs VTValue resVar)
                         (freeL [ve1, ve2])

@@ -41,7 +41,7 @@ checkRegionParams rtid params = do
 --
 -- Currently, this simply checks that no regions are mentioned
 isTriviallyStable :: Assrt -> Bool
-isTriviallyStable (AssrtPure {}) = True
+isTriviallyStable AssrtPure{} = True
 isTriviallyStable (AssrtSpatial _ (SARegion _)) = False
 isTriviallyStable (AssrtSpatial _ _) = True
 isTriviallyStable (AssrtConj _ a1 a2) = isTriviallyStable a1 && isTriviallyStable a2
