@@ -99,9 +99,9 @@ instance Show CaperException where
                 "The guard '" ++ gd ++ "' is not consistent with the guard type '" ++ gt ++ "'."
         show (GuardTypeMultipleOccurrences s Nothing) = "Multiple guards named '" ++ s ++ "' are declared in a guard type."
         show (GuardTypeMultipleOccurrences s (Just gt)) = "Multiple guards named '" ++ s ++ "' are declared in the guard type '" ++ gt ++ "'."
-        show (OverlappingStateInterpretation) =
+        show OverlappingStateInterpretation =
                 "There are multiple possible interpretations for a single region state."
-        show (MissingStateInterpretation) =
+        show MissingStateInterpretation =
                 "There are no state interpretations for the region."
         show (OverloadedProcedure pname) = 
                 "There are multiple procedures named '" ++ pname ++ "'."
@@ -109,7 +109,7 @@ instance Show CaperException where
                 "Failed to verify: " ++ f
         show (UndeclaredFunctionCall f) =
                 "Call to undeclared function: " ++ f
-        show (UnstableStateInterpretation) =
+        show UnstableStateInterpretation =
                 "Could not show state interpretation to be stable."
 
 

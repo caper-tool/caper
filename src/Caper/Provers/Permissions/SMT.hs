@@ -151,7 +151,7 @@ smtify bits ctx (FOFExists v f) = "(exists ((" ++ newbits ++ " (_ BitVec "
                 ctx' = v : ctx
                 l = length ctx
                 newbits = "bits" ++ (show (l + 1))
-smtify bits ctx (FOFAtom atm) = "(and " ++ intercalate " "
+smtify bits ctx (FOFAtom atm) = "(and " ++ unwords
         ["(= " ++ toBin 0 ++
                 " (bvand " ++ bits ++ " " ++ toBin msk ++ "))"
                 | msk <- masks atm ] ++ ")"
