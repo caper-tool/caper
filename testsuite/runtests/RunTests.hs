@@ -5,6 +5,7 @@
 module RunTests (tests) where
 
 import Distribution.TestSuite hiding (run)
+import qualified Distribution.TestSuite as TS
 import Control.Applicative
 import Data.List(sort)
 import Control.Monad (forM_,liftM,foldM)
@@ -52,8 +53,27 @@ main = shelly $ silently $ errExit False $ do
     m' <- foldM testFile (Map.empty :: Map.Map TestResult Int) names
     liftIO $ putStrLn $ Map.foldlWithKey (\s k v -> (s ++ show k ++ ": " ++ show v ++ "; ")) "" m'
 -}
+{-
 tests :: IO [Test]
 tests = do
     -- dir <- getExecutablePath
     -- putStrLn dir
     return [undefined]
+    -}
+tests :: IO [Test]
+tests = return [ Test succeeds, Test fails ]
+  where
+    succeeds = TestInstance
+        { TS.run = return $ Finished Pass
+        , name = "succeeds"
+        , tags = []
+        , options = []
+        , setOption = \_ _ -> Right succeeds
+        }
+    fails = TestInstance
+        { TS.run = return $ Finished $ Fail "Always fails!"
+        , name = "fails"
+        , tags = []
+        , options = []
+        , setOption = \_ _ -> Right fails
+        }
