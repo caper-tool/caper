@@ -1,5 +1,8 @@
 {-# LANGUAGE DeriveDataTypeable, FlexibleInstances, FlexibleContexts, MultiParamTypeClasses,
-        OverlappingInstances, UndecidableInstances #-}
+        UndecidableInstances #-}
+#ifndef overlap_pragmas
+{-# LANGUAGE OverlappingInstances #-}
+#endif
 {- |The Exceptions module provides for execution-time failure reporting.
    The exceptions defined here are /not/ for programmer errors (e.g. assertion
    failures) or generally recoverable exceptions.  The system provides a
@@ -140,7 +143,7 @@ type RaiseT = EitherT ([ExceptionContext], CaperException)
 runRaiseT :: Monad m => RaiseT m a -> m (Either ([ExceptionContext], CaperException) a)
 runRaiseT = runEitherT
         
-instance (Monad m, MonadReader r m, ECLenses r) =>
+instance {-# OVERLAPPING #-} (Monad m, MonadReader r m, ECLenses r) =>
         MonadRaise (EitherT ([ExceptionContext], CaperException) m) where
         raise ex = do
                 ctx <- view exceptionContext

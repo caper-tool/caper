@@ -40,6 +40,7 @@ executable Caper
                    int-cast,
                    unification-fd >=0.10
   hs-source-dirs:  src
+  extensions:      CPP
   ghc-options:     -Wall -fno-warn-unused-matches -rtsopts -threaded
   other-modules:   
                    Caper.Assertions.Check,
@@ -98,6 +99,9 @@ executable Caper
     cpp-options:    -Dz3ffi
     other-modules:  Caper.Provers.Values.Z3, Caper.Provers.Permissions.SMT
 
+  if impl(ghc >= 7.10)
+     cpp-options:   -Doverlap_pragmas
+     
 executable Interpreter
   build-depends:   
                    base >= 4,
@@ -145,5 +149,6 @@ test-suite IntegrationTests
                    containers >= 0.5,
                    Cabal >= 1.9.2
   hs-source-dirs:  testsuite/runtests
+--  main-is:         RunTests.hs
   test-module:     RunTests
 

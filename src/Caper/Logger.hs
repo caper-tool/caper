@@ -1,7 +1,10 @@
-{-# LANGUAGE TypeSynonymInstances, FlexibleInstances, OverlappingInstances,
+{-# LANGUAGE TypeSynonymInstances, FlexibleInstances,
         FlexibleContexts, UndecidableInstances, Rank2Types,
         GeneralizedNewtypeDeriving
          #-}
+#ifndef overlap_pragmas
+{-# LANGUAGE OverlappingInstances #-}
+#endif
 module Caper.Logger where
 import Data.Set (Set)
 import qualified Data.Set
@@ -81,7 +84,7 @@ instance (Monad m) => MonadLogger (LoggerT m) where
         logAll = tell
         logEventContext ec = tell [ec] 
 
-instance (MonadTrans t, Monad (t m), MonadLogger m) => MonadLogger (t m) where
+instance {-# OVERLAPPABLE #-} (MonadTrans t, Monad (t m), MonadLogger m) => MonadLogger (t m) where
         logAll = lift . logAll
         logEventContext = lift . logEventContext
         logEvent = lift . logEvent
