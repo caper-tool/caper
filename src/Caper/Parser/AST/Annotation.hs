@@ -22,6 +22,20 @@ instance Ord VarExpr where
     compare (Variable _ _) (WildCard _) = GT
     compare (Variable _ s1) (Variable _ s2) = compare s1 s2
 
+-- |Logical types
+data LType = LTInt | LTPerm | LTRid deriving (Eq)
+instance Show LType where
+  show LTInt = "int"
+  show LTPerm = "perm"
+  show LTRid = "rid"
+
+-- |Optionally typed variables
+data TVarExpr = TVarExpr VarExpr (Maybe LType)
+
+instance Show TVarExpr where
+        show (TVarExpr ve Nothing) = show ve
+        show (TVarExpr ve (Just t)) = show ve ++ "::" ++ show t
+
 {-
 instance FreeVariables VarExpr (Maybe String) where
         foldrFree f x (Variable _ s) = f (Just s) x
@@ -209,7 +223,11 @@ instance Show Guard where
 instance FreeVariables Guard VarExpr where
     foldrFree _ x NamedGuard{} = x
     foldrFree f x (PermGuard _ _ pe) = foldrFree f x pe
-    foldrFree f x (ParamGuard _ _ params) = foldrFree f x params    
+    foldrFree f x (ParamGuard _ _ params) = foldrFree f x params
+    foldrFree f x (ParamSetGuard _ _ bvs pas) = foldrFree f' x pas
+      where
+        f' v@(Variable _ s) = if s `elem` bvs then id else f v
+        f' v = f v
 
 -- |Guards associated with a region
 data Guards = Guards SourcePos String [Guard]

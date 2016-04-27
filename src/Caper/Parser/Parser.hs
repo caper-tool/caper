@@ -62,7 +62,7 @@ languageDef =
                                      , "#cells"
                                      , "_"
                                      ]
-           , Token.reservedOpNames = ["+", "-", "*", "/", ":="
+           , Token.reservedOpNames = ["+", "-", "*", "/", ":=", "::"
                                      , "=", "!=", "<", ">", ">=", "<="
                                      , "and", "or", "not", "?", ":"
                                      , "&*&", "$", "!"
@@ -109,6 +109,7 @@ sequenceOfDeclr = sepBy declaration whiteSpace
 declaration :: Parser Declr
 declaration =  liftM DeclrFun function
            <|> liftM DeclrReg region
+           <|> liftM DeclrPred predicateDeclr
 
 assertionSemi =
   do a <- assertion
@@ -142,6 +143,15 @@ region =
      act <- braces $ endBy action semi
      reserved "}"
      return $ RegionDeclr pos var args gds itr act
+
+predicateDeclr :: Parser PredicateDeclr
+predicateDeclr = do
+  pos <- getPosition
+  reserved "predicate"
+  pname <- pIdentifier
+  args <- parens $ sepBy tVarExpr comma
+  semi
+  return $ PredicateDeclr pos pname args
 
 topLevelGuardDeclaration :: Parser TopLevelGuardDeclr
 topLevelGuardDeclaration =  (do { reserved "0"; return ZeroGuardDeclr})
@@ -431,7 +441,7 @@ valueRelation =  (do { vo <- equalityRelation; return (ValEquality vo) })
              <|> (reservedOp ">=" >> return ValGreaterOrEqual)
              <|> (reservedOp "<" >> return ValLess)
              <|> (reservedOp "<=" >> return ValLessOrEqual)
-
+  -- 
 valueExpression :: Parser ValExpr
 valueExpression = buildExpressionParser valueOperators valueTerm
 
@@ -675,3 +685,17 @@ parseStatement str =
   case parse statementParser "" str of
     Left e  -> error $ show e
     Right r -> r
+
+-- |Logical type
+lType :: Parser LType
+lType = (reserved "int" >> return LTInt) <|>
+  (reserved "perm" >> return LTPerm) <|>
+  (reserved "rid" >> return LTRid) <?> "logical type"
+
+-- |Optionally-typed variable expression
+tVarExpr :: Parser TVarExpr
+tVarExpr = do
+  ve <- variableExpression
+  ty <- ((try (reservedOp "::")) >> lType >>= return . Just)
+    <|> return Nothing
+  return $ TVarExpr ve ty
