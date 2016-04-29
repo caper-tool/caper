@@ -30,7 +30,7 @@ import Caper.Exceptions
 import Caper.Logger
 import qualified Caper.Parser.AST as AST
 import Caper.Parser.AST.Annotation ()
-import Caper.DeclarationTyping
+-- import Caper.DeclarationTyping
 import Caper.Assertions.Generate
 import Caper.ExceptionContext
 
@@ -240,10 +240,10 @@ checkActionsGuards tlgd@AST.ZeroGuardDeclr = mapM_ $ \a -> let grd = AST.actionG
 declrsToRegionTypeContext :: (MonadIO m, MonadRaise m, MonadLogger m, MonadReader r m, Provers r) =>
         [AST.Declr]
         -- ^ Declarations
+        -> (Map String [(String, VariableType)])
+        -- ^ Typing for region parameters
         -> m RegionTypeContext
-declrsToRegionTypeContext declrs = do
-            -- Determine the parameter types for (region) declarations
-            typings <- typeDeclarations declrs
+declrsToRegionTypeContext declrs typings = do
             -- Build the region type context
             accumulate typings 0 emptyRegionTypeContext (AST.regionDeclrs declrs)
     where

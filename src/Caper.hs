@@ -11,6 +11,7 @@ import System.Console.ArgParser.Format
 
 import Caper.Utils.MonadHoist
 -- import Caper.Assertions
+import Caper.Predicates (createPredicateContext)
 import Caper.Contexts
 import Caper.ProverDatatypes
 import Caper.Provers
@@ -21,6 +22,7 @@ import Caper.Logger
 import Caper.RegionTypes
 import Caper.RegionInterpretations
 import Caper.Procedures
+import Caper.DeclarationTyping
 import Caper.SymbolicExecution
 
 data CommandLine =
@@ -89,10 +91,12 @@ caperCommand (CLVerify file verb) = do
         provers <- initProvers
         let filtLog = filterLogger (if verb then const True else logNotProver)
         result <- runOutLogger $ filtLog $ flip runReaderT [StringContext $ "File: \"" ++ file ++ "\"."] $ runRaiseT $ do
+            (predTypings, regTypeTypings) <- typeDeclarations declrs
+            let pc = createPredicateContext predTypings
             procSpecs <- declrsToProcedureSpecs funDecs
-            rtc <- hoist (withReaderT (ProverContext provers)) $ declrsToRegionTypeContext declrs
+            rtc <- hoist (withReaderT (ProverContext provers)) $ declrsToRegionTypeContext declrs regTypeTypings
             liftIO $ print rtc 
-            hoist (withReaderT (ProcedureContext procSpecs rtc provers)) $ do
+            hoist (withReaderT (ProcedureContext procSpecs rtc pc provers)) $ do
                 logEvent $ InfoEvent "Validating region declarations."
                 checkRegionTypeContextInterpretations
                 -- FIXME: Add check that transitions are well-formed (guards are valid)

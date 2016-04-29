@@ -132,16 +132,16 @@ instance RTCGetter r => DebugState (WithAssertions SymbState) r where
             inform reg = InformedRegion (reg, regTypeInstance reg >>=
                                 \(RegionInstance rtid _) -> return $ (r ^. resolveRType) rtid)
 
-validatePredicate :: (MonadState s m, SymbStateLenses s) => Predicate -> m ()
+validatePredicate :: (MonadState s m, SymbStateLenses s, MonadReader r m, PredicateLenses r, MonadRaise m) => Predicate -> m ()
 -- ^Check that a predicate has the correct number and type of parameters.
-validatePredicate (n, exprs) = chkTypes exprs
-        (Map.findWithDefault (error $ "The predicate name '" ++ show n ++ "' is not defined.") n predicateTypes)
+validatePredicate (n, exprs) = do
+            predType <- resolvePredicateType n
+            unless (length predType == length exprs) $
+                raise $ ArgumentCountMismatch (length exprs) (length predType)
+            chkTypes exprs predType
         where
-                chkTypes [] [] = return ()
                 chkTypes (e : es) (t : ts) = checkExpressionAtType e t >> chkTypes es ts
-                chkTypes (_ : _) [] = error $ "The predicate '" ++ show n ++ "' is used with too many arguments."
-                chkTypes [] (_ : _) = error $ "The predicate '" ++ show n ++ "' is used with too few arguments."
-
+                chkTypes _ _ = return ()
 
 
 predicateAssumptions :: Predicate -> Predicates -> [Condition VariableID]
@@ -149,6 +149,7 @@ predicateAssumptions (PCell, e1 : _) prds = toCondition (VALt (VEConst 0) e0) :
                 foldMap genCond (Map.findWithDefault MultiSet.empty PCell prds)
         where
                 genCond (e1' : _) = [negativeCondition $ VAEq (toValueExpr e1') e0]
+                genCond _ = error "predicateAssumptions: Bad #cell predicate"
                 e0 = toValueExpr e1
 predicateAssumptions (PCells, [e1, e2]) _ = [toCondition (VALt (VEConst 0) e1'),  toCondition (VALt (VEConst 0) e2')]
         where
@@ -170,7 +171,7 @@ mergePredicates = Map.unionWith MultiSet.union
 addPredicate :: (MonadState s m, SymbStateLenses s) => Predicate -> m ()
 addPredicate p = preds %= insertPredicate p
                 
-producePredicate :: (MonadState s m, SymbStateLenses s) => Predicate -> m ()
+producePredicate :: (MonadState s m, SymbStateLenses s, MonadReader r m, PredicateLenses r, MonadRaise m) => Predicate -> m ()
 -- Check that a predicate is appropriately typed,
 -- generate any pure assumptions from it, and
 -- add it to the symbolic state
@@ -228,6 +229,9 @@ consumePred (PCell, [x, y]) = (do
                         addPredicate (PCells, [toExpr (x $+$ VEConst 1), toExpr (e1 $+$ e2 $-$ x $-$ VEConst 1)])
                         assertTrue $ (x $+$ VEConst 1) $<$ (e1 $+$ e2)))
                 -- add justCheck to fail faster?
+consumePred p@(pt, args) = do
+                args' <- takingEachPredInstance pt
+                forM_ (zip args args') $ uncurry assertEqual
 
 
 -- |Consumes a predicate, after checking that it is well-formed.
@@ -244,7 +248,7 @@ consumePred (PCell, [x, y]) = (do
         -}
 consumePredicate :: 
                       (SymbStateLenses s, AssertionLenses s, MonadLogger m,
-                       MonadState s m, MonadPlus m) =>
+                       MonadState s m, MonadPlus m, MonadReader r m, PredicateLenses r, MonadRaise m) =>
                       Predicate -> m ()
 consumePredicate p = do
                 validatePredicate p
@@ -332,7 +336,7 @@ symExLocalAssign target expr = do
                 progVars %= Map.insert target newval
 
 symExAllocate :: 
-                   (MonadRaise m, MonadLogger m, Provers p, MonadReader p m,
+                   (MonadRaise m, MonadLogger m, Provers p, PredicateLenses p, MonadReader p m,
                    SymbStateLenses s, MonadState s m, MonadIO m, MonadPlus m) =>
                    Maybe String -> AExpr -> m ()
 symExAllocate target lenExpr = do
@@ -344,7 +348,7 @@ symExAllocate target lenExpr = do
                 producePredicate (PCells, [var loc, lenval])
                 forM_ target $ \tvar -> progVars %= Map.insert tvar (var loc)
 
-symExWrite :: (SymbStateLenses s, MonadLogger m, MonadRaise m, Provers p,
+symExWrite :: (SymbStateLenses s, MonadLogger m, MonadRaise m, Provers p, PredicateLenses p,
                      MonadReader p m, MonadIO m, MonadState s m, MonadPlus m) =>
                     AExpr -> AExpr -> m ()
 symExWrite target expr = do
@@ -355,7 +359,7 @@ symExWrite target expr = do
                 newval <- aexprToExpr expr
                 addPredicate (PCell, [loc, newval])
 
-symExRead :: (SymbStateLenses s, MonadRaise m, MonadLogger m, Provers p,
+symExRead :: (SymbStateLenses s, MonadRaise m, MonadLogger m, Provers p, PredicateLenses p,
                 MonadReader p m, MonadIO m, MonadState s m, MonadPlus m) =>
                String -> AExpr -> m ()
 symExRead target eloc = do
@@ -367,7 +371,7 @@ symExRead target eloc = do
                 addPredicate (PCell, [loc, var oldval])
                 progVars %= Map.insert target (var oldval)
 
-symExCAS :: (SymbStateLenses s, MonadRaise m, MonadLogger m, Provers p,
+symExCAS :: (SymbStateLenses s, MonadRaise m, MonadLogger m, Provers p, PredicateLenses p,
                 MonadReader p m, MonadIO m, MonadState s m, MonadPlus m,
                 MonadDemonic m) =>
                 Maybe String -> AExpr -> AExpr -> AExpr -> m ()

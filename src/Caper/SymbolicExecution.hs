@@ -35,13 +35,13 @@ import Caper.DeductionFailure
 -}
 
 class (MonadRaise m, MonadIO m, MonadLogger m,
-        MonadReader r m, Provers r, RTCGetter r, SpecificationContext r,
+        MonadReader r m, Provers r, RTCGetter r, PredicateLenses r, SpecificationContext r,
         MonadPlus m, MonadOrElse m, Failure DeductionFailure m, OnFailure DeductionFailure m,
         MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s r,
         RegionLenses s, MonadDemonic m, DebugState (WithAssertions s) r) => SymExMonad r s m
 
 instance (MonadRaise m, MonadIO m, MonadLogger m,
-        MonadReader r m, Provers r, RTCGetter r, SpecificationContext r,
+        MonadReader r m, Provers r, RTCGetter r, PredicateLenses r, SpecificationContext r,
         MonadPlus m, MonadOrElse m, Failure DeductionFailure m, OnFailure DeductionFailure m,
         MonadState SymbState m, MonadDemonic m) => SymExMonad r SymbState m
 
@@ -446,7 +446,7 @@ symbolicExecute stmt cont = do
 
 checkProcedure ::
     (MonadRaise m, MonadIO m, MonadLogger m,
-        MonadReader r m, Provers r, RTCGetter r, SpecificationContext r) =>
+        MonadReader r m, Provers r, RTCGetter r, PredicateLenses r, SpecificationContext r) =>
         FunctionDeclr -> m Bool
 checkProcedure fd@(FunctionDeclr sp n opre opost args s) =
         contextualise fd $ contextualise ("Checking procedure '" ++ n ++ "'") $ do
@@ -482,7 +482,7 @@ checkProcedure fd@(FunctionDeclr sp n opre opost args s) =
             
 verifyProcedure ::
     (MonadRaise m, MonadIO m, MonadLogger m,
-        MonadReader r m, Provers r, RTCGetter r, SpecificationContext r) =>
+        MonadReader r m, Provers r, RTCGetter r, PredicateLenses r, SpecificationContext r) =>
         FunctionDeclr -> m ()        
 verifyProcedure fd = do
         res <- checkProcedure fd
@@ -491,6 +491,6 @@ verifyProcedure fd = do
 
 verifyProcedures ::
     (MonadRaise m, MonadIO m, MonadLogger m,
-        MonadReader r m, Provers r, RTCGetter r, SpecificationContext r) =>
+        MonadReader r m, Provers r, RTCGetter r, PredicateLenses r, SpecificationContext r) =>
         [FunctionDeclr] -> m ()
 verifyProcedures = mapM_ verifyProcedure

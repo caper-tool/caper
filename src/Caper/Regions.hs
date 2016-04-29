@@ -4,14 +4,11 @@ module Caper.Regions where
 import Prelude hiding (mapM_,mapM,concat,any,foldl,concatMap,foldr)
 import Control.Monad.State hiding (mapM_,mapM,forM_,msum)
 import Control.Monad.Reader hiding (mapM_,mapM,forM_,msum)
-import Control.Monad.Trans.Maybe
 import Control.Lens hiding (op)
 import Data.Foldable
 import Data.Traversable
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Data.Maybe
-import Data.List (partition)
 
 import Caper.Utils.NondetClasses
 import Caper.Utils.Choice
@@ -29,9 +26,6 @@ import Caper.DeductionFailure
 import Caper.ProverStates
 import Caper.Guards
 import Caper.Transitions
-import Caper.FirstOrder
-
-import Debug.Trace
 
 data RegionInstance = RegionInstance {
         riType :: RTId,

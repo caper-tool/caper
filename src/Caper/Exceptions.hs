@@ -46,6 +46,11 @@ data CaperException =
         -- records the undeclared name.  The second field records a
         -- list of (similar) alternatives.
         | UndeclaredRegionType String [String]
+        -- |'UndeclaredPredicate' indicates that a predicate
+        -- is being used, but has not been declared.  The first field
+        -- records the undeclared name.  The second field records a
+        -- list of (similar) alternatives.
+        | UndeclaredPredicate String [String]        
         -- |'TypeMismatch' indicates that an expression of the
         -- expected type (first field) was required, but an expression
         -- of the actual type (second field) was given.
@@ -74,6 +79,12 @@ data CaperException =
         -- |'OverloadedProcedure' indicates that two procedures with the same
         -- name have been declared.
         | OverloadedProcedure String
+        -- |'OverloadedRegionType' indicates that two region types with the same name
+        -- have been defined.
+        | OverloadedRegionType String
+        -- |'OverloadedPredicate' indicates that two (possibly incompatible) predicates
+        -- of the same name have been defined or declared.
+        | OverloadedPredicate String
         -- |'VerificationFailed' indicates that a given procedure could not be verified.
         | VerificationFailed String
         -- |'UndeclaredFunctionCall' indicates a call to a function that has no declaration.
@@ -87,6 +98,10 @@ instance Show CaperException where
         show (SyntaxNotImplemented s) = "The following syntax is not yet implemented: " ++ s
         show (TypesNotUnifiable tue) = show tue
         show (UndeclaredRegionType rt l) = "The region type '" ++ rt ++ "' has not been declared." ++ shw l
+                where
+                        shw [] = ""
+                        shw ll = "\n\tPerhaps you meant: " ++ intercalate ", " ll ++ "."
+        show (UndeclaredPredicate rt l) = "The predicate '" ++ rt ++ "' has not been declared." ++ shw l
                 where
                         shw [] = ""
                         shw ll = "\n\tPerhaps you meant: " ++ intercalate ", " ll ++ "."
@@ -108,6 +123,10 @@ instance Show CaperException where
                 "There are no state interpretations for the region."
         show (OverloadedProcedure pname) = 
                 "There are multiple procedures named '" ++ pname ++ "'."
+        show (OverloadedRegionType rtname) =
+                "There are multiple region types named '" ++ rtname ++ "'."
+        show (OverloadedPredicate pname) =
+                "There are multiple predicates named '" ++ pname ++ "'."
         show (VerificationFailed f) =
                 "Failed to verify: " ++ f
         show (UndeclaredFunctionCall f) =

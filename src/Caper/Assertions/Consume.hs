@@ -16,6 +16,7 @@ import Caper.Prover
 import Caper.ProverStates
 import Caper.Parser.AST
 import Caper.SymbolicState (SymbStateLenses)
+import Caper.Predicates (PredicateLenses)
 import qualified Caper.SymbolicState as SS
 import Caper.Regions (RegionLenses)
 import qualified Caper.Regions as R
@@ -28,12 +29,12 @@ import Caper.Assertions.Check
 
 
 class (MonadState s m, AssertionLenses s, RegionLenses s, SymbStateLenses s,
-    MonadReader r m, RTCGetter r, Provers r, DebugState s r,
+    MonadReader r m, RTCGetter r, PredicateLenses r, Provers r, DebugState s r,
     MonadRaise m, MonadLogger m, MonadPlus m, MonadOrElse m, Failure DeductionFailure m, MonadDemonic m,
     MonadIO m) => ConsumeMonad r s m
 
 instance (MonadState s m, AssertionLenses s, RegionLenses s, SymbStateLenses s,
-    MonadReader r m, RTCGetter r, Provers r, DebugState s r,
+    MonadReader r m, RTCGetter r, PredicateLenses r, Provers r, DebugState s r,
     MonadRaise m, MonadLogger m, MonadPlus m, MonadOrElse m, Failure DeductionFailure m, MonadDemonic m,
     MonadIO m) => ConsumeMonad r s m
 
@@ -179,7 +180,7 @@ consumeGuards gg@(Guards sp ridv gds) = contextualise gg $
 consumePredicate :: (ConsumeMonad r s m) =>
         Predicate -> m ()
 consumePredicate pa = contextualise pa $
-        raise $ SyntaxNotImplemented "predicates"
+        generatePred consumeVariable pa >>= SS.consumePredicate
 
 consumeSpatial :: (ConsumeMonad r s m) =>
         SpatialAssrt -> m ()

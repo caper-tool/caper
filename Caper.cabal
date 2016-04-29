@@ -33,7 +33,7 @@ executable Caper
                    SafeSemaphore >=0.9,
                    directory ==1.2.*,
                    either ==4.3.*,
-                   vector ==0.10.*,
+                   vector >=0.10,
                    template-haskell >=2.8,
                    transformers >=0.2,
                    argparser >=0.3.4,

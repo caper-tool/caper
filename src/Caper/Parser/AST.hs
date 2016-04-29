@@ -75,4 +75,4 @@ predicateDeclrs :: [Declr] -> [PredicateDeclr]
 predicateDeclrs = mapMaybe preds
     where
         preds (DeclrPred p) = Just p
-        pred _ = Nothing
+        preds _ = Nothing

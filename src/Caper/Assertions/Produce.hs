@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, ScopedTypeVariables, MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, ScopedTypeVariables, MultiParamTypeClasses #-}
 module Caper.Assertions.Produce where
 
 import           Control.Monad.State hiding (state)
@@ -19,6 +19,7 @@ import           Caper.SymbolicState (SymbStateLenses)
 import qualified Caper.SymbolicState as SS
 import           Caper.Utils.AliasingMap ()
 import           Caper.Utils.NondetClasses
+import Caper.Predicates (PredicateLenses)
 {-
         At some point, this whole module should probably be rewritten.
         In particular, some consideration of where variables are bound to
@@ -29,6 +30,14 @@ import           Caper.Utils.NondetClasses
         This means that one should be careful to bind them correctly at point
         of use.
 -}
+
+class (MonadState s m, AssumptionLenses s, RegionLenses s, SymbStateLenses s,
+        MonadReader r m, RTCGetter r, PredicateLenses r,
+        MonadRaise m, MonadDemonic m, MonadIO m) => ProduceMonad r s m
+
+instance (MonadState s m, AssumptionLenses s, RegionLenses s, SymbStateLenses s,
+        MonadReader r m, RTCGetter r, PredicateLenses r,
+        MonadRaise m, MonadDemonic m, MonadIO m) => ProduceMonad r s m        
 
 
 -- |Given a syntactic pure assertion, produce it by adding it as an assumption.
@@ -91,15 +100,12 @@ produceAnyExpr :: (MonadState s m, AssumptionLenses s, SymbStateLenses s,
         AnyExpr -> m (Expr VariableID)
 produceAnyExpr = generateAnyExpr produceVariable
 
-produceCell :: (MonadState s m, AssumptionLenses s, SymbStateLenses s, MonadRaise m) =>
+produceCell :: ProduceMonad r s m =>
         CellAssrt -> m ()
 produceCell p = generateCellPred produceVariable p >>= SS.producePredicate
 
 -- |Produce a region assertion.
-produceRegion :: (MonadState s m, AssumptionLenses s, RegionLenses s,
-                SymbStateLenses s,
-                MonadReader r m, RTCGetter r,
-                MonadRaise m) =>
+produceRegion :: ProduceMonad r s m =>
         Bool -- ^Should the region be treated as dirty (unstable)
         -> RegionAssrt -> m ()
 produceRegion dirty regn@(Region sp rtn ridv lrps rse) = contextualise regn $
@@ -119,10 +125,7 @@ produceRegion dirty regn@(Region sp rtn ridv lrps rse) = contextualise regn $
 -- If the guards are not compatible with a guard type for the region,
 -- this will result in an assumption of inconsistency.  However, if the
 -- guards are syntactically incompatible, an exception is raised instead.
-produceGuards :: (MonadState s m, AssumptionLenses s, RegionLenses s,
-                SymbStateLenses s,
-                MonadReader r m, RTCGetter r,
-                MonadRaise m) =>
+produceGuards :: (ProduceMonad r s m) =>
         Guards -> m ()
 produceGuards gg@(Guards sp ridv gds) = contextualise gg $
                 do
@@ -157,16 +160,12 @@ produceGuards gg@(Guards sp ridv gds) = contextualise gg $
 -}
 
 
-producePredicate :: (MonadState s m, AssumptionLenses s,
-                MonadRaise m) =>
+producePredicate :: (ProduceMonad r s m) =>
         Predicate -> m ()
 producePredicate pa = contextualise pa $
-        raise $ SyntaxNotImplemented "predicates"
+        generatePred produceVariable pa >>= SS.producePredicate
 
-produceSpatial :: (MonadState s m, AssumptionLenses s, RegionLenses s,
-                SymbStateLenses s,
-                MonadReader r m, RTCGetter r,
-                MonadRaise m) =>
+produceSpatial :: (ProduceMonad r s m) =>
         Bool ->
         SpatialAssrt -> m ()
 produceSpatial dirty (SARegion a) = produceRegion dirty a
@@ -174,10 +173,7 @@ produceSpatial _ (SAPredicate a) = producePredicate a
 produceSpatial _ (SACell a) = produceCell a
 produceSpatial _ (SAGuards a) = produceGuards a
 
-produceAssrt ::  (MonadState s m, AssumptionLenses s, RegionLenses s,
-                SymbStateLenses s,
-                MonadReader r m, RTCGetter r,
-                MonadRaise m, MonadDemonic m, MonadIO m) =>
+produceAssrt :: ProduceMonad r s m =>
         Bool ->
         Assrt -> m ()
 produceAssrt _ (AssrtPure sp a) = producePure a

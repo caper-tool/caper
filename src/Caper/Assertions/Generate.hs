@@ -9,7 +9,7 @@ import Caper.Utils.AliasingMap ()
 import Caper.Exceptions
 import Caper.ProverDatatypes
 import Caper.Parser.AST
-import Caper.Predicates as P
+import qualified Caper.Predicates as P
 import qualified Caper.Guards as G
 
 {-
@@ -98,11 +98,19 @@ generateCellPred :: (Monad m, MonadRaise m) =>
 generateCellPred genvar (Cell sp e1 e2) = do
                 ve1 <- generateValueExpr genvar e1
                 ve2 <- generateValueExpr genvar e2
-                return (PCell, [ValueExpr ve1, ValueExpr ve2])
+                return (P.PCell, [ValueExpr ve1, ValueExpr ve2])
 generateCellPred genvar (CellBlock sp e1 e2) = do
                 ve1 <- generateValueExpr genvar e1
                 ve2 <- generateValueExpr genvar e2
-                return (PCells, [ValueExpr ve1, ValueExpr ve2])
+                return (P.PCells, [ValueExpr ve1, ValueExpr ve2])
+
+generatePred :: (Monad m, MonadRaise m) =>
+        (VarExpr -> m VariableID)
+        -> Predicate
+        -> m P.Predicate
+generatePred genvar (Predicate _ pname args) = do
+                args' <- mapM (generateAnyExpr genvar) args
+                return (P.PName pname, args')
 
 -- |Convert a list of AST guards to the map-based internal representation of
 -- guards.  For practical purposes, this works like producing the guard.

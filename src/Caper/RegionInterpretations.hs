@@ -19,6 +19,7 @@ import Caper.ProverDatatypes
 import Caper.RegionTypes
 import Caper.Regions
 import Caper.SymbolicState
+import Caper.Predicates (PredicateLenses)
 import Caper.Exceptions
 import Caper.Logger
 import Caper.Prover
@@ -111,7 +112,7 @@ checkStateInterpretationOtherAmbiguity params si1 si2 =
 -- is only one interpretation for each state.
 checkStateInterpretations ::
         (MonadRaise m, MonadIO m, MonadLogger m,
-        MonadReader r m, Provers r, RTCGetter r) =>
+        MonadReader r m, Provers r, RTCGetter r, PredicateLenses r) =>
         [String] -- ^The region parameters
         -> [StateInterpretation]
         -> m ()
@@ -125,7 +126,7 @@ checkStateInterpretations params (si : sis) = do
 -- |Check that a state interpretation is stable.
 checkStateInterpretationStability ::
         (MonadRaise m, MonadIO m, MonadLogger m,
-        MonadReader r m, Provers r, RTCGetter r) =>
+        MonadReader r m, Provers r, RTCGetter r, PredicateLenses r) =>
         [String] -- ^The region parameters
         -> StateInterpretation
         -> m ()
@@ -159,14 +160,14 @@ checkStateInterpretationStability params si =
 
 checkRegionType :: 
         (MonadRaise m, MonadIO m, MonadLogger m,
-        MonadReader r m, Provers r, RTCGetter r) =>
+        MonadReader r m, Provers r, RTCGetter r, PredicateLenses r) =>
         RegionType -> m ()
 checkRegionType rt = contextualise rt $ checkStateInterpretations (rtParamNames rt)
                         (rtInterpretation rt)
                 
 checkRegionTypeContextInterpretations ::
         (MonadRaise m, MonadIO m, MonadLogger m,
-        MonadReader r m, Provers r, RTCGetter r) =>
+        MonadReader r m, Provers r, RTCGetter r, PredicateLenses r) =>
         m ()
 checkRegionTypeContextInterpretations = 
         view theRTContext >>= mapM_ checkRegionType . rtcRegionTypes

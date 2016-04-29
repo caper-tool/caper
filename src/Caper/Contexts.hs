@@ -8,10 +8,12 @@ import Caper.ProverDatatypes
 import Caper.ExceptionContext
 import Caper.RegionTypes
 import Caper.Procedures
+import Caper.Predicates
  
 data ProcedureContext = ProcedureContext {
         _pcSpecificationContext :: Map String Specification,  
         _pcRegionTypeContext :: RegionTypeContext,
+        _pcPredicateContext :: PredicateContext,
         _pcProverContext :: ProverRecord,
         _pcExceptionContext :: [ExceptionContext]
         }
@@ -29,6 +31,9 @@ instance RTCGetter ProcedureContext where
         
 instance ECLenses ProcedureContext where
         exceptionContext = pcExceptionContext
+
+instance PredicateLenses ProcedureContext where
+        predicateContext = pcPredicateContext
 
 data ProverContext = ProverContext {
         _pvcProverContext :: ProverRecord,

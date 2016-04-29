@@ -1,11 +1,17 @@
+{-# LANGUAGE TemplateHaskell #-}
 module Caper.Predicates where
 
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.MultiSet (MultiSet)
 import qualified Data.MultiSet as MultiSet
+import Control.Lens
+import Data.List
+import Control.Monad.Reader
 
+import Caper.Utils.SimilarStrings
 import Caper.ProverDatatypes
+import Caper.Exceptions
 
 -- |Predicate names are either 'String's or the special 
 -- cases for heap cells: single cell or multiple (uninitialised) cells
@@ -16,14 +22,29 @@ instance Show PredicateName where
         show PCells = "#cells"
 
 
+data PredicateContext = PredicateContext {
+        _predTypes :: Map PredicateName [VariableType]
+        }
+makeLenses ''PredicateContext
+
+class PredicateLenses a where
+        predicateContext :: Simple Lens a PredicateContext
+        predicateTypes :: Simple Lens a (Map PredicateName [VariableType])
+        predicateTypes = predicateContext . predicateTypes
+
+instance PredicateLenses PredicateContext where
+        predicateContext = id
+
 -- |A (default) map from predicate names to the list of
 -- types of the predicate parameters.  Here, we'll just
 -- have a mapping for 'PCell' and 'PCells'
-predicateTypes :: Map PredicateName [VariableType]
-predicateTypes = Map.fromList [(PCell, [VTValue, VTValue]), -- A #cell has two value parameters
+defaultPredicateTypes :: Map PredicateName [VariableType]
+defaultPredicateTypes = Map.fromList [(PCell, [VTValue, VTValue]), -- A #cell has two value parameters
                         (PCells, [VTValue, VTValue])    -- A #cells has two value parameters (start and length)
                         ]
 
+createPredicateContext :: Map String [(Maybe String, VariableType)] -> PredicateContext
+createPredicateContext = PredicateContext . ifoldr (\pname pargs -> Map.insert (PName pname) (map snd pargs)) defaultPredicateTypes
 
 -- |PVarBindings map program variables (modelled a 'String's) to
 -- expressions
@@ -54,4 +75,15 @@ toPredicateList = Map.foldWithKey (\key val rest -> map ((,) key) (MultiSet.toLi
 showPredicate :: Predicate -> String
 showPredicate (PCell, [x, y]) = show x ++ " |-> " ++ show y
 showPredicate (PCells, [x, y]) = show x ++ " |-> #cells(" ++ show y ++ ")"
-showPredicate (PName s, l) = show s ++ show l
+showPredicate (PName s, l) = show s ++ "(" ++ intercalate "," (map show l) ++ ")"
+showPredicate _ = error "showPredicate: Ill-formed predicate"
+
+-- |Look up the type of a predicate.  Throw an exception if there is no predicate
+-- of the given name in the context.
+resolvePredicateType :: (MonadRaise m, MonadReader r m, PredicateLenses r) =>
+        PredicateName -> m [VariableType]
+resolvePredicateType pname = do
+        pts <- view predicateTypes
+        case pts ^. at pname of
+                Nothing -> raise $ UndeclaredPredicate (show pname) (similarStrings (show pname) (map show $ Map.keys pts))
+                Just vts -> return vts
