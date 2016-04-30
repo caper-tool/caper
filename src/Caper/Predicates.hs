@@ -30,7 +30,7 @@ makeLenses ''PredicateContext
 class PredicateLenses a where
         predicateContext :: Simple Lens a PredicateContext
         predicateTypes :: Simple Lens a (Map PredicateName [VariableType])
-        predicateTypes = predicateContext . predicateTypes
+        predicateTypes = predicateContext . predTypes
 
 instance PredicateLenses PredicateContext where
         predicateContext = id
