@@ -75,7 +75,7 @@ toPredicateList = Map.foldWithKey (\key val rest -> map ((,) key) (MultiSet.toLi
 showPredicate :: Predicate -> String
 showPredicate (PCell, [x, y]) = show x ++ " |-> " ++ show y
 showPredicate (PCells, [x, y]) = show x ++ " |-> #cells(" ++ show y ++ ")"
-showPredicate (PName s, l) = show s ++ "(" ++ intercalate "," (map show l) ++ ")"
+showPredicate (PName s, l) = s ++ "(" ++ intercalate "," (map show l) ++ ")"
 showPredicate _ = error "showPredicate: Ill-formed predicate"
 
 -- |Look up the type of a predicate.  Throw an exception if there is no predicate
