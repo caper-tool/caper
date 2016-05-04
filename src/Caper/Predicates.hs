@@ -46,17 +46,6 @@ defaultPredicateTypes = Map.fromList [(PCell, [VTValue, VTValue]), -- A #cell ha
 createPredicateContext :: Map String [(Maybe String, VariableType)] -> PredicateContext
 createPredicateContext = PredicateContext . ifoldr (\pname pargs -> Map.insert (PName pname) (map snd pargs)) defaultPredicateTypes
 
--- |PVarBindings map program variables (modelled a 'String's) to
--- expressions
-type PVarBindings = Map String (ValueExpression VariableID)
-
--- |LVarBindings map syntactic logical variables ('String's) to their internal
--- representations ('VariableID's)
-type LVarBindings = Map String VariableID
-
-emptyLVars :: LVarBindings
-emptyLVars = Map.empty
-
 -- |Predicates are maps from predicate names to multisets of
 -- lists of parameters.  That is, for each predicate name
 -- there's a bag of the parameters that we have copies of the

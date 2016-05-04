@@ -18,6 +18,7 @@ import Caper.Constants
 import Caper.ProverDatatypes
 import Caper.Exceptions
 import Caper.Logger
+import Caper.Guards (emptyGuard)
 import Caper.Parser.AST hiding (Region)
 import Caper.Procedures
 import Caper.Predicates
@@ -69,23 +70,67 @@ localiseLogicalVars mop = do
             logicalVars .= savedLVars
             return a
 
--- | Symbolically execute some code with the specified region open.
--- Afterwards, the region should be closed and the state updated.
--- The specified region should be in the domain of the map and have a region type.
--- The region should also have been stabilised (BEFORE ANY REGIONS HAVE BEEN OPENED!)
-atomicOpenRegion ::
-        SymExMonad r s m =>
-        VariableID          -- ^Region identifier
-        -> (m () -> m ())   -- ^Operation for performing symbolic execution (parametrised by continuation)
-        -> m ()             -- ^Continuation
-            -> m ()
-atomicOpenRegion rid ase cont = do
+closeRegions :: SymExMonad r s m => m ()
+closeRegions = do
+            savedLVars <- use logicalVars
+            -- TODO: this could be rewritten so that the updateState doesn't have to
+            -- happen for regions that are created by the handler.
+            admitChecks $ (flip (localMultiRetry regionConstructionLimit) handler) $ do
+                ors <- use openRegions
+                regs <- mapM updateState ors
+                mapM_ closeRegion regs
+            logicalVars .= savedLVars
+            openRegions .= []
+        where
+            updateState OpenRegion{oregID=rid,oregType=rt,oregParams=ps,oregParamLVars=plstate,oregInitialGuard=gd,oregInitialState=st0} = do
+                st1 <- liftM var $ newEvar $ show rid ++ "state"
+                guarCond <- generateGuaranteeCondition rt ps gd st0 st1
+                assertTrue guarCond
+                regions . ix rid %= (\r -> r {regState = Just st1, regDirty = True})
+                return (rid, rt, plstate, st1)
+            closeRegion (rid, rt, plstate, st1) = do
+                interp <- msum $ map return (rtInterpretation rt)
+                liftIO $ putStrLn $ "*** Closing region " ++ show rid ++ " with interp " ++ show interp
+                logicalVars .= plstate -- Interpret logical variables wrt region parameters
+                st1' <- consumeValueExpr (siState interp)
+                assertEqual st1 st1'
+                forM_ (siConditions interp) consumePure
+                consumeAssrt (siInterp interp) -- Consume the interpretation
+                justCheck -- Validate the choice
+                liftIO $ putStrLn $ "*** Closed region " ++ show rid ++ " with interp " ++ show interp
+            handler (MissingRegionByType rtid params st s) = Just $ do
+                rt <- lookupRType rtid
+                let vars = Set.unions (toSet st : map toSet params)
+                bvars <- use boundVars
+                forM_ (vars `Set.difference` bvars) declareEvar
+                rid <- newEvar "region"
+                -- Create a logical state holding the region parameters
+                let (RTDVar ridparam, VTRegionID) = head (rtParameters rt)
+                bindVarAs rid VTRegionID
+                let plstate0 = Map.insert ridparam rid emptyLVars
+                plstate <- foldM (\m (pe, (RTDVar parnam, t)) -> do
+                            ev <- letEvar parnam pe
+                            bindVarAs ev t
+                            return (Map.insert parnam ev m))
+                        plstate0 (zip params (tail $ rtParameters rt))
+                openRegions %= (OpenRegion rid st emptyGuard rt params plstate :)
+                regions %= AM.insert rid Region {
+                    regDirty = True,
+                    regTypeInstance = Just (RegionInstance rtid params),
+                    regState = Just st,
+                    regGuards = rtFullGuard rt}
+                
+
+openRegion :: SymExMonad r s m =>
+    VariableID      -- ^Region identifier
+    -> m ()
+openRegion rid = do
         -- Resolve the region
         regs <- use regions
         (rs, rg, rt, ps :: [Expr VariableID]) <- case AM.lookup rid regs of
-            Nothing -> error $ "atomicOpenRegion: Unable to resolve region identifier '" ++ show rid ++ "'"
-            Just (Region {regDirty = True}) -> error $ "atomicOpenRegion: Cannot open dirty region '" ++ show rid ++ "'"
-            Just (Region {regTypeInstance = Nothing}) -> error $ "atomicOpenRegion: Region '" ++ show rid ++ "' is of unknown type"
+            Nothing -> error $ "openRegion: Unable to resolve region identifier '" ++ show rid ++ "'"
+            Just (Region {regDirty = True}) -> error $ "openRegion: Cannot open dirty region '" ++ show rid ++ "'"
+            Just (Region {regTypeInstance = Nothing}) -> error $ "openRegion: Region '" ++ show rid ++ "' is of unknown type"
             Just (Region {regTypeInstance = Just (RegionInstance rti ps), regState = rs0, regGuards = rg}) -> do
                     rt <- lookupRType rti
                     rs <- case rs0 of
@@ -102,45 +147,20 @@ atomicOpenRegion rid ase cont = do
         -- For each region interpretation...
         dAll $ flip map (rtInterpretation rt) $ \interp -> 
             do
-                liftIO $ putStrLn $ "*** Trying interp " ++ show interp  
+                liftIO $ putStrLn $ "*** Opening region " ++ show rid ++ " with interp " ++ show interp  
                 savedLVars <- use logicalVars
                 logicalVars .= plstate
                 -- ...assume we are in that state
                 st0 <- produceValueExpr (siState interp)
                 assumeTrueE $ VAEq st0 rs
-                --use theAssumptions >>= (liftIO . print)
-                --use logicalVars >>= (liftIO . print)
                 forM_ (siConditions interp) producePure
                 -- and produce the resources
                 produceAssrt False (siInterp interp)
-                -- If it's inconsistent then we've nothing to prove here
-                whenConsistent $ do
-                    oldRegions <- use openRegions
-                    openRegions %= (rid:)
-                    logicalVars .= savedLVars
-                    -- Execute the atomic thing
-                    ase $ do
-                        savedLVars' <- use logicalVars
-                        logicalVars .= plstate -- The parameters don't change
-                        -- Non-deterministically choose the next interpretation
-                        interp' <- msum $ map return (rtInterpretation rt)
-                        liftIO $ putStrLn $ "*** Closing with interp " ++ show interp'
-                        debugState
-                        check $ do
-                            -- Assert that we are in this interpretation
-                            st1 <- consumeValueExpr (siState interp')
-                            forM_ (siConditions interp') consumePure
-                            regions . ix rid %= (\r -> r {regState = Just st1, regDirty = True})
-                            consumeAssrt (siInterp interp')
-                            justCheck -- This isn't needed, but may result in failing faster
-                            -- and that the state is guarantee related
-                            guardCond <- generateGuaranteeCondition rt ps rg st0 st1
-                            assertTrue guardCond
-                        liftIO $ putStrLn $ "*** Closed with interp " ++ show interp'
-                        logicalVars .= savedLVars'
-                        openRegions .= oldRegions
-                        debugState
-                        cont
+                -- We're done for this path if it's inconsistent
+                succeedIfInconsistent
+                openRegions %= (OpenRegion rid rs rg rt ps plstate :)
+                logicalVars .= savedLVars
+
 
 availableRegions :: (SymExMonad r s m) => m [VariableID]
 availableRegions = do
@@ -148,18 +168,34 @@ availableRegions = do
             regs <- use regions
             let r0 = AM.distinctKeys regs
             let r1 = [r | r <- r0, isJust $ AM.lookup r regs >>= regTypeInstance]
-            filterM (liftM and . forM oregs . cannotAliasStrong) r1
-            
+            filterM (liftM and . forM (map oregID oregs) . cannotAliasStrong) r1
+
 
 -- |Symbolically execute an atomic operation, trying opening
 -- regions.        
+atomicSymEx :: SymExMonad r s m =>
+    m () -> m ()
+atomicSymEx aop = do
+        opnRegions 3 -- TODO: Move this constant
+        aop
+        closeRegions
+    where
+        opnRegions n
+            | n <= 0 = return ()
+            | otherwise = return () `mplus` do
+                            ars <- availableRegions
+                            msum [openRegion r | r <- ars]
+                            opnRegions (n - 1)
+
+{-
 atomicSymEx :: (SymExMonad r s m) =>
-    (m () -> m ())  -- ^Atomic operation (parametrised by continuation 
+    (m () -> m ())  -- ^Atomic operation (parametrised by continuation) 
     -> m ()         -- ^Continuation
      -> m ()
 atomicSymEx ase cont = ase cont `mplus` do
             ars <- availableRegions
             msum [ atomicOpenRegion r (atomicSymEx ase) cont | r <- ars] 
+-}
 
 createRegionWithParams :: (SymExMonad r s m) =>
     RTId
@@ -172,7 +208,8 @@ createRegionWithParams :: (SymExMonad r s m) =>
     -> m ()
 createRegionWithParams rtid params st = do
         rt <- lookupRType rtid
-        oldRegions <- use openRegions
+        liftIO $ putStrLn $ "*** createRegionWithParams: " ++ rtRegionTypeName rt ++ show params
+        --oldRegions <- use openRegions
         savedLVars <- use logicalVars
         interp' <- check $ do
             let vars = Set.unions (toSet st : map toSet params)
@@ -189,7 +226,7 @@ createRegionWithParams rtid params st = do
                              bindVarAs ev t
                              return (Map.insert parnam ev m))
                         plstate0 (zip params (tail $ rtParameters rt))
-            openRegions %= (rid:)
+            -- openRegions %= (rid:)
             logicalVars .= plstate
             -- Non-deterministically choose the next interpretation
             interp' <- msum $ map return (rtInterpretation rt)
@@ -206,10 +243,10 @@ createRegionWithParams rtid params st = do
             return interp'
         liftIO $ putStrLn $ "*** Constructed with interp " ++ show interp'
         logicalVars .= savedLVars
-        openRegions .= oldRegions
-    where
-        toSet :: (Foldable f, Ord v) => f v -> Set.Set v
-        toSet = Set.fromList . toList
+        --openRegions .= oldRegions
+
+toSet :: (Foldable f, Ord v) => f v -> Set.Set v
+toSet = Set.fromList . toList
 
 missingRegionHandler :: (SymExMonad r s m) => m ()
 missingRegionHandler = --retry (liftIO $ putStrLn "registered missing region handler") handler >> retry (return ()) handler
@@ -221,7 +258,7 @@ missingRegionHandler = --retry (liftIO $ putStrLn "registered missing region han
                 createRegionWithParams rtid params st
                 liftIO $ putStrLn "created region"
                 debugState
-        handler _ = Nothing
+--      handler _ = Nothing
 
 data ExitMode = EMReturn (Maybe (ValueExpression VariableID)) | EMContinuation
 
@@ -283,11 +320,11 @@ symbolicExecute stmt cont = do
         se (WhileStmt sp minv cond body) = symExLoop sp minv cond body
         se (DoWhileStmt sp minv body cond) = symbolicExecute body (updateContinuation cont (symExLoop sp minv cond body)) 
         se (LocalAssignStmt _ trgt src) = symExLocalAssign trgt src >> cont EMContinuation
-        se (DerefStmt _ trgt src) = atomicSymEx (symExRead trgt src >>) (cont EMContinuation)
-        se (AssignStmt _ trgt src) = atomicSymEx (symExWrite trgt src >>) (cont EMContinuation)
+        se (DerefStmt _ trgt src) = atomicSymEx (symExRead trgt src) >> (cont EMContinuation)
+        se (AssignStmt _ trgt src) = atomicSymEx (symExWrite trgt src) >> (cont EMContinuation)
         se smt@(CallStmt sp rvar "CAS" args) = contextualise (DescriptiveContext sp "In a CAS") $
                 case args of
-                    [target, oldv, newv] -> atomicSymEx (\c -> symExCAS rvar target oldv newv >> whenConsistent c)
+                    [target, oldv, newv] -> atomicSymEx (symExCAS rvar target oldv newv >> succeedIfInconsistent) >>
                                                 (cont EMContinuation)
                     _ -> raise $ ArgumentCountMismatch 3 (length args)
         se smt@(CallStmt sp rvar "alloc" args) = contextualise (DescriptiveContext sp "In an alloc") $ do

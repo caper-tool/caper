@@ -39,7 +39,7 @@ data SymbState = SymbState {
         _ssLogicalVars :: LVarBindings,
         _ssPreds :: Predicates,
         _ssRegions :: AliasMap.AliasMap VariableID Region,
-        _ssOpenRegions :: [VariableID]
+        _ssOpenRegions :: [OpenRegion]
         }
 makeLenses ''SymbState
 

@@ -2,7 +2,7 @@
 {-# LANGUAGE ExtendedDefaultRules #-}
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
 
-module RunTests (tests) where
+module RunTests (tests,main) where
 
 import Distribution.TestSuite hiding (run)
 import qualified Distribution.TestSuite as TS
@@ -77,3 +77,6 @@ tests = return [ Test succeeds, Test fails ]
         , options = []
         , setOption = \_ _ -> Right fails
         }
+
+main :: IO ()
+main = putStrLn "Testing"

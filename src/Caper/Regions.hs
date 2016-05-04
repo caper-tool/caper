@@ -39,9 +39,18 @@ data Region = Region {
         regGuards :: Guard VariableID
 }
 
+data OpenRegion = OpenRegion {
+        oregID :: VariableID,
+        oregInitialState :: ValueExpression VariableID,
+        oregInitialGuard :: Guard VariableID,
+        oregType :: RegionType,
+        oregParams :: [Expr VariableID],
+        oregParamLVars :: LVarBindings
+        }
+
 class RegionLenses a where
         regions :: Simple Lens a (AliasMap VariableID Region)
-        openRegions :: Simple Lens a [VariableID]
+        openRegions :: Simple Lens a [OpenRegion]
         
 
 instance RegionLenses s => RegionLenses (WithAssertions s) where

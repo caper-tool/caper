@@ -4,6 +4,8 @@ module Caper.ProverStates where
 import Control.Lens
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.List (intercalate)
 import Control.Monad.Reader
 import Control.Monad.State
@@ -107,3 +109,15 @@ debugState = do
             r <- ask
             s <- get
             liftIO $ putStrLn $ showState r s
+
+-- |PVarBindings map program variables (modelled as 'String's) to
+-- expressions
+type PVarBindings = Map String (ValueExpression VariableID)
+
+-- |LVarBindings map syntactic logical variables ('String's) to their internal
+-- representations ('VariableID's)
+type LVarBindings = Map String VariableID
+
+emptyLVars :: LVarBindings
+emptyLVars = Map.empty
+
