@@ -98,6 +98,7 @@ closeRegions = do
                 consumeAssrt (siInterp interp) -- Consume the interpretation
                 justCheck -- Validate the choice
                 liftIO $ putStrLn $ "*** Closed region " ++ show rid ++ " with interp " ++ show interp
+                debugState
             handler (MissingRegionByType rtid params st s) = Just $ do
                 rt <- lookupRType rtid
                 let vars = Set.unions (toSet st : map toSet params)
@@ -119,6 +120,7 @@ closeRegions = do
                     regTypeInstance = Just (RegionInstance rtid params),
                     regState = Just st,
                     regGuards = rtFullGuard rt}
+                liftIO $ putStrLn $ "*** Created region " ++ show rid ++ " of type " ++ show rt
                 
 
 openRegion :: SymExMonad r s m =>
@@ -176,7 +178,7 @@ availableRegions = do
 atomicSymEx :: SymExMonad r s m =>
     m () -> m ()
 atomicSymEx aop = do
-        opnRegions 3 -- TODO: Move this constant
+        opnRegions (2 :: Int) -- TODO: Move this constant
         aop
         closeRegions
     where

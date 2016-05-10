@@ -161,7 +161,7 @@ instance ExpressionSub ValueExpression e => ExpressionSub ValueAtomic e where
 
 
 instance Show a => Show (ValueAtomic a) where
-        show (VAEq e1 e2) = show e1 ++ " =v= " ++ show e2
+        show (VAEq e1 e2) = show e1 ++ " = " ++ show e2
         show (VALt e1 e2) = show e1 ++ " < " ++ show e2
 
 class ValueExpressionCastable t v where
