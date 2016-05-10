@@ -106,15 +106,26 @@ mergeRegions r1 r2 = do
 
 -- FIXME: Add bound information!
 -- | Add a region, or merge it if one already exists with the same identifier.
+-- Performs case analysis on whether the region is the same as an existing one.
 --
 -- Pre: the number and type of arguments should have been checked (otherwise an error may arise).
 produceMergeRegion :: (MonadState s m, AssumptionLenses s, RegionLenses s,
-                MonadReader r m, RTCGetter r) =>
+                MonadReader r m, RTCGetter r,
+                MonadDemonic m) =>
                 VariableID -> Region -> m ()
 produceMergeRegion rvar region = do
                 regs <- use regions
+                let rs = AM.toRootList regs
                 case AM.lookup rvar regs of
-                        Nothing -> regions .= AM.insert rvar region regs
+                        Nothing -> (do
+                                regions .= AM.insert rvar region regs
+                                forM_ rs (assume . DisequalityCondition rvar . fst)
+                                ) <#>
+                            dAll [(do
+                                assume $ EqualityCondition rvar rid
+                                r' <- mergeRegions r region
+                                regions .= AM.overwrite rid r' regs
+                                ) | (rid, r) <- rs]
                         (Just r) -> do
                                 r' <- mergeRegions r region
                                 regions .= AM.overwrite rvar r' regs

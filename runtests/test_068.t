@@ -1,5 +1,5 @@
 // NAME: Value variable as region state test 2
-// RESULT: REJECT
+// RESULT: ACCEPT
 
 /* DESCRIPTION: This test is equivalent to test_067, but does not restrict n to be non negative.
  */

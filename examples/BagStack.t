@@ -47,6 +47,9 @@ function pop(x)
   ensures ret = 0 ? Bag(r,x,0) : Bag(r,x,0) &*& bagInvariant(ret);
 {
   t := [x];
+  if (t = 0) {
+    return 0;
+  }
   t2 := [t + 1];
   cr := CAS(x,t,t2);
   if (cr != 1) {
