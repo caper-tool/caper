@@ -1,0 +1,177 @@
+\documentclass[a4paper]{article}
+
+\usepackage{amsmath}
+\usepackage{amsthm}
+\usepackage{amssymb}
+\usepackage{color}
+\usepackage{mathpartir}
+\usepackage{stmaryrd}
+
+\newcommand{\sem}[1]{\left\llbracket#1\right\rrbracket}
+\newcommand{\Set}[1]{\left\{#1\right\}}
+% Set builder
+\newcommand{\Setb}[2]{\left\{#1 \, \middle| \, \begin{array}{@{}l@{}}#2\end{array} \right\}}
+
+\newcommand{\pfun}{\rightharpoonup}
+\newcommand{\fpfun}{\rightharpoonup_{\mathrm{fin}}}
+
+\newcommand{\mktype}[1]{\mathsf{#1}}
+
+\newcommand{\tsvars}{\mktype{SVar}}
+\newcommand{\tsort}{\mktype{Sort}}
+\newcommand{\tcond}{\mktype{Cond}}
+\newcommand{\tpred}{\mktype{Pred}}
+\newcommand{\trid}{\mktype{RId}}
+\newcommand{\torty}{\mktype{ORType}}
+\newcommand{\texp}{\mktype{Exp}}
+\newcommand{\tguard}{\mktype{Guard}}
+\newcommand{\tpvar}{\mktype{ProgVar}}
+
+\newcommand{\tsstate}{\mktype{SState}}
+\newcommand{\tvctx}{\mktype{VarCtx}}
+\newcommand{\tpcnds}{\mktype{Pure}}
+\newcommand{\tpreds}{\mktype{Preds}}
+\newcommand{\tregs}{\mktype{Regions}}
+\newcommand{\tpvars}{\mktype{ProgVars}}
+
+\newcommand{\sstate}{S}
+\newcommand{\vctx}{\Delta}
+\newcommand{\pcnds}{\Pi}
+\newcommand{\preds}{\Sigma}
+\newcommand{\regs}{\Xi}
+\newcommand{\pvars}{\Upsilon}
+
+\begin{document}
+\title{Symbolic Execution in \textsc{Caper}}
+\author{Thomas Dinsdale-Young}
+\maketitle
+
+In \textsc{Caper}, we distinguish three kinds of variables:
+\begin{itemize}
+  \item \textbf{Program variables} occur in the syntax of the programming language, and are mutable, stack variables.
+  \item \textbf{Assertion variables} occur in the (input) syntax of assertions.
+    How assertion variables are interpreted can depend on the context.
+  \item \textbf{Symbolic variables} (or simply \textbf{variables}) are Caper's internal representation of logical variables.
+\end{itemize}
+
+Symbolic states $\sstate = (\vctx,\pcnds,\preds,\regs,\pvars) \in \tsstate$ consist of the following components:
+\begin{itemize}
+  \item $\vctx \in \tvctx = \tsvars \fpfun \tsort$, a \emph{variable context} associating logical sorts with symbolic variables;
+  \item $\pcnds \in \tpcnds = \tcond^*$, a context of \emph{pure conditions} (over the symbolic variables);
+  \item $\preds \in \tpreds = \mathcal{M}(\tpred)$, a multiset of \emph{predicates} (over the symbolic variables);
+  \item $\regs \in \tregs = \trid \fpfun \torty \times \texp \times \tguard$, a finite map of region identifiers to an (optional) region type, an expression representing the state of the region, and an guard expression for the region;
+  \item $\pvars \in \tpvars = \tpvar \fpfun \texp$, a map from program variables to expressions.
+\end{itemize}
+
+\begin{mathpar}
+  \inferrule{
+  }{
+    \vctx,\pcnds,\pvars[\mathtt{x} \mapsto E] \vdash \mathtt{x} \Downarrow E
+  }
+  \and
+  \inferrule{
+    \vctx,\pcnds,\pvars \vdash \mathtt{e}_1 \Downarrow E_1 \\
+    \vctx,\pcnds,\pvars \vdash \mathtt{e}_2 \Downarrow E_2 \\
+  }{
+    \vctx,\pcnds,\pvars \vdash \mathtt{e}_1 \mathbin{\mbox{\tt +}} \mathtt{e}_2 \Downarrow E_1 + E_2
+  }
+  \and
+  \inferrule{
+    n \in \mathbb{Z}
+  }{
+    \vctx,\pcnds,\pvars \vdash n \Downarrow n
+  }
+  \and
+  \inferrule{
+    \vctx,\pcnds,\pvars \vdash \mathtt{e}_1 \Downarrow E_1 \\
+    \vctx,\pcnds,\pvars \vdash \mathtt{e}_2 \Downarrow E_2 \\
+  }{
+    \vctx,\pcnds,\pvars \vdash \mathtt{e}_1 \mathbin{\mbox{\tt -}} \mathtt{e}_2 \Downarrow E_1 - E_2
+  }
+  \and
+  \inferrule{
+    \vctx,\pcnds,\pvars \vdash \mathtt{e}_1 \Downarrow E_1 \\
+    \vctx,\pcnds,\pvars \vdash \mathtt{e}_2 \Downarrow E_2 \\
+  }{
+    \vctx,\pcnds,\pvars \vdash \mathtt{e}_1 \mathbin{\mbox{\tt *}} \mathtt{e}_2 \Downarrow E_1 \times E_2
+  }
+  \and
+  \inferrule{
+    \vctx,\pcnds,\pvars \vdash \mathtt{e}_1 \Downarrow E_1 \\
+    \vctx,\pcnds,\pvars \vdash \mathtt{e}_2 \Downarrow E_2 \\
+    \vctx,\pcnds \vdash E_2 \neq 0
+  }{
+    \vctx,\pcnds,\pvars \vdash \mathtt{e}_1 \mathbin{\mbox{\tt /}} \mathtt{e}_2 \Downarrow E_1 / E_2
+  }
+\end{mathpar}
+
+\begin{mathpar}
+  \inferrule{
+  }
+  {
+    \vdash \sstate \rightsquigarrow \Set{\sstate}
+  }
+  \and
+  \inferrule{
+    \vctx,\pcnds \vdash \bot
+  }{
+    \vdash (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow \emptyset
+  }
+  \and
+  \inferrule{
+    \vctx,\pcnds \vdash \bigvee \Set{P_i}_{i \in I}
+  }{
+    \vdash (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow \Setb{(\vctx,\pcnds;P_i,\preds,\regs,\pvars)}{i \in I}
+  }
+  \and
+  \inferrule{
+    \vdash \sstate \rightsquigarrow \Set{\sstate_i}_{i \in I} \\
+    \forall i \in I \ldotp \vdash \sstate_i \rightsquigarrow \Set{\sstate_{i,j}}_{j \in J_i}
+  }{
+    \vdash \sstate \rightsquigarrow \Setb{\sstate_{i,j}}{i \in I, j \in J_i}
+  }
+  \and
+  \inferrule{
+    \vdash \mathbb{C} : \sstate \rightsquigarrow \Set{\sstate_i}_{i \in I} \\
+    \forall i \in I \ldotp \vdash \sstate_i \rightsquigarrow \Set{\sstate_{i,j}}_{j \in J_i}
+  }{
+    \vdash \mathbb{C} : \sstate \rightsquigarrow \Setb{\sstate_{i,j}}{i \in I, j \in J_i}
+  }
+  \and
+  \inferrule{
+    \vdash \sstate \rightsquigarrow \Set{\sstate_i}_{i \in I} \\
+    \forall i \in I \ldotp \vdash \mathbb{C} : \sstate_i \rightsquigarrow \Set{\sstate_{i,j}}_{j \in J_i}
+  }{
+    \vdash \mathbb{C} : \sstate \rightsquigarrow \Setb{\sstate_{i,j}}{i \in I, j \in J_i}
+  }
+  \and
+  \inferrule{
+    \vdash \mathbb{C}_1 : \sstate \rightsquigarrow \Set{\sstate_i}_{i \in I} \\
+    \forall i \in I \ldotp \vdash \mathbb{C}_2 : \sstate_i \rightsquigarrow \Set{\sstate_{i,j}}_{j \in J_i}
+  }{
+    \vdash \mathbb{C}_1 ; \mathbb{C}_2 : \sstate \rightsquigarrow \Setb{\sstate_{i,j}}{i \in I, j \in J_i}
+  }
+  \and
+  \inferrule{
+    \vctx,\pcnds,\pvars \vdash \mathtt{e} \Downarrow E
+  }{
+    \vdash \mathtt{x := e} : (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow \Set{(\vctx,\pcnds,\preds,\regs,\pvars{[\mathtt{x} \mapsto E]})}
+  }
+\end{mathpar}
+
+\begin{mathpar}
+  \inferrule{
+    \vdash \mathrm{produce}(A_1, \gamma) ; \mathrm{produce}(A_2, \gamma) : S \rightsquigarrow \mathbb{S}
+  }{
+    \vdash \mathrm{produce}(A_1 \mathbin{\texttt{\&*\&}} A_2, \gamma) : S \rightsquigarrow \mathbb{S}
+  }
+  \and
+  \inferrule{
+    \vdash \mathrm{produce}(A_1, \gamma) : (\vctx,\pcnds; \sem{p}_\gamma,\preds,\regs,\pvars) \rightsquigarrow \mathbb{S}_1 \\
+    \vdash \mathrm{produce}(A_2, \gamma) : (\vctx,\pcnds; \lnot\sem{p}_\gamma,\preds,\regs,\pvars) \rightsquigarrow \mathbb{S}_2
+  }{
+    \vdash \mathrm{produce}(p \mathbin{\texttt{?}} A_1 \mathbin{\texttt{:}} A_2, \gamma) : (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow \mathbb{S}_1 \cup \mathbb{S}_2
+  }
+\end{mathpar}
+
+\end{document}
