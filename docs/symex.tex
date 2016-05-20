@@ -172,6 +172,11 @@ Symbolic states $\sstate = (\vctx,\pcnds,\preds,\regs,\pvars) \in \tsstate$ cons
   }{
     \vdash \mathrm{produce}(p \mathbin{\texttt{?}} A_1 \mathbin{\texttt{:}} A_2, \gamma) : (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow \mathbb{S}_1 \cup \mathbb{S}_2
   }
+  \and
+  \inferrule{
+  }{
+    \vdash \mathrm{produce}(p, \gamma) : (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow (\vctx,\pcnds; \sem{p}_\gamma,\preds,\regs,\pvars)
+  }
 \end{mathpar}
 
 \end{document}
