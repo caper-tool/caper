@@ -12,6 +12,8 @@
 % Set builder
 \newcommand{\Setb}[2]{\left\{#1 \, \middle| \, \begin{array}{@{}l@{}}#2\end{array} \right\}}
 
+\newcommand{\eqdef}{\triangleq}
+
 \newcommand{\pfun}{\rightharpoonup}
 \newcommand{\fpfun}{\rightharpoonup_{\mathrm{fin}}}
 
@@ -22,7 +24,7 @@
 \newcommand{\tcond}{\mktype{Cond}}
 \newcommand{\tpred}{\mktype{Pred}}
 \newcommand{\trid}{\mktype{RId}}
-\newcommand{\torty}{\mktype{ORType}}
+\newcommand{\trty}{\mktype{RType}}
 \newcommand{\texp}{\mktype{Exp}}
 \newcommand{\tguard}{\mktype{Guard}}
 \newcommand{\tpvar}{\mktype{ProgVar}}
@@ -59,7 +61,7 @@ Symbolic states $\sstate = (\vctx,\pcnds,\preds,\regs,\pvars) \in \tsstate$ cons
   \item $\vctx \in \tvctx = \tsvars \fpfun \tsort$, a \emph{variable context} associating logical sorts with symbolic variables;
   \item $\pcnds \in \tpcnds = \tcond^*$, a context of \emph{pure conditions} (over the symbolic variables);
   \item $\preds \in \tpreds = \mathcal{M}(\tpred)$, a multiset of \emph{predicates} (over the symbolic variables);
-  \item $\regs \in \tregs = \trid \fpfun \torty \times \texp \times \tguard$, a finite map of region identifiers to an (optional) region type, an expression representing the state of the region, and an guard expression for the region;
+  \item $\regs \in \tregs = \trid \fpfun \trty_\bot \times \texp_\bot \times \tguard$, a finite map of region identifiers to an (optional) region type, an (optional) expression representing the state of the region, and an guard expression for the region;
   \item $\pvars \in \tpvars = \tpvar \fpfun \texp$, a map from program variables to expressions.
 \end{itemize}
 
@@ -105,6 +107,8 @@ Symbolic states $\sstate = (\vctx,\pcnds,\preds,\regs,\pvars) \in \tsstate$ cons
   }
 \end{mathpar}
 
+\newcommand{\Rho}{\mathrm{P}}
+
 \begin{mathpar}
   \inferrule{
   }
@@ -113,15 +117,15 @@ Symbolic states $\sstate = (\vctx,\pcnds,\preds,\regs,\pvars) \in \tsstate$ cons
   }
   \and
   \inferrule{
-    \vctx,\pcnds \vdash \bot
+    \forall \delta \in \sem{\vctx} \ldotp \sem{\pcnds}_{\delta} \implies \bot
   }{
     \vdash (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow \emptyset
   }
   \and
   \inferrule{
-    \vctx,\pcnds \vdash \bigvee \Set{P_i}_{i \in I}
+    \forall \delta \in \sem{\vctx} \ldotp \sem{\pcnds}_\delta \implies \exists i \ldotp \exists \gamma \in \sem{\Gamma_i} \ldotp \sem{\Rho_i}_{\delta ; \gamma}
   }{
-    \vdash (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow \Setb{(\vctx,\pcnds;P_i,\preds,\regs,\pvars)}{i \in I}
+    \vdash (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow \Setb{(\vctx;\Gamma_i,\pcnds;\Rho_i,\preds,\regs,\pvars)}{i \in I}
   }
   \and
   \inferrule{
@@ -159,6 +163,117 @@ Symbolic states $\sstate = (\vctx,\pcnds,\preds,\regs,\pvars) \in \tsstate$ cons
   }
 \end{mathpar}
 
+The relation $\mathord{\xrightarrow{\mathrm{mergeRType}}} \subseteq (\trty_\bot \times \trty_\bot) \times (\tpcnds \times \trty_\bot)$ determines conditions under which two (optional) region types can be merged.
+Either one of them must be $\bot$, or they must have the same region type identifier and number of parameters, and the parameters must be equal.
+\begin{mathpar}
+  \inferrule{
+  }{
+    \bot, r \xrightarrow{\mathrm{mergeRType}} \varepsilon, r
+  }
+  \and
+  \inferrule{
+  }{
+    r, \bot \xrightarrow{\mathrm{mergeRType}} \varepsilon, r
+  }
+  \and
+  \inferrule{
+    | \bar{x} | = | \bar{x}' | = n
+  }{
+    (\mathbf{t},\bar{x}), (\mathbf{t},\bar{x}') \xrightarrow{\mathrm{mergeRType}} (x_1 = x'_1; \dotsc; x_n = x'_n), (\mathbf{t},\bar{x})
+  }
+\end{mathpar}
+
+Similarly, the relation $\mathord{\xrightarrow{\mathrm{mergeState}}} \subseteq (\texp_\bot \times \texp_\bot) \times (\tpcnds \times \texp_\bot)$ determines conditions under which two region states can be merged.
+\begin{mathpar}
+  \inferrule{
+  }{
+    \bot, s \xrightarrow{\mathrm{mergeState}} \varepsilon, s
+  }
+  \and
+  \inferrule{
+  }{
+    s, \bot \xrightarrow{\mathrm{mergeState}} \varepsilon, s
+  }
+  \and
+  \inferrule{
+  }{
+    e, e' \xrightarrow{\mathrm{mergeState}} e = e', e
+  }
+\end{mathpar}
+
+\begin{align*}
+  \mktype{GType} \ni G &::= n \mid \% n \mid \# n \mid G * G \mid G + G \\
+  \mktype{GPType} \ni t &::= \mathbf{Unique} \mid \mathbf{Perm} \mid \mathbf{Param} \\
+  \mktype{GP} \ni m &::= () \mid \pi \mid \Setb{s}{P} \\[-0.8em]
+\intertext{where $\pi \in \texp$, $s \in \tsvars$, $P \in \tcond$}
+  \tguard & \eqdef \mktype{GName} \fpfun \mktype{GP}
+\end{align*}
+
+We define an interpretation function $\sem{-} : \mktype{GType} \to \mathcal{P}(\mktype{GName} \fpfun \mktype{GPType})$.
+This is defined only for well-formed guard types, which means that each guard name appears at most once in the type.
+\begin{align*}
+  \sem{n} &= \Set{[n \mapsto \mathbf{Unique}]} \\
+  \sem{\% n} &= \Set{[n \mapsto \mathbf{Perm}]} \\
+  \sem{\# n} &= \Set{[n \mapsto \mathbf{Param}]} \\
+  \sem{G_1 * G_2} &= \Setb{q_1 \uplus q_2}{q_1 \in \sem{G_1}, q_2 \in \sem{G_2}} \\
+  \sem{G_1 + G_2} &= \sem{G_1} \cup \sem{G_2}
+\end{align*}
+
+\begin{mathpar}
+  \inferrule{
+  }{
+    \vdash () : \mathbf{Unique}
+  } \and
+  \inferrule{
+  }{
+    \vdash \pi : \mathbf{Perm}
+  } \and
+  \inferrule{
+  }{
+    \vdash \Setb{s}{P} : \mathbf{Param}
+  } \and
+  \inferrule{
+    \mathit{gt} \in \sem{G} \\
+    \forall n \in \mathrm{dom}(g) \ldotp \vdash g(n) : \mathit{gt}(n)
+  }{
+    \vdash g : G
+  }
+\end{mathpar}
+
+\begin{mathpar}
+  \inferrule{
+  }{
+    \Setb{ s }{ P }, \Setb{ s }{ Q } \xrightarrow{\mathrm{mergeGP}} (\forall s \ldotp \lnot (P \land Q)), \Setb{ s }{ P \lor Q }
+  }
+  \and
+  \inferrule{
+  }{
+    \pi_1, \pi_2 \xrightarrow{\mathrm{mergeGP}} (\pi_1 \# \pi_2), (\pi_1 \bullet \pi_2)
+  }
+\end{mathpar}
+
+\begin{mathpar}
+  \inferrule{
+    \mathrm{dom}(g_1) \cap \mathrm{dom}(g_2) = \Set{x_1, \dotsc, x_i} \\
+    \mathrm{dom}(g_1) \setminus \mathrm{dom}(g_2) = \Set{y_1, \dotsc, y_j} \\
+    \mathrm{dom}(g_2) \setminus \mathrm{dom}(g_1) = \Set{z_1, \dotsc, z_k} \\
+    \forall n \ldotp g_1(x_n), g_2(x_n) \xrightarrow{\mathrm{mergeGP}} \Pi_n, m_n
+  }{
+    g_1, g_2 \xrightarrow{\mathrm{mergeGuard}} (\Pi_1; \dotsc; \Pi_i), [\bar{x} \mapsto \bar{m}, \bar{y} \mapsto g_1(\bar{y}), \bar{z} \mapsto g_2(\bar{z})]
+  }
+\end{mathpar}
+
+\begin{mathpar}
+  \inferrule{
+    r, r' \xrightarrow{\mathrm{mergeRType}} \Pi_1, r'' \\
+    s, s' \xrightarrow{\mathrm{mergeState}} \Pi_2, s'' \\
+    g, g' \xrightarrow{\mathrm{mergeGuard}} \Pi_3, g'' \\
+    (\forall G, I, A \ldotp \Psi(r'') = (G,I,A) \implies \vdash g'' : G)
+  }{
+    (r,s,g), (r',s',g') \xrightarrow{\mathrm{mergeRegion}} \Pi_1; \Pi_2; \Pi_3 , (r'',s'',g'')
+  }
+\end{mathpar}
+
 \begin{mathpar}
   \inferrule{
     \vdash \mathrm{produce}(A_1, \gamma) ; \mathrm{produce}(A_2, \gamma) : S \rightsquigarrow \mathbb{S}
@@ -177,6 +292,63 @@ Symbolic states $\sstate = (\vctx,\pcnds,\preds,\regs,\pvars) \in \tsstate$ cons
   }{
     \vdash \mathrm{produce}(p, \gamma) : (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow (\vctx,\pcnds; \sem{p}_\gamma,\preds,\regs,\pvars)
   }
+  \and
+  \inferrule{
+  }{
+    \vdash \mathrm{produce}(e_1 \mapsto e_2, \gamma) : (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow (\vctx,\pcnds;\mathcal{C}_{\mathrm{cell}}(\sem{e_1}_\gamma,\preds),\preds;\sem{e_1}_\gamma \mapsto \sem{e_2}_\gamma,\regs,\pvars)
+  }
+  \and
+  \inferrule{
+  }{
+    \vdash \mathrm{produce}(e_1 \mapsto \texttt{\#cells}(e_2), \gamma) : {\begin{array}{@{}l@{}} (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow \\ (\vctx,\pcnds;\mathcal{C}_{\mathrm{cells}}(\sem{e_1}_\gamma,\sem{e_2}_\gamma,\preds),\preds;\sem{e_1}_\gamma \mapsto \mathrm{\#cells}(\sem{e_2}_\gamma),\regs,\pvars) \end{array} }
+  }
+  \and
+  \inferrule{
+  }{
+    \vdash \mathrm{produce}(P(\bar{e}), \gamma) : (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow (\vctx,\pcnds,\preds;P(\sem{\bar{e}}_\gamma),\regs,\pvars)
+  }
+  \and
+  \inferrule{
+    i \notin \mathrm{dom}(\regs) \\
+    r_0 = ((R,\sem{z,\bar{e}}_\gamma),\sem{s}_\gamma,0) \\
+    \mathbb{S}_1 = \Setb{(\vctx,\pcnds;\sem{z}_\gamma = i';\pcnds',\preds,\regs[i' \mapsto r'],\pvars)}{ \regs(i) = r, ( r, r_0 \xrightarrow{\mathrm{mergeRegion}} \pcnds', r')} \\
+    \mathbb{S}_2 = \Set{\left(\vctx,\pcnds;\sem{z}_\gamma = i; \bigwedge_{i' \in \mathrm{dom}(\regs)} \hspace{-1em} i \neq i', \preds,\regs[i \mapsto r_0],\pvars\right)}
+  }{
+    \vdash \mathrm{produce}(R(z,\bar{e},s), \gamma) : (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow  \mathbb{S}_1 \cup \mathbb{S}_2
+  }
+  \and
+  \inferrule{
+    i \notin \mathrm{dom}(\regs) \\
+    r_0 = (\bot,\bot,\sem{g}_\gamma) \\
+    \mathbb{S}_1 = \Setb{(\vctx,\pcnds;\sem{z}_\gamma = i';\pcnds',\preds,\regs[i' \mapsto r'],\pvars)}{ \regs(i) = r, ( r, r_0 \xrightarrow{\mathrm{mergeRegion}} \pcnds', r')} \\
+    \mathbb{S}_2 = \Set{\left(\vctx,\pcnds;\sem{z}_\gamma = i; \bigwedge_{i' \in \mathrm{dom}(\regs)} \hspace{-1em} i \neq i', \preds,\regs[i \mapsto r_0],\pvars\right)}
+  }{
+    \vdash \mathrm{produce}(z@(g), \gamma) : (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow  \mathbb{S}_1 \cup \mathbb{S}_2
+  }
+
 \end{mathpar}
+
+The following reflects \textsc{Caper}'s current behaviour:
+\begin{align*}
+  \mathcal{C}_{\mathrm{cell}}(a,\varepsilon) &= a > 0 \\
+  \mathcal{C}_{\mathrm{cell}}(a,b \mapsto c ; \preds) &= \mathcal{C}_{\mathrm{cell}}(a,\preds) ; a \neq b \\
+  \mathcal{C}_{\mathrm{cell}}(a,b \mapsto \mathrm{\#cells}(c) ; \preds) &= \mathcal{C}_{\mathrm{cell}}(a,\preds) \\
+  \mathcal{C}_{\mathrm{cell}}(a,P(\bar{x}) ; \preds) &= \mathcal{C}_{\mathrm{cell}}(a,\preds) \\[1em]
+  \mathcal{C}_{\mathrm{cells}}(a,b,\preds) &= a > 0; b > 0
+\end{align*}
+This could (or should?) be strengthened as follows:
+\begin{align*}
+  \mathcal{C}_{\mathrm{cell}}(a,\varepsilon) &= a > 0 \\
+  \mathcal{C}_{\mathrm{cell}}(a,b \mapsto c ; \preds) &= \mathcal{C}_{\mathrm{cell}}(a,\preds) ; a \neq b \\
+  \mathcal{C}_{\mathrm{cell}}(a,b \mapsto \mathrm{\#cells}(c) ; \preds) &= \mathcal{C}_{\mathrm{cell}}(a,\preds) ; (a < b \lor b + c \leq a) \\
+  \mathcal{C}_{\mathrm{cell}}(a,P(\bar{x}) ; \preds) &= \mathcal{C}_{\mathrm{cell}}(a,\preds) \\[1em]
+  \mathcal{C}_{\mathrm{cells}}(a,b,\varepsilon) &= a > 0; b > 0\\
+  \mathcal{C}_{\mathrm{cells}}(a,b, c \mapsto d ; \preds) &= \mathcal{C}_{\mathrm{cells}}(a,b,\preds) ; (c < a \lor a + b \leq c) \\
+  \mathcal{C}_{\mathrm{cells}}(a,b, c \mapsto \mathrm{\#cells}(d) ; \preds) &= \mathcal{C}_{\mathrm{cells}}(a,b,\preds) ; (a + b \leq c \lor c + d \leq a) \\
+  \mathcal{C}_{\mathrm{cells}}(a,P(\bar{x}) ; \preds) &= \mathcal{C}_{\mathrm{cells}}(a,\preds)
+\end{align*}
+
+
+
 
 \end{document}
