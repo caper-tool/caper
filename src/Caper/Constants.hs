@@ -12,7 +12,8 @@ module Caper.Constants(
     defaultPreconditionBool,
     defaultPostconditionBool,
     programVariableSupersedesLogicalVariable,
-    regionConstructionLimit
+    regionConstructionLimit,
+    regionOpenLimit
 )
  where
 
