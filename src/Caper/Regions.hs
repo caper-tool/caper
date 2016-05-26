@@ -72,11 +72,12 @@ mergeMaybe op (Just m1) (Just m2) = liftM Just (op m1 m2)
 -- Pre: region instances should be checked against their types; i.e.
 -- if they have the same region type, then they must have the same number
 -- and type of parameters.
-mergeRegionInstances :: (MonadState s m, AssumptionLenses s) => RegionInstance -> RegionInstance -> m RegionInstance
+mergeRegionInstances :: (MonadState s m, AssumptionLenses s, MonadDemonic m) => RegionInstance -> RegionInstance -> m RegionInstance
 mergeRegionInstances i1@(RegionInstance t1 ps1) i2@(RegionInstance t2 ps2)
         = (if t1 /= t2 then
                 -- These regions cannot be the same, so assume false!
-                assumeContradiction
+                -- assumeContradiction
+                succeed
           else forM_ (zip ps1 ps2) $ \(p1, p2) ->
                         -- The precondition should guarantee against an error
                         -- in exprEquality.
@@ -88,7 +89,7 @@ mergeValueExpressions :: (MonadState s m, AssumptionLenses s) =>
         ValueExpression VariableID -> m (ValueExpression VariableID)
 mergeValueExpressions ve1 ve2 = assumeTrue (ve1 $=$ ve2) >> return ve1
 
-mergeRegions :: (MonadState s m, AssumptionLenses s, MonadReader r m, RTCGetter r) =>
+mergeRegions :: (MonadState s m, AssumptionLenses s, MonadReader r m, RTCGetter r, MonadDemonic m) =>
         Region -> Region -> m Region
 mergeRegions r1 r2 = do
                 let dirty = regDirty r1 || regDirty r2
@@ -99,7 +100,7 @@ mergeRegions r1 r2 = do
                         (Just (RegionInstance rtid _)) -> do
                                 res <- view resolveRType
                                 let gt = rtWeakGT $ res rtid
-                                unless (checkGuardAtType g gt) assumeContradiction
+                                unless (checkGuardAtType g gt) succeed --assumeContradiction
                         _ -> return ()
                 return $ Region dirty ti s g
 
@@ -213,8 +214,8 @@ restoring f = do
 -- This version gives fewer false negatives than cannotAlias, but requires
 -- calls to provers to see if a merge can take place.
 cannotAliasStrong :: (ProverM s r m, RegionLenses s, RTCGetter r) => VariableID -> VariableID -> m Bool
-cannotAliasStrong r1 r2
-        | r1 == r2 = return False
+cannotAliasStrong r1 r2 = use regions >>= return . not . AM.areAliases r1 r2
+{-        | r1 == r2 = return False
         | otherwise = do
                     -- Try merging the regions.  If the result is
                     -- inconsistent then the regions are not aliases.
@@ -226,7 +227,7 @@ cannotAliasStrong r1 r2
                                 c <- isConsistent
                                 return (c == Just False)
                         _ -> return False
-                        
+-}                        
 
 -- |Stabilise all regions
 stabiliseRegions :: (ProverM s r m, RegionLenses s, RTCGetter r, DebugState s r, MonadRaise m) =>

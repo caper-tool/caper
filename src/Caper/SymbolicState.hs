@@ -258,7 +258,7 @@ consumePredicate p = do
 -- that will restore them. 
 frame :: (MonadState s m, SymbStateLenses s, AssumptionLenses s, RegionLenses s,
         MonadReader r m, RTCGetter r, Provers r, DebugState s r,
-        MonadLogger m, MonadRaise m, MonadIO m) =>
+        MonadLogger m, MonadRaise m, MonadIO m, MonadDemonic m) =>
         m (m ())
 frame = do
         stabiliseRegions

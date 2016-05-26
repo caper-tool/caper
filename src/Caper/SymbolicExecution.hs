@@ -178,7 +178,7 @@ availableRegions = do
 atomicSymEx :: SymExMonad r s m =>
     m () -> m ()
 atomicSymEx aop = do
-        opnRegions (2 :: Int) -- TODO: Move this constant
+        opnRegions regionOpenLimit -- TODO: Move this constant
         aop
         closeRegions
     where

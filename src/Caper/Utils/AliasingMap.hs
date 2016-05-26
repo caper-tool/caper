@@ -143,3 +143,13 @@ toRootList (AliasMap m) = Map.foldWithKey scq [] m
 -- for one of them.
 distinctKeys :: (Ord a) => AliasMap a b -> [a]
 distinctKeys = map fst . toRootList
+
+areAliases :: (Ord a) => a -> a -> AliasMap a b -> Bool
+areAliases k1 k2 (AliasMap m) = k1 == k2 || case Map.lookup k1 m of
+        Nothing -> False
+        Just (Left k1') -> k1 == k2 || case Map.lookup k2 m of
+                Just (Left k2') -> k1' == k2'
+                _ -> False
+        Just (Right _) -> case Map.lookup k2 m of
+                Just (Left k2') -> k1 == k2'
+                _ -> False

@@ -82,3 +82,10 @@ programVariableSupersedesLogicalVariable = True
 -- searches without benefit.
 regionConstructionLimit :: Int
 regionConstructionLimit = 2
+
+-- |This limits how many regions may be opened when performing an
+-- atomic operation.  Setting this too high may slow down failing
+-- proof searches without benefit.  Setting it too low may of course
+-- cause some proof searches that should succeed to fail.
+regionOpenLimit :: Int
+regionOpenLimit = 3
