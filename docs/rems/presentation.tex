@@ -1,0 +1,109 @@
+\documentclass[sans,mathserif,dvipsnames]{beamer}
+\mode<presentation>
+\usepackage{pgfpages}
+%\setbeameroption{show notes}
+%\setbeameroption{show notes on second screen=right}
+\setbeamertemplate{footline}[frame number]
+\usepackage{amsmath,amssymb}
+\usepackage{stmaryrd}
+\usepackage{proof}
+\usepackage{graphicx}
+\usepackage[sans]{dsfont}
+\usepackage{rotating}
+\usepackage{array}
+\usepackage{bbding}
+\usepackage{tikz}
+\usetikzlibrary{calc,shapes.multipart,chains,arrows,positioning,decorations.markings,shapes,shapes.geometric}
+
+
+\tikzstyle{terminal} = [rectangle, draw, text width=8em, text centered, rounded corners=1em, minimum height=2em]
+\tikzstyle{action} = [draw,rectangle, text width=2cm, minimum width=1cm, text centered, minimum height=2.5em, inner sep=0.1cm, outer sep=0cm]
+\tikzstyle{choice} = [draw,diamond,aspect=2,text width=2cm, minimum width=1cm, text centered, minimum height=2.5em, inner sep=0.1cm,outer sep=0cm]
+
+\newcommand{\theauthor}[2]{%
+\includegraphics[width=0.6\textwidth]{#2}\\#1
+}%
+
+\newcommand{\thepicture}[1]{%
+\includegraphics[width=0.8\textwidth]{#1}
+}%
+
+\begin{document}
+
+\title{Caper: Automatic Verification with Concurrent Abstract Predicates}
+\author{Thomas Dinsdale-Young \and \textbf{Pedro da Rocha Pinto} \and Kristoffer Just Andersen \and Lars Birkedal}
+\date{}
+
+\begin{frame}
+\maketitle
+\end{frame}
+
+\begin{frame}{Concurrent Abstract Predicates}
+  \begin{itemize}
+    \item CAP provides a way of specifying arbitrary knowledge and rights as resources
+    \item A region provides an abstraction over some shared resources
+    \item The region is equipped with a protocol that determines how threads can update it
+    \item Resources called guards determine the roles threads can play in the protocol
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Example: Spin Lock}
+  \begin{itemize}
+    \item A spin lock region has two states: locked (1) and unlocked (0)
+    \item Any thread can update it from unlocked to locked
+    \item Only the thread that acquired the lock can update it from locked to unlocked
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Demo: Spin Lock}
+\end{frame}
+
+\begin{frame}{What else}
+  \begin{itemize}
+    \item Can specify multiple guards for a region type
+    \begin{itemize}
+      \item Singleton
+      \item Permissions
+      \item Set
+      \item Product
+      \item Sum
+    \end{itemize}
+    \item We have applied it to several examples:
+    \begin{itemize}
+      \item Spin counter, blocking counter, bounded counter
+      \item Ticket lock, read writers lock
+      \item Fork/Join
+      \item Stack
+    \end{itemize}
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Summary}
+ \begin{itemize}
+    \item Caper supports reasoning about concurrency through shared regions
+    \item Sharing is mediated by protocols, with roles determined by ownership of guard resources
+    \item Given the protocol and currently owned guards, Caper computes rely and guarantee relations as part of its symbolic execution
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Future work}
+  \begin{itemize}
+    \item Support for richer abstractions
+      \begin{itemize}
+        \item Sets, lists, etc.
+        \item Necessary for many interesting data structures
+      \end{itemize}
+    \item Improved proof/proof-search output
+      \begin{itemize}
+        \item Interactive navigation
+        \item Certificate generation for external proof checker
+      \end{itemize}
+    \item Support for abstract atomicity
+  \end{itemize}
+\end{frame}
+
+\begin{frame}
+``Man's life's a vapor, and full of woes; he cuts a caper, and down he goes'' - Proverb
+\end{frame}
+
+\end{document}
