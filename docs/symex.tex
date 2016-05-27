@@ -348,7 +348,73 @@ This could (or should?) be strengthened as follows:
   \mathcal{C}_{\mathrm{cells}}(a,P(\bar{x}) ; \preds) &= \mathcal{C}_{\mathrm{cells}}(a,\preds)
 \end{align*}
 
-
+\begin{mathpar}
+  \inferrule{
+    \mathrm{consume}(A_1, \gamma) : S \rightsquigarrow \Set{(S_i, \Rho_i)}_{i \in I} \\
+    \forall i \ldotp \mathrm{consume}(A_2, \gamma) : S_i \rightsquigarrow \Set{(S_{i,j}, \Rho_{i,j})}_{j \in J_i}
+  }{
+    \mathrm{consume}(A_1 \mathbin{\texttt{\&*\&}} A_2, \gamma) : S \rightsquigarrow \Setb{(S_{i,j}, \Rho_i ; \Rho_{i,j}}{ i \in I, j \in J_i }
+  }
+  \and
+  \inferrule{
+    \mathrm{consume}(A_1,\gamma) : S \rightsquigarrow \mathbb{S}
+  }
+  {
+    \mathrm{consume}(p \mathbin{\texttt{?}} A_1 \mathbin{\texttt{:}} A_2, \gamma) : S \rightsquigarrow \Setb{ (S', \sem{p}_\gamma; \Rho) }{ (S', \Rho) \in \mathbb{S} }
+  }
+  \and
+  \inferrule{
+    \mathrm{consume}(A_2,\gamma) : S \rightsquigarrow \mathbb{S}
+  }
+  {
+    \mathrm{consume}(p \mathbin{\texttt{?}} A_1 \mathbin{\texttt{:}} A_2, \gamma) : S \rightsquigarrow \Setb{ (S', \lnot\sem{p}_\gamma; \Rho) }{ (S', \Rho) \in \mathbb{S} }
+  }
+  \and
+  \inferrule{
+    \mathrm{fv}(\sem{p}_\gamma) \subseteq \vctx \\
+    \mathrm{consume}(A_1,\gamma) : (\vctx,\pcnds; \sem{p}_\gamma,\preds,\regs,\pvars) \rightsquigarrow \mathbb{S}_1 \\
+    \mathrm{consume}(A_2,\gamma) : (\vctx,\pcnds; \lnot\sem{p}_\gamma,\preds,\regs,\pvars) \rightsquigarrow \mathbb{S}_2 \\
+  }
+  {
+    \mathrm{consume}(p \mathbin{\texttt{?}} A_1 \mathbin{\texttt{:}} A_2, \gamma) : (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow \mathbb{S}_1 \cup \mathbb{S}_2
+  }
+  \and
+  \inferrule{
+  }{
+    \mathrm{consume}(p,\gamma) : S \rightsquigarrow \Set{ (S, \sem{p}_\gamma) }
+  }
+  \and
+  \inferrule{
+  }{
+    \mathrm{consume}(e_1 \mapsto e_2, \gamma) : (\vctx,\pcnds,\preds;a \mapsto b;\preds',\regs,\pvars) \rightsquigarrow \Set{ ((\vctx,\pcnds,\preds;\preds',\regs,\pvars), (\sem{e_1}_\gamma = a; \sem{e_2}_\gamma = b)}
+  }
+  \and
+  \inferrule{
+    \Rho = (l = r) \\
+    \preds = \varepsilon
+  }{
+    \mathrm{block}(l,r,\Rho,\preds)
+  }
+  \and
+  \inferrule{
+    \Rho = (l < r) \\
+    \preds = (l \mapsto (r - l))
+  }{
+    \mathrm{block}(l,r,\Rho,\preds)
+  }
+  \and
+  \inferrule{
+    v \notin \Delta, \mathrm{range}(\gamma) \\
+    \mathrm{block}(a,\sem{e_1}_\gamma,\Rho_l,\preds_l) \\
+    \mathrm{block}(\sem{e_1}_\gamma + 1,a + n,\Rho_r,\preds_r)
+  }{
+    \mathrm{consume}(e_1 \mapsto e_2, \gamma) : {\begin{array}{@{}l@{}} (\vctx,\pcnds,\preds;a \mapsto \#cells(n);\preds',\regs,\pvars) \\ \rightsquigarrow \Set{ ((\vctx;v : \mathbf{Val},\pcnds,\preds;\preds_l;\preds_r;\preds',\regs,\pvars), (\sem{e_2}_\gamma = v; \Rho_l; \Rho_r)} \end{array}}
+  } \and
+  \inferrule{
+  }{
+    \mathrm{consume}(P(\bar{e}),\gamma) : (\vctx,\pcnds,\preds;P(\bar{a});\preds',\regs,\pvars) \rightsquigarrow \Set{((\vctx,\pcnds,\preds;\preds',\regs,\pvars), \sem{\bar{e}}_\gamma = \bar{a})}
+  }
+\end{mathpar}
 
 
 \end{document}
