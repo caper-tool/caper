@@ -329,14 +329,14 @@ This is defined only for well-formed guard types, which means that each guard na
 \end{mathpar}
 
 The following reflects \textsc{Caper}'s current behaviour:
-\begin{align*}
-  \mathcal{C}_{\mathrm{cell}}(a,\varepsilon) &= a > 0 \\
-  \mathcal{C}_{\mathrm{cell}}(a,b \mapsto c ; \preds) &= \mathcal{C}_{\mathrm{cell}}(a,\preds) ; a \neq b \\
-  \mathcal{C}_{\mathrm{cell}}(a,b \mapsto \mathrm{\#cells}(c) ; \preds) &= \mathcal{C}_{\mathrm{cell}}(a,\preds) \\
-  \mathcal{C}_{\mathrm{cell}}(a,P(\bar{x}) ; \preds) &= \mathcal{C}_{\mathrm{cell}}(a,\preds) \\[1em]
-  \mathcal{C}_{\mathrm{cells}}(a,b,\preds) &= a > 0; b > 0
-\end{align*}
-This could (or should?) be strengthened as follows:
+%\begin{align*}
+%  \mathcal{C}_{\mathrm{cell}}(a,\varepsilon) &= a > 0 \\
+%  \mathcal{C}_{\mathrm{cell}}(a,b \mapsto c ; \preds) &= \mathcal{C}_{\mathrm{cell}}(a,\preds) ; a \neq b \\
+%  \mathcal{C}_{\mathrm{cell}}(a,b \mapsto \mathrm{\#cells}(c) ; \preds) &= \mathcal{C}_{\mathrm{cell}}(a,\preds) \\
+%  \mathcal{C}_{\mathrm{cell}}(a,P(\bar{x}) ; \preds) &= \mathcal{C}_{\mathrm{cell}}(a,\preds) \\[1em]
+%  \mathcal{C}_{\mathrm{cells}}(a,b,\preds) &= a > 0; b > 0
+%\end{align*}
+%This could (or should?) be strengthened as follows:
 \begin{align*}
   \mathcal{C}_{\mathrm{cell}}(a,\varepsilon) &= a > 0 \\
   \mathcal{C}_{\mathrm{cell}}(a,b \mapsto c ; \preds) &= \mathcal{C}_{\mathrm{cell}}(a,\preds) ; a \neq b \\
@@ -413,6 +413,20 @@ This could (or should?) be strengthened as follows:
   \inferrule{
   }{
     \mathrm{consume}(P(\bar{e}),\gamma) : (\vctx,\pcnds,\preds;P(\bar{a});\preds',\regs,\pvars) \rightsquigarrow \Set{((\vctx,\pcnds,\preds;\preds',\regs,\pvars), \sem{\bar{e}}_\gamma = \bar{a})}
+  }
+  \and
+  \inferrule{
+    \regs(v) = ((R,\bar{x}),s,g) \\
+    s \neq \bot
+  }{
+    \mathrm{consume}(R(r,\bar{e},a),\gamma) : (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow \Set{((\vctx,\pcnds,\preds,\regs,\pvars), (\sem{r}_\gamma = v; \sem{r,\bar{e}}_\gamma = \bar{x}; \sem{a}_\gamma = s)}
+  }
+  \and
+  \inferrule{
+    \regs(v) = ((R,\bar{x}),\bot,g) \\
+    s \notin \Delta, \mathrm{range}(\gamma)
+  }{
+    \mathrm{consume}(R(r,\bar{e},a),\gamma) : (\vctx;s,\pcnds,\preds,\regs,\pvars) \rightsquigarrow \Set{((\vctx,\pcnds,\preds,\regs,\pvars), (\sem{r}_\gamma = v; \sem{r,\bar{e}}_\gamma = \bar{x}; \sem{a}_\gamma = s)}
   }
 \end{mathpar}
 

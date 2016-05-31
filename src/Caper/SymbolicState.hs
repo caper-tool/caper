@@ -146,15 +146,30 @@ validatePredicate (n, exprs) = do
 
 predicateAssumptions :: Predicate -> Predicates -> [Condition VariableID]
 predicateAssumptions (PCell, e1 : _) prds = toCondition (VALt (VEConst 0) e0) :
-                foldMap genCond (Map.findWithDefault MultiSet.empty PCell prds)
+                foldMap genCond (Map.findWithDefault MultiSet.empty PCell prds) ++
+                foldMap genCellsCond (Map.findWithDefault MultiSet.empty PCells prds)
         where
                 genCond (e1' : _) = [negativeCondition $ VAEq (toValueExpr e1') e0]
                 genCond _ = error "predicateAssumptions: Bad #cell predicate"
                 e0 = toValueExpr e1
-predicateAssumptions (PCells, [e1, e2]) _ = [toCondition (VALt (VEConst 0) e1'),  toCondition (VALt (VEConst 0) e2')]
+                genCellsCond [a,l] = [toCondition (FOFOr (FOFAtom (VALt e0 (toValueExpr a))) (FOFNot $ FOFAtom (VALt e0 (VEPlus (toValueExpr a) (toValueExpr l)))))]
+                genCellsCond _ = error "predicateAssumptions: Bad #cells predicate"
+predicateAssumptions (PCells, [e1, e2]) prds = [toCondition (VALt (VEConst 0) e1'),  toCondition (VALt (VEConst 0) e2')] ++
+                foldMap genCellCond (Map.findWithDefault MultiSet.empty PCell prds) ++
+                foldMap genCellsCond (Map.findWithDefault MultiSet.empty PCells prds)
         where
                 e1' = toValueExpr e1
                 e2' = toValueExpr e2
+                genCellCond (a : _) = [toCondition (FOFOr (FOFAtom (VALt (toValueExpr a) e1')) (FOFNot $ FOFAtom (VALt (toValueExpr a) (VEPlus e1' e2'))))]
+                genCellCond _ = error "predicateAssumptions: Bad #cell predicate"
+                genCellsCond [a,l] = let
+                        a' = toValueExpr a
+                        l' = toValueExpr l in
+                        [toCondition (FOFOr 
+                                (FOFNot $ FOFAtom $ VALt a' (VEPlus e1' e2'))
+                                (FOFNot $ FOFAtom $ VALt e1' (VEPlus a' l')))]
+                genCellsCond _ = error "predicateAssumptions: Bad #cells predicate"
+
 predicateAssumptions _ _ = []
 
 generatePredicateAssumptions :: (MonadState s m, SymbStateLenses s) => Predicate -> m ()
