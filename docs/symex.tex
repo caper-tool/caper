@@ -276,57 +276,65 @@ This is defined only for well-formed guard types, which means that each guard na
 
 \begin{mathpar}
   \inferrule{
-    \vdash \mathrm{produce}(A_1, \gamma) ; \mathrm{produce}(A_2, \gamma) : S \rightsquigarrow \mathbb{S}
+    \vdash \mathrm{produce}(A_1, \gamma) : S \rightsquigarrow \Set{S_i}_{i \in I} \\
+    \forall i \in I \ldotp \vdash \mathrm{produce}(A_2, \gamma) : S_i \rightsquigarrow \Set{S_{i,j}}_{j \in J_i}
   }{
-    \vdash \mathrm{produce}(A_1 \mathbin{\texttt{\&*\&}} A_2, \gamma) : S \rightsquigarrow \mathbb{S}
+    \vdash \mathrm{produce}(A_1 \mathbin{\texttt{\&*\&}} A_2, \gamma) : S \rightsquigarrow \Setb{S_{i,j}}{i \in I, j \in J_i}
   }
   \and
   \inferrule{
-    \vdash \mathrm{produce}(A_1, \gamma) : (\vctx,\pcnds; \sem{p}_\gamma,\preds,\regs,\pvars) \rightsquigarrow \mathbb{S}_1 \\
-    \vdash \mathrm{produce}(A_2, \gamma) : (\vctx,\pcnds; \lnot\sem{p}_\gamma,\preds,\regs,\pvars) \rightsquigarrow \mathbb{S}_2
+    \vdash \mathrm{produce}(A_1, \gamma) : (\vctx,\pcnds; \sem{p}_\gamma,\preds,\regs) \rightsquigarrow \mathbb{S}_1 \\
+    \vdash \mathrm{produce}(A_2, \gamma) : (\vctx,\pcnds; \lnot\sem{p}_\gamma,\preds,\regs) \rightsquigarrow \mathbb{S}_2
   }{
-    \vdash \mathrm{produce}(p \mathbin{\texttt{?}} A_1 \mathbin{\texttt{:}} A_2, \gamma) : (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow \mathbb{S}_1 \cup \mathbb{S}_2
-  }
-  \and
-  \inferrule{
-  }{
-    \vdash \mathrm{produce}(p, \gamma) : (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow (\vctx,\pcnds; \sem{p}_\gamma,\preds,\regs,\pvars)
+    \vdash \mathrm{produce}(p \mathbin{\texttt{?}} A_1 \mathbin{\texttt{:}} A_2, \gamma) : (\vctx,\pcnds,\preds,\regs) \rightsquigarrow \mathbb{S}_1 \cup \mathbb{S}_2
   }
   \and
   \inferrule{
   }{
-    \vdash \mathrm{produce}(e_1 \mapsto e_2, \gamma) : (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow (\vctx,\pcnds;\mathcal{C}_{\mathrm{cell}}(\sem{e_1}_\gamma,\preds),\preds;\sem{e_1}_\gamma \mapsto \sem{e_2}_\gamma,\regs,\pvars)
+    \vdash \mathrm{produce}(p, \gamma) : (\vctx,\pcnds,\preds,\regs) \rightsquigarrow (\vctx,\pcnds; \sem{p}_\gamma,\preds,\regs)
   }
   \and
   \inferrule{
   }{
-    \vdash \mathrm{produce}(e_1 \mapsto \texttt{\#cells}(e_2), \gamma) : {\begin{array}{@{}l@{}} (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow \\ (\vctx,\pcnds;\mathcal{C}_{\mathrm{cells}}(\sem{e_1}_\gamma,\sem{e_2}_\gamma,\preds),\preds;\sem{e_1}_\gamma \mapsto \mathrm{\#cells}(\sem{e_2}_\gamma),\regs,\pvars) \end{array} }
+    \vdash \mathrm{produce}(e_1 \mapsto e_2, \gamma) : (\vctx,\pcnds,\preds,\regs) \rightsquigarrow (\vctx,\pcnds;\mathcal{C}_{\mathrm{cell}}(\sem{e_1}_\gamma,\preds),\preds;\sem{e_1}_\gamma \mapsto \sem{e_2}_\gamma,\regs)
   }
   \and
   \inferrule{
   }{
-    \vdash \mathrm{produce}(P(\bar{e}), \gamma) : (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow (\vctx,\pcnds,\preds;P(\sem{\bar{e}}_\gamma),\regs,\pvars)
+    \vdash \mathrm{produce}(e_1 \mapsto \texttt{\#cells}(e_2), \gamma) : {\begin{array}{@{}l@{}} (\vctx,\pcnds,\preds,\regs) \rightsquigarrow \\ (\vctx,\pcnds;\mathcal{C}_{\mathrm{cells}}(\sem{e_1}_\gamma,\sem{e_2}_\gamma,\preds),\preds;\sem{e_1}_\gamma \mapsto \mathrm{\#cells}(\sem{e_2}_\gamma),\regs) \end{array} }
   }
   \and
   \inferrule{
-    i \notin \mathrm{dom}(\regs) \\
+  }{
+    \vdash \mathrm{produce}(P(\bar{e}), \gamma) : (\vctx,\pcnds,\preds,\regs) \rightsquigarrow (\vctx,\pcnds,\preds;P(\sem{\bar{e}}_\gamma),\regs)
+  }
+  \and
+  \inferrule{
     r_0 = ((R,\sem{z,\bar{e}}_\gamma),\sem{s}_\gamma,0) \\
-    \mathbb{S}_1 = \Setb{(\vctx,\pcnds;\sem{z}_\gamma = i';\pcnds',\preds,\regs[i' \mapsto r'],\pvars)}{ \regs(i) = r, ( r, r_0 \xrightarrow{\mathrm{mergeRegion}} \pcnds', r')} \\
-    \mathbb{S}_2 = \Set{\left(\vctx,\pcnds;\sem{z}_\gamma = i; \bigwedge_{i' \in \mathrm{dom}(\regs)} \hspace{-1em} i \neq i', \preds,\regs[i \mapsto r_0],\pvars\right)}
+    \mathbb{S}_1 = \mathrm{rmerge}(\vctx,\pcnds,\preds,\regs,\sem{z}_\gamma,r_0) \\
+    i \notin \mathrm{dom}(\regs) \\
+    \mathbb{S}_2 = \mathrm{rnew}(\vctx,\pcnds,\preds,\regs,\sem{z}_\gamma,r_0,i)
   }{
-    \vdash \mathrm{produce}(R(z,\bar{e},s), \gamma) : (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow  \mathbb{S}_1 \cup \mathbb{S}_2
+    \vdash \mathrm{produce}(R(z,\bar{e},s), \gamma) : (\vctx,\pcnds,\preds,\regs) \rightsquigarrow  \mathbb{S}_1 \cup \mathbb{S}_2
   }
   \and
   \inferrule{
-    i \notin \mathrm{dom}(\regs) \\
     r_0 = (\bot,\bot,\sem{g}_\gamma) \\
-    \mathbb{S}_1 = \Setb{(\vctx,\pcnds;\sem{z}_\gamma = i';\pcnds',\preds,\regs[i' \mapsto r'],\pvars)}{ \regs(i) = r, ( r, r_0 \xrightarrow{\mathrm{mergeRegion}} \pcnds', r')} \\
-    \mathbb{S}_2 = \Set{\left(\vctx,\pcnds;\sem{z}_\gamma = i; \bigwedge_{i' \in \mathrm{dom}(\regs)} \hspace{-1em} i \neq i', \preds,\regs[i \mapsto r_0],\pvars\right)}
+    \mathbb{S}_1 = \mathrm{rmerge}(\vctx,\pcnds,\preds,\regs,\sem{z}_\gamma,r_0) \\
+    i \notin \mathrm{dom}(\regs) \\
+    \mathbb{S}_2 = \mathrm{rnew}(\vctx,\pcnds,\preds,\regs,\sem{z}_\gamma,r_0,i)
   }{
-    \vdash \mathrm{produce}(z@(g), \gamma) : (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow  \mathbb{S}_1 \cup \mathbb{S}_2
+    \vdash \mathrm{produce}(z@(g), \gamma) : (\vctx,\pcnds,\preds,\regs) \rightsquigarrow  \mathbb{S}_1 \cup \mathbb{S}_2
   }
-
 \end{mathpar}
+
+\begin{multline*}
+  \mathrm{rmerge}(\vctx,\pcnds,\preds,\regs,a,r_0) = \\
+  \Setb{(\vctx,\pcnds;a=i';\pcnds',\preds,\regs[i' \mapsto r'])}{\exists r \ldotp \regs(i) = r \land (r, r_0 \xrightarrow{\mathrm{mergeRegion}} \pcnds', r')}
+\end{multline*}
+\[
+  \mathrm{rnew}(\vctx,\pcnds,\preds,\regs,a,r_0,i) = \Set{\left(\vctx,\pcnds;a=i;\bigwedge_{i' \in \mathrm{dom}(\regs)} i \neq i', \preds, \regs[i \mapsto r_0]\right)}
+\]
 
 The following reflects \textsc{Caper}'s current behaviour:
 %\begin{align*}
@@ -350,43 +358,43 @@ The following reflects \textsc{Caper}'s current behaviour:
 
 \begin{mathpar}
   \inferrule{
-    \mathrm{consume}(A_1, \gamma) : S \rightsquigarrow \Set{(S_i, \Rho_i)}_{i \in I} \\
-    \forall i \ldotp \mathrm{consume}(A_2, \gamma) : S_i \rightsquigarrow \Set{(S_{i,j}, \Rho_{i,j})}_{j \in J_i}
+    \mathrm{consume}(A_1, \gamma) : S \rightsquigarrow \Set{S_i}_{i \in I} \\
+    \forall i \ldotp \mathrm{consume}(A_2, \gamma) : S_i \rightsquigarrow \Set{S_{i,j}}_{j \in J_i}
   }{
-    \mathrm{consume}(A_1 \mathbin{\texttt{\&*\&}} A_2, \gamma) : S \rightsquigarrow \Setb{(S_{i,j}, \Rho_i ; \Rho_{i,j}}{ i \in I, j \in J_i }
+    \mathrm{consume}(A_1 \mathbin{\texttt{\&*\&}} A_2, \gamma) : S \rightsquigarrow \Setb{S_{i,j}}{ i \in I, j \in J_i }
   }
   \and
   \inferrule{
-    \mathrm{consume}(A_1,\gamma) : S \rightsquigarrow \mathbb{S}
-  }
-  {
-    \mathrm{consume}(p \mathbin{\texttt{?}} A_1 \mathbin{\texttt{:}} A_2, \gamma) : S \rightsquigarrow \Setb{ (S', \sem{p}_\gamma; \Rho) }{ (S', \Rho) \in \mathbb{S} }
+    \mathrm{consume}(A_1,\gamma) : (\vctx,\pcnds,\Gamma,\Rho;\sem{p}_\gamma,\preds,\regs) \rightsquigarrow \mathbb{S}
+  }{
+    \mathrm{consume}(p \mathbin{\texttt{?}} A_1 \mathbin{\texttt{:}} A_2, \gamma) : (\vctx,\pcnds,\Gamma,\Rho,\preds,\regs) \rightsquigarrow \mathbb{S}
   }
   \and
   \inferrule{
-    \mathrm{consume}(A_2,\gamma) : S \rightsquigarrow \mathbb{S}
-  }
-  {
-    \mathrm{consume}(p \mathbin{\texttt{?}} A_1 \mathbin{\texttt{:}} A_2, \gamma) : S \rightsquigarrow \Setb{ (S', \lnot\sem{p}_\gamma; \Rho) }{ (S', \Rho) \in \mathbb{S} }
+    \mathrm{consume}(A_2,\gamma) : (\vctx,\pcnds,\Gamma,\Rho;\lnot\sem{p}_\gamma,\preds,\regs) \rightsquigarrow \mathbb{S}
+  }{
+    \mathrm{consume}(p \mathbin{\texttt{?}} A_1 \mathbin{\texttt{:}} A_2, \gamma) : (\vctx,\pcnds,\Gamma,\Rho,\preds,\regs) \rightsquigarrow \mathbb{S}
   }
   \and
   \inferrule{
     \mathrm{fv}(\sem{p}_\gamma) \subseteq \vctx \\
-    \mathrm{consume}(A_1,\gamma) : (\vctx,\pcnds; \sem{p}_\gamma,\preds,\regs,\pvars) \rightsquigarrow \mathbb{S}_1 \\
-    \mathrm{consume}(A_2,\gamma) : (\vctx,\pcnds; \lnot\sem{p}_\gamma,\preds,\regs,\pvars) \rightsquigarrow \mathbb{S}_2 \\
+    \mathrm{consume}(A_1,\gamma) : (\vctx,\pcnds; \sem{p}_\gamma,\Gamma,\Rho,\preds,\regs) \rightsquigarrow \mathbb{S}_1 \\
+    \mathrm{consume}(A_2,\gamma) : (\vctx,\pcnds; \lnot\sem{p}_\gamma,\Gamma,\Rho,\preds,\regs) \rightsquigarrow \mathbb{S}_2 \\
   }
   {
-    \mathrm{consume}(p \mathbin{\texttt{?}} A_1 \mathbin{\texttt{:}} A_2, \gamma) : (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow \mathbb{S}_1 \cup \mathbb{S}_2
+    \mathrm{consume}(p \mathbin{\texttt{?}} A_1 \mathbin{\texttt{:}} A_2, \gamma) : (\vctx,\pcnds,\Gamma,\Rho,\preds,\regs) \rightsquigarrow \mathbb{S}_1 \cup \mathbb{S}_2
   }
   \and
   \inferrule{
   }{
-    \mathrm{consume}(p,\gamma) : S \rightsquigarrow \Set{ (S, \sem{p}_\gamma) }
+    \mathrm{consume}(p,\gamma) : (\vctx,\pcnds,\Gamma,\Rho,\preds,\regs) \rightsquigarrow \Set{ (\vctx,\pcnds,\Gamma,\Rho;\sem{p}_\gamma,\preds,\regs) }
   }
   \and
   \inferrule{
   }{
-    \mathrm{consume}(e_1 \mapsto e_2, \gamma) : (\vctx,\pcnds,\preds;a \mapsto b;\preds',\regs,\pvars) \rightsquigarrow \Set{ ((\vctx,\pcnds,\preds;\preds',\regs,\pvars), (\sem{e_1}_\gamma = a; \sem{e_2}_\gamma = b)}
+    \mathrm{consume}(e_1 \mapsto e_2, \gamma) :
+      {\begin{array}{@{}l@{}} (\vctx,\pcnds,\Gamma,\Rho,\preds;a \mapsto b;\preds',\regs) \\
+      \rightsquigarrow \Set{ (\vctx,\pcnds,\Gamma,\Rho;\sem{e_1}_\gamma = a; \sem{e_2}_\gamma = b, \preds;\preds',\regs)}\end{array}}
   }
   \and
   \inferrule{
@@ -398,37 +406,135 @@ The following reflects \textsc{Caper}'s current behaviour:
   \and
   \inferrule{
     \Rho = (l < r) \\
-    \preds = (l \mapsto (r - l))
+    \preds = (l \mapsto \mathrm{\#cells}(r - l))
   }{
     \mathrm{block}(l,r,\Rho,\preds)
   }
   \and
   \inferrule{
-    v \notin \Delta, \mathrm{range}(\gamma) \\
+    v \notin \vctx;\Gamma \\
     \mathrm{block}(a,\sem{e_1}_\gamma,\Rho_l,\preds_l) \\
     \mathrm{block}(\sem{e_1}_\gamma + 1,a + n,\Rho_r,\preds_r)
   }{
-    \mathrm{consume}(e_1 \mapsto e_2, \gamma) : {\begin{array}{@{}l@{}} (\vctx,\pcnds,\preds;a \mapsto \#cells(n);\preds',\regs,\pvars) \\ \rightsquigarrow \Set{ ((\vctx;v : \mathbf{Val},\pcnds,\preds;\preds_l;\preds_r;\preds',\regs,\pvars), (\sem{e_2}_\gamma = v; \Rho_l; \Rho_r)} \end{array}}
+    \mathrm{consume}(e_1 \mapsto e_2, \gamma) : {\begin{array}{@{}l@{}} (\vctx,\pcnds,\Gamma,\Rho,\preds;a \mapsto \mathrm{\#cells}(n);\preds',\regs) \\ \rightsquigarrow \Set{ (\vctx;v : \mathbf{Val},\pcnds,\Gamma,\Rho;\sem{e_2}_\gamma = v; \Rho_l; \Rho_r,\preds;\preds_l;\preds_r;\preds',\regs)} \end{array}}
   } \and
   \inferrule{
   }{
-    \mathrm{consume}(P(\bar{e}),\gamma) : (\vctx,\pcnds,\preds;P(\bar{a});\preds',\regs,\pvars) \rightsquigarrow \Set{((\vctx,\pcnds,\preds;\preds',\regs,\pvars), \sem{\bar{e}}_\gamma = \bar{a})}
+    \mathrm{consume}(P(\bar{e}),\gamma) : (\vctx,\pcnds,\Gamma,\Rho,\preds;P(\bar{a});\preds',\regs) \rightsquigarrow \Set{(\vctx,\pcnds,\Gamma,\Rho;\sem{\bar{e}}_\gamma = \bar{a}, \preds;\preds',\regs)}
   }
   \and
   \inferrule{
     \regs(v) = ((R,\bar{x}),s,g) \\
     s \neq \bot
   }{
-    \mathrm{consume}(R(r,\bar{e},a),\gamma) : (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow \Set{((\vctx,\pcnds,\preds,\regs,\pvars), (\sem{r}_\gamma = v; \sem{r,\bar{e}}_\gamma = \bar{x}; \sem{a}_\gamma = s)}
+    \mathrm{consume}(R(r,\bar{e},a),\gamma) : (\vctx,\pcnds,\Gamma,\Rho,\preds,\regs) \rightsquigarrow \Set{(\vctx,\pcnds,\Gamma,\Rho;\sem{r}_\gamma = v; \sem{r,\bar{e}}_\gamma = \bar{x}; \sem{a}_\gamma = s,\preds,\regs)}
   }
   \and
   \inferrule{
     \regs(v) = ((R,\bar{x}),\bot,g) \\
-    s \notin \Delta, \mathrm{range}(\gamma)
+    s \notin \Delta;\Gamma
   }{
-    \mathrm{consume}(R(r,\bar{e},a),\gamma) : (\vctx;s,\pcnds,\preds,\regs,\pvars) \rightsquigarrow \Set{((\vctx,\pcnds,\preds,\regs,\pvars), (\sem{r}_\gamma = v; \sem{r,\bar{e}}_\gamma = \bar{x}; \sem{a}_\gamma = s)}
+    \mathrm{consume}(R(r,\bar{e},a),\gamma) : (\vctx,\pcnds,\Gamma,\Rho,\preds,\regs) \rightsquigarrow \Set{(\vctx; s : \mathbf{Val},\pcnds,\Gamma,\Rho;\sem{r}_\gamma = v; \sem{r,\bar{e}}_\gamma = \bar{x}; \sem{a}_\gamma = s,\preds,\regs)}
+  }
+  \and
+  \inferrule{
+    \regs(v) = (t,s,h) \\
+    \mathrm{takeGuard}(\sem{g}_\gamma) : \vctx, h \rightsquigarrow \Gamma', f, \Rho'
+  }{
+    \mathrm{consume}(r@g,\gamma) : (\vctx,\pcnds,\Gamma,\Rho,\preds,\regs) \rightsquigarrow \Set{(\vctx,\pcnds,\Gamma;\Gamma',\Rho;\Rho',\preds,\regs{[v \mapsto (t,s,f)]})}
+  }
+  \and
+  \inferrule{
+    \regs(v) = ((R,\bar{x}),s,h) \\
+    \Psi(R) \vdash g_1 \sim g_1' \\
+    \mathrm{takeGuard}(g_1) : \vctx, h \rightsquigarrow \Gamma_1, f, \Rho_1 \\
+    \mathrm{takeGuard}(\sem{g}_\gamma) : \vctx; \Gamma_1, g_1' \uplus f \rightsquigarrow \Gamma_2, f', \Rho_2
+  }{
+    \mathrm{consume}(r@g,\gamma) : (\vctx,\pcnds,\Gamma,\Rho,\preds,\regs) \rightsquigarrow \Set{(\vctx,\pcnds,\Gamma;\Gamma_1;\Gamma_2,\Rho;\Rho_1;\Rho_2,\preds,\regs{[v \mapsto ((R,\bar{x}),s,f')]})}
   }
 \end{mathpar}
 
+
+\begin{mathpar}
+  \inferrule{
+  }{
+    \mathrm{takeGuard}(\emptyset) : \vctx, g \rightsquigarrow \varepsilon, g, \varepsilon
+  }
+  \and
+  \inferrule{
+    \mathrm{takeGuard}(g) : \vctx, h \rightsquigarrow \Gamma, f, \Rho
+  }{
+    \mathrm{takeGuard}(g \uplus [n \mapsto ()]) : \vctx, (h \uplus [n \mapsto ()]) \rightsquigarrow \Gamma, f, \Rho
+  }
+  \and
+  \inferrule{
+    \mathrm{takeGuard}(g) : \vctx, h \rightsquigarrow \Gamma, f, \Rho
+  }{
+    \mathrm{takeGuard}(g \uplus [n \mapsto \pi_1]) : \vctx, (h \uplus [n \mapsto \pi_2]) \rightsquigarrow \Gamma, f, (\Rho; \pi_1 = \pi_2)
+  }
+  \and
+  \inferrule{
+    \mathrm{takeGuard}(g) : \vctx, h \rightsquigarrow \Gamma, f, \Rho \\
+    \pi_3 \notin \vctx,\Gamma
+  }{
+    \mathrm{takeGuard}(g \uplus [n \mapsto \pi_1]) : \vctx, (h \uplus [n \mapsto \pi_2]) \rightsquigarrow (\Gamma; \pi_3 : \mathbf{Perm}), (f \uplus [n \mapsto \pi_3]), (\Rho; \pi_3 \neq 0_{p}; \pi_2 = \pi_1 \bullet \pi_3 )
+  }
+  \and
+  \inferrule{
+    \mathrm{takeGuard}(g) : \vctx, h \rightsquigarrow \Gamma, f, \Rho
+  }{
+    \mathrm{takeGuard}(g \uplus [n \mapsto \Setb{s}{P_1}]) : {\begin{array}{@{}l@{}} \vctx, (h \uplus [n \mapsto \Setb{s}{P_2}]) \rightsquigarrow \\
+      \Gamma, (f \uplus [n \mapsto \Setb{s}{P_2 \land \lnot P_1}]), (\Rho; \forall s \ldotp P_1 \Rightarrow P_2) \end{array}}
+  }
+\end{mathpar}
+
+\begin{mathpar}
+  \inferrule{
+  }{
+    G \vdash g \sim g
+  }
+  \and
+  \inferrule{
+    G \vdash g \sim g'
+  }{
+    G \vdash g \uplus f \sim g' \uplus f
+  }
+  \and
+  \inferrule{
+    g_1 \in \mathrm{full}(G_1) \\
+    g_2 \in \mathrm{full}(G_2)
+  }{
+    G_1 + G_2 \vdash g_1 \sim g_2
+  }
+  \and
+  \inferrule{
+    G_1 \vdash g_1 \sim g_1'
+  }{
+    G_1 + G_2 \vdash g_1 \sim g_1'
+  }
+  \and
+  \inferrule{
+    G_2 \vdash g_2 \sim g_2'
+  }{
+    G_1 + G_2 \vdash g_1 \sim g_1'
+  }
+  \and
+  \inferrule{
+    G_1 \vdash g_1 \sim g_1' \\
+    G_2 \vdash g_2 \sim g_2'
+  }{
+    G_1 * G_2 \vdash g_1 \uplus g_2 \sim g_1' \uplus g_2
+  }
+\end{mathpar}
+
+\begin{mathpar}
+  \inferrule{
+    G \vdash g_1 \sim g_1' \\
+    \mathrm{takeGuard}(g_1) : \vctx, h \rightsquigarrow \Gamma_1, f, \Rho_1 \\
+    \mathrm{takeGuard}(g) : \vctx; \Gamma_1, g_1' \uplus f \rightsquigarrow \Gamma_2, f', \Rho_2
+  }{
+    \mathrm{consumeGuard}(G,g) : \vctx, h \rightsquigarrow \Gamma_1; \Gamma_2, f', \Rho_1; \Rho_2
+  }
+\end{mathpar}
 
 \end{document}
