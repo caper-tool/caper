@@ -189,3 +189,5 @@ produceAssrt dirty (AssrtITE sp c a1 a2) =
             liftIO (putStrLn $ "*** case: " ++ show (NotBAssrt sp c))
             producePure (NotBAssrt sp c)
             produceAssrt dirty a2)
+produceAssrt dirty (AssrtOr sp a1 a2) =
+  produceAssrt dirty a1 <#> produceAssrt dirty a2

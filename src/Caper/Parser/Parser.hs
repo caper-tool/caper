@@ -65,7 +65,7 @@ languageDef =
            , Token.reservedOpNames = ["+", "-", "*", "/", ":=", "::"
                                      , "=", "!=", "<", ">", ">=", "<="
                                      , "and", "or", "not", "?", ":"
-                                     , "&*&", "$", "!"
+                                     , "&*&", "\\/", "$", "!"
                                      , "==", "|->", "@", "~>", "|", "%"
                                      ]
            }
@@ -406,7 +406,8 @@ iteAssertion =
 assertionAux :: Parser Assrt
 assertionAux = buildExpressionParser assertionOperators assertionTerm
 
-assertionOperators = [ [Infix  (do { pos <- getPosition; reservedOp "&*&"; return (AssrtConj pos)}) AssocLeft]
+assertionOperators = [ [Infix  (do { pos <- getPosition; reservedOp "&*&"; return (AssrtConj pos)}) AssocLeft],
+                       [Infix  (do { pos <- getPosition; reservedOp "\\/"; return (AssrtOr pos)}) AssocLeft]
                      ]
 
 assertionTerm =  try (parens assertion2)
@@ -595,6 +596,7 @@ refineAssertion (AssrtPure pos pa)      = AssrtPure pos (refinePureAssertion pa)
 refineAssertion a@(AssrtSpatial _ _) = a
 refineAssertion (AssrtConj pos a1 a2)   = AssrtConj pos (refineAssertion a1) (refineAssertion a2)
 refineAssertion (AssrtITE pos pa a1 a2) = AssrtITE pos (refinePureAssertion pa) (refineAssertion a1) (refineAssertion a2)
+refineAssertion (AssrtOr pos a1 a2) = AssrtOr pos (refineAssertion a1) (refineAssertion a2)
 
 refinePureAssertion (NotBAssrt pos pe) = NotBAssrt pos (refinePureAssertion pe)
 refinePureAssertion (BinaryPermAssrt pos (PermEquality br) (VarPermExpr _ e1) (VarPermExpr _ e2)) = BinaryVarAssrt pos br e1 e2

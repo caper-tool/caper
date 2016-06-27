@@ -46,3 +46,4 @@ isTriviallyStable (AssrtSpatial _ (SARegion _)) = False
 isTriviallyStable (AssrtSpatial _ _) = True
 isTriviallyStable (AssrtConj _ a1 a2) = isTriviallyStable a1 && isTriviallyStable a2
 isTriviallyStable (AssrtITE _ _ a1 a2) = isTriviallyStable a1 && isTriviallyStable a2
+isTriviallyStable (AssrtOr _ a1 a2) = isTriviallyStable a1 && isTriviallyStable a2

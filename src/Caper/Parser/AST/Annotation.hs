@@ -251,11 +251,13 @@ data Assrt = AssrtPure SourcePos PureAssrt
            | AssrtSpatial SourcePos SpatialAssrt
            | AssrtConj SourcePos Assrt Assrt
            | AssrtITE SourcePos PureAssrt Assrt Assrt
+           | AssrtOr SourcePos Assrt Assrt
 instance Show Assrt where
         show (AssrtPure _ a) = show a
         show (AssrtSpatial _ a) = show a
         show (AssrtConj _ a1 a2) = show a1 ++ " &*& " ++ show a2
         show (AssrtITE _ ac a1 a2) = "(" ++ show ac ++ " ? " ++ show a1 ++ " : " ++ show a2 ++ ")"
+        show (AssrtOr _ a1 a2) = "(" ++ show a1 ++ " \\/ " ++ show a2 ++ ")"
 
 data StateInterpretation = StateInterpretation {
         siSourcePos :: SourcePos,

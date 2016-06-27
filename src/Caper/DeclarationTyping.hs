@@ -287,6 +287,7 @@ typeAssrt resVar = ta
                 ta (AssrtConj _ a1 a2) = ta a1 >> ta a2
                 ta (AssrtITE _ ac a1 a2) = typePureAssrt resVar ac >> ta a1
                                         >> ta a2
+                ta (AssrtOr _ a1 a2) = ta a1 >> ta a2
                 tArg arg (AnyVar ve@(Variable _ v)) = contextualise ve $ 
                         unifyR arg (resVar v)
                 tArg _ (AnyVar _) = return ()

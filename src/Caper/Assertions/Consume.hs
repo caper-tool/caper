@@ -233,3 +233,5 @@ consumeAssrt (AssrtITE sp c a1 a2) = {-
                     avs <- use assumptionVars
                     if Set.member x avs then return x else mzero
     assumptionVariable (WildCard _) = mzero
+consumeAssrt (AssrtOr sp a1 a2) =
+        consumeAssrt a1 `mplus` consumeAssrt a2
