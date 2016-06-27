@@ -3,7 +3,7 @@
 region Counter(r,x) {
   guards %INCREMENT * OWN;
   interpretation {
-    n >= 0 | n : k = 0 ? x |-> n &*& r@OWN : x |-> -1;
+    n >= 0 | n : x |-> n &*& r@OWN \/ x |-> -1;
   }
   actions {
     n >= 0, n < m | INCREMENT[_] * OWN : n ~> m;
