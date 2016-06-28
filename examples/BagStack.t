@@ -5,7 +5,7 @@ predicate bagInvariant(v);
 region Bag(r,x) {
   guards 0;
   interpretation {
-    0 : x |-> y &*& BagList(s,y,_,0) &*& s@OWN;
+    0 : x |-> head &*& BagList(bl,head,_,0) &*& bl@OWN;
   }
   actions {}
 }
@@ -13,8 +13,8 @@ region Bag(r,x) {
 region BagList(s,y,z) {
   guards OWN;
   interpretation {
-    0 : y = 0 ? true : y |-> v &*& (y + 1) |-> z &*& BagList(t,z,_,0) &*& t@OWN &*& bagInvariant(v);
-    1 : s@OWN &*& y |-> v &*& (y + 1) |-> z &*& BagList(t,z,_,_);
+    0 : y = 0 ? true : y |-> val &*& (y + 1) |-> z &*& BagList(nxtbl,z,_,0) &*& nxtbl@OWN &*& bagInvariant(val);
+    1 : s@OWN &*& y |-> val &*& (y + 1) |-> z &*& BagList(xtbl,z,_,_);
   }
   actions {
     OWN : 0 ~> 1;
@@ -37,7 +37,7 @@ function innerPush(x,y)
   t := [x];
   [y + 1] := t;
   cr := CAS(x,t,y);
-  if (cr != 1) {
+  if (cr = 0) {
     innerPush(x, y);
   }
 }
@@ -52,7 +52,7 @@ function pop(x)
   }
   t2 := [t + 1];
   cr := CAS(x,t,t2);
-  if (cr != 1) {
+  if (cr = 0) {
     ret := pop(x);
     return ret;
   }
