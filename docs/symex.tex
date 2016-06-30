@@ -508,6 +508,13 @@ The following reflects \textsc{Caper}'s current behaviour:
   }
   \and
   \inferrule{
+    g_1 \in \mathrm{full}(G_1) \\
+    g_2 \in \mathrm{full}(G_2)
+  }{
+    G_1 + G_2 \vdash g_2 \sim g_1
+  }
+  \and
+  \inferrule{
     G_1 \vdash g_1 \sim g_1'
   }{
     G_1 + G_2 \vdash g_1 \sim g_1'
@@ -536,5 +543,62 @@ The following reflects \textsc{Caper}'s current behaviour:
     \mathrm{consumeGuard}(G,g) : \vctx, h \rightsquigarrow \Gamma_1; \Gamma_2, f', \Rho_1; \Rho_2
   }
 \end{mathpar}
+
+\[
+  \inferrule{
+    \mathrm{dom}(\gamma) = S \\
+    \mathrm{range}(\gamma) = \Gamma \\
+    \forall x, y \in S \ldotp \gamma(x) = \gamma(y) \implies x = y \\
+    \Delta \cap \Gamma = \emptyset
+  }{
+    \mathrm{freshSub}(\Delta,\Gamma,S,\gamma)
+  }
+\]
+
+\begin{mathpar}
+  \inferrule{
+    \regs(r) = ((R, \bar{x}), s, g) \\
+    \Psi_\mathrm{I}(R) = \Set{ (\Rho_i,e_i,A_i) }_{i \in I} \\
+    \forall i \in I \ldotp \mathrm{freshSub}(\Delta,\Gamma_i,\mathrm{vars}(\Rho_i,e_i,A_i),\gamma_i) \\
+    \forall i \in I \ldotp \mathrm{produce}(A_i, \gamma_i) : \vctx; \Gamma_i, \pcnds; \sem{\Psi_\mathrm{P} (R)}_{\gamma_i} = (r, \bar{x}); s = \sem{e_i}_{\gamma_i}; \sem{\Rho_i}_{\gamma_i}, \preds, \regs \rightsquigarrow \mathbb{S}_i
+  }{
+    \mathrm{open}(r) : \vctx, \pcnds, \preds, \regs \rightsquigarrow \bigcup \Set{ \mathbb{S}_i}_{i \in I}
+  }
+
+  \inferrule{
+  }{
+    \mathrm{openRegions} : (\vctx, \pcnds, \preds, \regs, \bar{r}) \rightsquigarrow \Set{ (\vctx, \pcnds, \preds, \regs, \bar{r}) }
+  }
+
+  \inferrule{
+    s \notin \bar{r} \\
+    \mathrm{open}(s) : (\vctx, \pcnds, \preds, \regs) \rightsquigarrow \mathbb{S} \\
+    \forall (\vctx_1,\pcnds_1,\preds_1,\regs_1) \in \mathbb{S} \ldotp \exists \mathbb{S}_1 \ldotp \mathrm{openRegions} : (\vctx_1,\pcnds_1,\preds_1,\regs_1) \rightsquigarrow \mathbb{S}_1
+    \land \mathbb{S}_1 \subseteq \mathbb{S}_2
+  }{
+    \mathrm{openRegions} : (\vctx, \pcnds, \preds, \regs, \bar{r}) \rightsquigarrow \mathbb{S}_2
+  }
+
+  \inferrule{
+    \regs(r) = ((R,\bar{x}),s,g) \\
+    s' \notin \vctx \\
+    \Gamma = (s' : \mathbf{Val}) \\
+    \Rho = ((s,s') \in \mathrm{Guarantee}_\Psi (R(r,\bar{x}),g))
+  }{
+    \mathrm{update}(r,\vctx,\regs,\Gamma,\Rho, \regs[r \mapsto ((R,\bar{x}),s',g))
+  }
+
+  \inferrule{
+    \mathrm{openRegions} : (\vctx, \pcnds, \preds, \regs, \varepsilon) \rightsquigarrow \mathbb{S} \\
+    \forall (\vctx_1, \pcnds_1, \preds_1, \regs_1, \bar{r}) \in \mathbb{S} \ldotp \exists \mathbb{S}_1 \ldotp \mathrm{atomic}(\alpha) : (\vctx_1, \pcnds_1, \preds_1, \pvars) \rightsquigarrow \mathbb{S}_1 \\
+    \forall (\vctx_2,\pcnds_2,\preds_2,\pvars_2) \in \mathbb{S}_1 \ldotp \exists \mathbb{S}_2 \ldotp \mathrm{updateRegions}(\bar{r}) : (\vctx_2,\pcnds_2,\varepsilon,\varepsilon,\regs_1) \rightsquigarrow \mathbb{S}_2 \\
+    \forall (\vctx_3,\pcnds_3,\Gamma_3,\Rho_3,\regs_3) \in \mathbb{S}_2 \ldotp \exists \mathbb{S}_3 \ldotp \mathrm{closeRegions}(\bar{r}) : (\vctx_3,\pcnds_3,\Gamma_3,\Rho_3,\preds_2,\regs_3) \rightsquigarrow \mathbb{S}_3 \\
+    \forall (\vctx_4,\pcnds_4,\Gamma_4,\Rho_4,\preds_4,\regs_4) \in \mathbb{S}_3 \ldotp (\vctx_4, \pcnds_4 \vdash \Gamma_4, \Rho_4) \land (\vctx_4;\Gamma_4,\pcnds_4;\Rho_4,\preds_4,\regs_4,\pvars_2) \in \mathbb{S}_4
+  }{
+    \vdash \langle \alpha \rangle : (\vctx,\pcnds,\preds,\regs,\pvars) \rightsquigarrow \mathbb{S}_4
+  }
+\end{mathpar}
+
+
 
 \end{document}
