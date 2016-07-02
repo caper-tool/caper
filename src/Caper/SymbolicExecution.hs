@@ -15,6 +15,7 @@ import Caper.Utils.NondetClasses
 import qualified Caper.Utils.AliasingMap as AM
 
 import Caper.Constants
+import Caper.Contexts
 import Caper.ProverDatatypes
 import Caper.Exceptions
 import Caper.Logger
@@ -36,13 +37,13 @@ import Caper.DeductionFailure
 -}
 
 class (MonadRaise m, MonadIO m, MonadLogger m,
-        MonadReader r m, Provers r, RTCGetter r, PredicateLenses r, SpecificationContext r,
+        MonadReader r m, Provers r, RTCGetter r, PredicateLenses r, SpecificationContext r, Configuration r,
         MonadPlus m, MonadOrElse m, Failure DeductionFailure m, OnFailure DeductionFailure m,
         MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s r,
         RegionLenses s, MonadDemonic m, DebugState (WithAssertions s) r) => SymExMonad r s m
 
 instance (MonadRaise m, MonadIO m, MonadLogger m,
-        MonadReader r m, Provers r, RTCGetter r, PredicateLenses r, SpecificationContext r,
+        MonadReader r m, Provers r, RTCGetter r, PredicateLenses r, SpecificationContext r, Configuration r,
         MonadPlus m, MonadOrElse m, Failure DeductionFailure m, OnFailure DeductionFailure m,
         MonadState SymbState m, MonadDemonic m) => SymExMonad r SymbState m
 
@@ -73,9 +74,10 @@ localiseLogicalVars mop = do
 closeRegions :: SymExMonad r s m => m ()
 closeRegions = do
             savedLVars <- use logicalVars
+            rcl <- reader regionConstructionLimit
             -- TODO: this could be rewritten so that the updateState doesn't have to
             -- happen for regions that are created by the handler.
-            admitChecks $ (flip (localMultiRetry regionConstructionLimit) handler) $ do
+            admitChecks $ (flip (localMultiRetry rcl) handler) $ do
                 ors <- use openRegions
                 regs <- mapM updateState ors
                 mapM_ closeRegion regs
@@ -178,7 +180,7 @@ availableRegions = do
 atomicSymEx :: SymExMonad r s m =>
     m () -> m ()
 atomicSymEx aop = do
-        opnRegions regionOpenLimit -- TODO: Move this constant
+        opnRegions =<< reader regionOpenLimit
         aop
         closeRegions
     where
@@ -252,7 +254,10 @@ toSet = Set.fromList . toList
 
 missingRegionHandler :: (SymExMonad r s m) => m ()
 missingRegionHandler = --retry (liftIO $ putStrLn "registered missing region handler") handler >> retry (return ()) handler
-        (liftIO $ putStrLn "registered missing region handler") >> multiRetry regionConstructionLimit handler
+        do
+                liftIO $ putStrLn "registered missing region handler"
+                rcl <- reader regionConstructionLimit
+                multiRetry rcl handler
     where
         handler (MissingRegionByType rtid params st s) = Just $ do
                 liftIO $ putStrLn "invoked missing region handler"
@@ -485,7 +490,7 @@ symbolicExecute stmt cont = do
 
 checkProcedure ::
     (MonadRaise m, MonadIO m, MonadLogger m,
-        MonadReader r m, Provers r, RTCGetter r, PredicateLenses r, SpecificationContext r) =>
+        MonadReader r m, Provers r, RTCGetter r, PredicateLenses r, SpecificationContext r, Configuration r) =>
         FunctionDeclr -> m Bool
 checkProcedure fd@(FunctionDeclr sp n opre opost args s) =
         contextualise fd $ contextualise ("Checking procedure '" ++ n ++ "'") $ do
@@ -521,7 +526,7 @@ checkProcedure fd@(FunctionDeclr sp n opre opost args s) =
             
 verifyProcedure ::
     (MonadRaise m, MonadIO m, MonadLogger m,
-        MonadReader r m, Provers r, RTCGetter r, PredicateLenses r, SpecificationContext r) =>
+        MonadReader r m, Provers r, RTCGetter r, PredicateLenses r, SpecificationContext r, Configuration r) =>
         FunctionDeclr -> m ()        
 verifyProcedure fd = do
         res <- checkProcedure fd
@@ -530,6 +535,6 @@ verifyProcedure fd = do
 
 verifyProcedures ::
     (MonadRaise m, MonadIO m, MonadLogger m,
-        MonadReader r m, Provers r, RTCGetter r, PredicateLenses r, SpecificationContext r) =>
+        MonadReader r m, Provers r, RTCGetter r, PredicateLenses r, SpecificationContext r, Configuration r) =>
         [FunctionDeclr] -> m ()
 verifyProcedures = mapM_ verifyProcedure

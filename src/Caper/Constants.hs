@@ -12,8 +12,8 @@ module Caper.Constants(
     defaultPreconditionBool,
     defaultPostconditionBool,
     programVariableSupersedesLogicalVariable,
-    regionConstructionLimit,
-    regionOpenLimit
+    defaultRegionConstructionLimit,
+    defaultRegionOpenLimit
 )
  where
 
@@ -81,12 +81,12 @@ programVariableSupersedesLogicalVariable = True
 -- |This limits how many regions may be constructed in consuming an
 -- assertion.  Setting this too high may slow down failing proof
 -- searches without benefit.
-regionConstructionLimit :: Int
-regionConstructionLimit = 2
+defaultRegionConstructionLimit :: Int
+defaultRegionConstructionLimit = 2
 
 -- |This limits how many regions may be opened when performing an
 -- atomic operation.  Setting this too high may slow down failing
 -- proof searches without benefit.  Setting it too low may of course
 -- cause some proof searches that should succeed to fail.
-regionOpenLimit :: Int
-regionOpenLimit = 3
+defaultRegionOpenLimit :: Int
+defaultRegionOpenLimit = 2

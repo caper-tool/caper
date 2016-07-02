@@ -4,13 +4,30 @@ module Caper.Contexts where
 import Control.Lens
 import Data.Map (Map)
 
+import Caper.Constants
 import Caper.ProverDatatypes
 import Caper.ExceptionContext
 import Caper.RegionTypes
 import Caper.Procedures
 import Caper.Predicates
- 
+
+data ConfigurationContext = ConfigurationContext {
+        ccRegionConstructionLimit :: Int,
+        ccRegionOpenLimit :: Int
+        }
+
+class Configuration c where
+        regionConstructionLimit :: c -> Int
+        regionOpenLimit :: c -> Int
+
+defaultConfiguration :: ConfigurationContext
+defaultConfiguration = ConfigurationContext {
+        ccRegionConstructionLimit = defaultRegionConstructionLimit,
+        ccRegionOpenLimit = defaultRegionOpenLimit
+        }
+
 data ProcedureContext = ProcedureContext {
+        _pcConfigurationContext :: ConfigurationContext,
         _pcSpecificationContext :: Map String Specification,  
         _pcRegionTypeContext :: RegionTypeContext,
         _pcPredicateContext :: PredicateContext,
@@ -18,6 +35,10 @@ data ProcedureContext = ProcedureContext {
         _pcExceptionContext :: [ExceptionContext]
         }
 makeLenses ''ProcedureContext
+
+instance Configuration ProcedureContext where
+        regionConstructionLimit = ccRegionConstructionLimit . _pcConfigurationContext
+        regionOpenLimit = ccRegionOpenLimit . _pcConfigurationContext
 
 instance SpecificationContext ProcedureContext where
         specifications = pcSpecificationContext
