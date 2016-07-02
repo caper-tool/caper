@@ -585,7 +585,40 @@ The following reflects \textsc{Caper}'s current behaviour:
     \Gamma = (s' : \mathbf{Val}) \\
     \Rho = ((s,s') \in \mathrm{Guarantee}_\Psi (R(r,\bar{x}),g))
   }{
-    \mathrm{update}(r,\vctx,\regs,\Gamma,\Rho, \regs[r \mapsto ((R,\bar{x}),s',g))
+    \mathrm{update}(r,\vctx,\regs,\Gamma,\Rho, \regs[r \mapsto ((R,\bar{x}),s',g)])
+  }
+
+  \inferrule{
+  }{
+    \mathrm{updateRegions}(\varepsilon, \vctx,\regs,\varepsilon,\varepsilon,\regs)
+  }
+
+  \inferrule{
+    \mathrm{update}(r_0,\vctx,\regs,\Gamma,\Rho,\regs') \\
+    \mathrm{updateRegions}(\bar{r},\vctx;\Gamma,\regs',\Gamma',\Rho',\regs'')
+  }{
+    \mathrm{updateRegions}(r_0; \bar{r},\vctx,\regs,\Gamma;\Gamma',\Rho;\Rho',\regs'')
+  }
+
+  \inferrule{
+    \regs(r) = ((R,\bar{x}),s,g) \\
+    (\Rho_0, e_0, A_0) \in \Psi_\mathrm{I}(R) \\
+    \mathrm{freshSub}(\vctx;\Gamma,\Gamma_0,\mathrm{vars}(\Rho_0,e_0,A_0),\gamma) \\
+    \mathrm{consume}(A_0,\gamma) : (\vctx,\pcnds,\Gamma;\Gamma_0,\Rho;\sem{\Psi_\mathrm{P}(R)}_\gamma = (r,\bar{x}); s = \sem{e_0}_\gamma; \sem{\Rho_0}_\gamma, \preds, \regs) \rightsquigarrow \mathbb{S}
+  }{
+    \mathrm{close}(r) : (\vctx,\pcnds,\Gamma,\Rho,\preds,\regs) \rightsquigarrow \mathbb{S}
+  }
+
+  \inferrule{
+  }{
+    \mathrm{closeRegions}(\varepsilon) : S \rightsquigarrow \Set{ S }
+  }
+
+  \inferrule{
+    \mathrm{close}(r_0) : (\vctx,\pcnds,\Gamma,\Rho,\preds,\regs) \rightsquigarrow \Set{S_i}_{i \in I}
+    \forall i \in I \ldotp \mathrm{closeRegions}(\bar{r}) : S_i \rightsquigarrow \mathbb{S}_i
+  }{
+    \mathrm{closeRegions}(r_0; \bar{r}) : (\vctx,\pcnds,\Gamma,\Rho,\preds,\regs) \rightsquigarrow \bigcup \Set{\mathbb{S}_i}_{i \in I}
   }
 
   \inferrule{
