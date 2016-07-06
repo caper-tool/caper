@@ -1,7 +1,7 @@
 // NAME: Region in region 3/Guarantee
-// RESULT: REJECT
+// RESULT: ACCEPT
 
-/* DESCRIPTION: We can't use FOO to go from state 1 to 0, when FOO is in the region.
+/* DESCRIPTION: We can use FOO to go from state 1 to 0, when FOO is in the region.
 */
 
 region Ra(r,x) {

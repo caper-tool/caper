@@ -87,7 +87,11 @@ closeRegions = do
             logicalVars .= savedLVars
             openRegions .= []
         where
-            updateState OpenRegion{oregID=rid,oregType=rt,oregParams=ps,oregParamLVars=plstate,oregInitialGuard=gd,oregInitialState=st0} = do
+            updateState OpenRegion{oregID=rid,oregType=rt,oregParams=ps,oregParamLVars=plstate,oregInitialGuard=gd0,oregInitialState=st0} = do
+                regs <- use regions
+                gd <- case AM.lookup rid regs of
+                        Nothing -> error $ "closeRegions: Unable to resolve region identifier '" ++ show rid ++ "'"
+                        Just (Region {regGuards = gd}) -> return gd
                 st1 <- liftM var $ newEvar $ show rid ++ "state"
                 guarCond <- generateGuaranteeCondition rt ps gd st0 st1
                 assertTrue guarCond
@@ -192,10 +196,13 @@ atomicSymEx aop = do
     where
         opnRegions n
             | n <= 0 = return ()
-            | otherwise = return () `mplus` do
-                            ars <- availableRegions
-                            msum [openRegion r | r <- ars]
-                            opnRegions (n - 1)
+            | otherwise = opnRegions (n - 1) `mplus` oRegions n
+        oRegions n
+            | n <= 0 = return ()
+            | otherwise = do
+                        ars <- availableRegions
+                        msum [openRegion r | r <- ars]
+                        oRegions (n - 1)            
 
 {-
 atomicSymEx :: (SymExMonad r s m) =>

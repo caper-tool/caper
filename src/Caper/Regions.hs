@@ -111,21 +111,25 @@ mergeRegions r1 r2 = do
 --
 -- Pre: the number and type of arguments should have been checked (otherwise an error may arise).
 produceMergeRegion :: (MonadState s m, AssumptionLenses s, RegionLenses s,
-                MonadReader r m, RTCGetter r,
+                MonadReader r m, RTCGetter r, MonadIO m,
                 MonadDemonic m) =>
                 VariableID -> Region -> m ()
 produceMergeRegion rvar region = do
                 regs <- use regions
                 let rs = AM.toRootList regs
+                liftIO $ putStrLn $ "MERGEABLES: " ++ show (map fst rs)
                 case AM.lookup rvar regs of
                         Nothing -> (do
+                                liftIO $ putStrLn $ "NOT MERGE " ++ show rvar
                                 regions .= AM.insert rvar region regs
                                 forM_ rs (assume . DisequalityCondition rvar . fst)
                                 ) <#>
                             dAll [(do
+                                liftIO $ putStrLn $ "TRY MERGE: " ++ show rvar ++ ", " ++ show rid
                                 assume $ EqualityCondition rvar rid
                                 r' <- mergeRegions r region
-                                regions .= AM.overwrite rid r' regs
+                                regions .= (AM.addAlias rvar rid) (AM.overwrite rid r' regs)
+                                liftIO $ putStrLn $ "MERGED"
                                 ) | (rid, r) <- rs]
                         (Just r) -> do
                                 r' <- mergeRegions r region
