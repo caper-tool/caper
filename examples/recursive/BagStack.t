@@ -1,4 +1,4 @@
-// Bag
+// Stack-based bag
 
 predicate bagInvariant(v);
 
@@ -14,7 +14,7 @@ region BagList(s,y,z) {
   guards OWN;
   interpretation {
     0 : y = 0 ? true : y |-> val &*& (y + 1) |-> z &*& BagList(nxtbl,z,_,0) &*& nxtbl@OWN &*& bagInvariant(val);
-    1 : s@OWN &*& y |-> val &*& (y + 1) |-> z &*& BagList(nxtbl,z,_,_);
+    1 : s@OWN &*& y |-> val &*& (y + 1) |-> z &*& BagList(xtbl,z,_,_);
   }
   actions {
     OWN : 0 ~> 1;
@@ -59,3 +59,4 @@ function pop(x)
   ret := [t];
   return ret;
 }
+
