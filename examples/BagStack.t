@@ -1,20 +1,21 @@
 // Stack-based bag
+// Requires flags: -c 1 -o 3
 
 predicate bagInvariant(v);
 
 region Bag(r,x) {
   guards 0;
   interpretation {
-    0 : x |-> head &*& BagList(bl,head,_,0) &*& bl@OWN;
+    0 : x |-> head &*& BagList(bl,head,_,_,0) &*& bl@OWN;
   }
   actions {}
 }
 
-region BagList(s,y,z) {
+region BagList(s,y,val,z) {
   guards OWN;
   interpretation {
-    0 : y = 0 ? true : y |-> val &*& (y + 1) |-> z &*& BagList(nxtbl,z,_,0) &*& nxtbl@OWN &*& bagInvariant(val);
-    1 : s@OWN &*& y |-> val &*& (y + 1) |-> z &*& BagList(xtbl,z,_,_);
+    0 : y = 0 ? true : y |-> val &*& (y + 1) |-> z &*& BagList(nxtbl,z,_,_,0) &*& nxtbl@OWN &*& bagInvariant(val);
+    1 : s@OWN &*& y |-> val &*& (y + 1) |-> z &*& BagList(nxtbl,z,_,_,_);
   }
   actions {
     OWN : 0 ~> 1;
@@ -51,7 +52,7 @@ function pop(x)
     return 0;
   }
   t2 := [t + 1];
-  cr := CAS(x,t,t2);
+  cr := popCAS(x,t,t2);
   if (cr = 0) {
     ret := pop(x);
     return ret;
@@ -60,3 +61,10 @@ function pop(x)
   return ret;
 }
 
+function popCAS(x,t,t2)
+  requires Bag(r,x,0) &*& BagList(rt,t,v,t2,_) &*& BagList(rt2,t2,_,_,_) &*& t != 0;
+  ensures ret = 0 \/ bagInvariant(v);
+{
+  cr := CAS(x,t,t2);
+  return cr;
+}
