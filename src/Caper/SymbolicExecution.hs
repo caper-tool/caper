@@ -73,14 +73,17 @@ localiseLogicalVars mop = do
 
 closeRegions :: SymExMonad r s m => m ()
 closeRegions = do
+            liftIO $ putStrLn $ "CLOSING REGIONS"
             savedLVars <- use logicalVars
             rcl <- reader regionConstructionLimit
             -- TODO: this could be rewritten so that the updateState doesn't have to
             -- happen for regions that are created by the handler.
-            admitChecks $ (flip (localMultiRetry rcl) handler) $ do
+            admitChecks $ (flip (scopedMultiRetry rcl) handler) $ do
                 ors <- use openRegions
+                liftIO $ putStrLn $ "CLOSING REGIONS: " ++ show (map oregID ors)
                 regs <- mapM updateState ors
                 mapM_ closeRegion regs
+            liftIO $ putStrLn $ "CLOSED REGIONS"
             logicalVars .= savedLVars
             openRegions .= []
         where
@@ -181,7 +184,10 @@ atomicSymEx :: SymExMonad r s m =>
     m () -> m ()
 atomicSymEx aop = do
         opnRegions =<< reader regionOpenLimit
+        ors <- use openRegions
+        liftIO $ putStrLn $ "OPENED REGIONS: " ++ show (map oregID ors)
         aop
+        liftIO $ putStrLn $ "STILL OPENED REGIONS: " ++ show (map oregID ors)
         closeRegions
     where
         opnRegions n
