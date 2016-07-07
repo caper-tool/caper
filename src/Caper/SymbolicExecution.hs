@@ -250,6 +250,7 @@ createRegionWithParams rtid params st = do
             liftIO $ putStrLn $ "*** Constructing with interp " ++ show interp'
             -- Assert that we are in this interpretation
             st1 <- consumeValueExpr (siState interp')
+            assertEqual st st1
             forM_ (siConditions interp') consumePure
             regions %= AM.insert rid Region {
                 regDirty = True,
