@@ -2,18 +2,18 @@
 
 predicate bagInvariant(v);
 
-region Bag(r,x) {
+region Tree(r,x) {
   guards 0;
   interpretation {
-    0 : x |-> head &*& BagList(bl,head,_,0) &*& bl@OWN;
+    0 : x |-> head &*& TreeNode(bl,head,_,0) &*& bl@OWN;
   }
   actions {}
 }
 
-region BagList(s,y,z) {
+region TreeNode(s,y,z) {
   guards OWN;
   interpretation {
-    0 : y = 0 ? true : y |-> val &*& (y + 1) |-> z &*& BagList(nxtbl,z,_,0) &*& nxtbl@OWN &*& bagInvariant(val);
+    0 : y = 0 ? true : y |-> val &*& (y + 1) |-> z &*& Node(t,z,_,0) &*& t@OWN &*& bagInvariant(val);
     1 : s@OWN &*& y |-> val &*& (y + 1) |-> z &*& BagList(xtbl,z,_,_);
   }
   actions {
