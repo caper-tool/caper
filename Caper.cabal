@@ -136,19 +136,3 @@ executable RunTests
                    containers >= 0.5
   hs-source-dirs:  Tests
   main-is:         RunTests.hs
-
-test-suite IntegrationTests
-  type:            detailed-0.9
-  ghc-options:     -Wall -rtsopts -threaded
-  build-depends:   base >= 4,
-                   template-haskell >=2.8,
-                   directory >= 1.2,
-                   text >= 1.1,
-                   filepath >= 1.3,
-                   shelly >= 1.6,
-                   containers >= 0.5,
-                   Cabal >= 1.9.2
-  hs-source-dirs:  testsuite/runtests
---  main-is:         RunTests.hs
-  test-module:     RunTests
-
