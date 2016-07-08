@@ -105,8 +105,9 @@ caperCommand (CLVerify file verb rol rcl) = do
                 logEvent $ InfoEvent "Validating region declarations."
                 checkRegionTypeContextInterpretations
                 -- FIXME: Add check that transitions are well-formed (guards are valid)
-                logEvent $ InfoEvent "Verifying procedures."
-                verifyProcedures funDecs
+                localWithDistinctionConditions $ do
+                        logEvent $ InfoEvent "Verifying procedures."
+                        verifyProcedures funDecs
         case result of
             Right () -> putStrLn "ACCEPTED"
             Left (context, exception) -> do
