@@ -11,7 +11,7 @@ region Qu(s,p) {
   actions {}
 }
 
-region QL(r,x,val) {
+region QL(r,x,v) {
   guards OWN * LIVE;
   interpretation {
     n > 0 | -(n + 1) : x |-> v &*& (x+1) |-> n &*& r@(OWN) &*& QL(rn,n,_,_);
@@ -29,7 +29,7 @@ region QL(r,x,val) {
 
 function dequeueCAS(q,sentinel,head)
   requires Qu(s,q,0) &*& QL(rs,sentinel,_,-(head+1)) &*& head > 0;
-  ensures r = 0 \/ (QL(rh,head,v,_) &*& queueInvariant(v));
+  ensures ret = 0 \/ (QL(rh,head,v,_) &*& queueInvariant(v));
 
 {
   r := CAS(q,sentinel,head);
