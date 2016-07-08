@@ -54,12 +54,13 @@ data RegionType = RegionType
         {
                 rtSourcePos :: SourcePos,
                 rtRegionTypeName :: String,
-                rtParameters :: [(RTDVar, VariableType)],
+                rtParameters :: [(RTDVar, VariableType)],  -- INCLUDING region identifier
                 rtGuardType :: AST.TopLevelGuardDeclr,
                 rtStateSpace :: StateSpace,
                 rtTransitionSystem :: [TransitionRule],
                 rtIsTransitive :: Bool,
-                rtInterpretation :: [AST.StateInterpretation]
+                rtInterpretation :: [AST.StateInterpretation],
+                rtDistinctionCondition :: (Maybe ([Expr VariableID] -> [Expr VariableID] -> [Condition VariableID]))
         }
 
 instance Contextual RegionType where
@@ -67,7 +68,7 @@ instance Contextual RegionType where
                 "In a region type declaration named '" ++ rtRegionTypeName rt ++ "'"
 
 instance Show RegionType where
-        show (RegionType _ nm params gt ss ts _ interp) =
+        show (RegionType _ nm params gt ss ts _ interp _) =
                 "region " ++ nm ++ "(" ++ intercalate "," (map (show . fst) params) ++ ") {\n" ++
                 "  guards : " ++ show gt ++ "\n" ++
                 "  transitions {\n    " ++ intercalate "\n    " (map show ts) ++ "\n  }\n" ++
@@ -166,7 +167,7 @@ emptyRegionTypeContext :: RegionTypeContext
 emptyRegionTypeContext = RegionTypeContext Map.empty Map.empty
 
 class RTCGetter a where
-        theRTContext :: Getter a RegionTypeContext
+        theRTContext :: Simple Lens a RegionTypeContext
         resolveRTName :: Getter a (String -> Maybe RTId)
         resolveRTName = to $ \c s -> Map.lookup s (rtcIds (c ^. theRTContext))
         resolveRType :: Getter a (RTId -> RegionType)
@@ -196,7 +197,7 @@ lookupRTNameE s = do
                 (Just rtid) -> return rtid
 
 instance RTCGetter RegionTypeContext where
-        theRTContext = to id
+        theRTContext = id
 
 createRegionTypeContext :: [RegionType] -> RegionTypeContext
 createRegionTypeContext = crtcs 0 emptyRegionTypeContext
@@ -266,7 +267,7 @@ declrsToRegionTypeContext declrs typings = do
                     -- precondition for this)
                     let !stateSpace = computeStateSpace interps
                     transitions <- mapM (actionToTransitionRule (map fst params)) acts
-                    let rt0 = RegionType sp rtnam params gddec stateSpace transitions False interps
+                    let rt0 = RegionType sp rtnam params gddec stateSpace transitions False interps Nothing
                     isTrans <- isTransitive rt0
                     let rt = rt0 { rtIsTransitive = isTrans }
                     accumulate typings (nextRTId + 1)

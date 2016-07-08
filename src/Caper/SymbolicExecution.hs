@@ -552,3 +552,51 @@ verifyProcedures ::
         MonadReader r m, Provers r, RTCGetter r, PredicateLenses r, SpecificationContext r, Configuration r) =>
         [FunctionDeclr] -> m ()
 verifyProcedures = mapM_ verifyProcedure
+
+generateRegionDistinctionCondition ::
+    (MonadRaise m, MonadIO m, MonadLogger m,
+        MonadReader r m, Provers r, RTCGetter r, PredicateLenses r, SpecificationContext r, Configuration r) =>
+        RTId -> m (Maybe ([Expr VariableID] -> [Expr VariableID] -> [Condition VariableID]))
+generateRegionDistinctionCondition rtid = do
+        rt <- lookupRType rtid
+        ((id1,id2,args), sstate) <- flip runStateT emptySymbState $ do
+                ((id1,id2) : args) <- forM (rtParameters rt) $ \(param, ptype) -> do
+                        av1 <- newAvar (varToString param)
+                        av2 <- newAvar (varToString param)
+                        bindVarsAs [av1, av2] ptype
+                        return (av1, av2)
+                s1 <- newAvar "state"
+                s2 <- newAvar "state"
+                bindVarsAs [s1,s2] VTValue
+                let args1 = map (var . fst) args
+                let args2 = map (var . snd) args
+                regions %= (AM.insert id1 (Region False (Just $ RegionInstance rtid args1) (Just (var s1)) emptyGuard)) .
+                        (AM.insert id2 (Region False (Just $ RegionInstance rtid args2) (Just (var s2)) emptyGuard))
+                assume $ DisequalityCondition id1 id2
+                return (id1,id2,args)
+        distincts <- forM args $ \(a1,a2) -> runAlternatingTD $ flip evalStateT sstate $ do
+                openRegion id1
+                openRegion id2
+                check $ do
+                        assert $ DisequalityCondition a1 a2
+        let ds = map isJust distincts
+        liftIO $ do
+                putStrLn $ "Distinction check for " ++ (rtRegionTypeName rt)
+                print ds
+        return $ Just $ fromDistincts ds
+    where
+        fromDistincts [] _ _ = []
+        fromDistincts (True:ds) (e1:e1s) (e2:e2s) = (negativeCondition $ exprEquality e1 e2): fromDistincts ds e1s e2s
+        fromDistincts (False:ds) (e1:e1s) (e2:e2s) = fromDistincts ds e1s e2s
+        fromDistincts _ _ _ = error $ "generateDistinctionCondition/fromDistincts: Insufficient arguments."
+
+localWithDistinctionConditions ::
+    (MonadRaise m, MonadIO m, MonadLogger m,
+        MonadReader r m, Provers r, RTCGetter r, PredicateLenses r, SpecificationContext r, Configuration r) =>
+        m a -> m a
+localWithDistinctionConditions a = do
+        rtc0 <- view theRTContext
+        rts1 <- iforM (rtcRegionTypes rtc0) $ \rtid rt -> do
+                rdc <- generateRegionDistinctionCondition rtid
+                return $ rt {rtDistinctionCondition = rdc}
+        local (theRTContext %~ \rtc -> rtc {rtcRegionTypes = rts1}) a

@@ -4,6 +4,7 @@ module Caper.Regions where
 import Prelude hiding (mapM_,mapM,concat,any,foldl,concatMap,foldr)
 import Control.Monad.State hiding (mapM_,mapM,forM_,msum)
 import Control.Monad.Reader hiding (mapM_,mapM,forM_,msum)
+import Control.Monad.Trans.Maybe
 import Control.Lens hiding (op)
 import Data.Foldable
 import Data.Traversable
@@ -29,7 +30,7 @@ import Caper.Transitions
 
 data RegionInstance = RegionInstance {
         riType :: RTId,
-        riParameters :: [Expr VariableID]
+        riParameters :: [Expr VariableID]  -- EXCLUDING region identifier
 }
 
 data Region = Region {
@@ -104,32 +105,39 @@ mergeRegions r1 r2 = do
                         _ -> return ()
                 return $ Region dirty ti s g
 
-
 -- FIXME: Add bound information!
 -- | Add a region, or merge it if one already exists with the same identifier.
 -- Performs case analysis on whether the region is the same as an existing one.
 --
 -- Pre: the number and type of arguments should have been checked (otherwise an error may arise).
 produceMergeRegion :: (MonadState s m, AssumptionLenses s, RegionLenses s,
-                MonadReader r m, RTCGetter r, MonadIO m,
+                MonadReader r m, RTCGetter r, --MonadIO m,
                 MonadDemonic m) =>
                 VariableID -> Region -> m ()
 produceMergeRegion rvar region = do
                 regs <- use regions
                 let rs = AM.toRootList regs
-                liftIO $ putStrLn $ "MERGEABLES: " ++ show (map fst rs)
+                --liftIO $ putStrLn $ "MERGEABLES: " ++ show (map fst rs)
                 case AM.lookup rvar regs of
                         Nothing -> (do
-                                liftIO $ putStrLn $ "NOT MERGE " ++ show rvar
+                                --liftIO $ putStrLn $ "NOT MERGE " ++ show rvar
                                 regions .= AM.insert rvar region regs
                                 forM_ rs (assume . DisequalityCondition rvar . fst)
+                                _ <- runMaybeT $ do
+                                    (RegionInstance rtid args) <- chooseFrom $ regTypeInstance region
+                                    rt <- lookupRType rtid
+                                    dc <- chooseFrom $ rtDistinctionCondition rt
+                                    forM_ rs $ \(_, rg) -> runMaybeT $ do
+                                        (RegionInstance rtid' args') <- chooseFrom $ regTypeInstance rg
+                                        when (rtid == rtid') $ mapM_ assume $ dc args args'
+                                return ()       
                                 ) <#>
                             dAll [(do
-                                liftIO $ putStrLn $ "TRY MERGE: " ++ show rvar ++ ", " ++ show rid
+                                --liftIO $ putStrLn $ "TRY MERGE: " ++ show rvar ++ ", " ++ show rid
                                 assume $ EqualityCondition rvar rid
                                 r' <- mergeRegions r region
                                 regions .= (AM.addAlias rvar rid) (AM.overwrite rid r' regs)
-                                liftIO $ putStrLn $ "MERGED"
+                                --liftIO $ putStrLn $ "MERGED"
                                 ) | (rid, r) <- rs]
                         (Just r) -> do
                                 r' <- mergeRegions r region

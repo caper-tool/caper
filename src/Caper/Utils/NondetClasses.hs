@@ -51,8 +51,8 @@ liftMaybe :: (MonadPlus m) => Maybe a -> m a
 liftMaybe (Just x) = return x
 liftMaybe Nothing = mzero
 
-chooseFrom :: (MonadPlus m) => [a] -> m a
-chooseFrom = msum . map return
+chooseFrom :: (Functor t, Foldable t, MonadPlus m) => t a -> m a
+chooseFrom = msum . fmap return
 
 {-
 {- |Record the current state; execute the first computation; revert to the saved state;
