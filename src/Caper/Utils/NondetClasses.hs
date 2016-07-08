@@ -1,6 +1,7 @@
 {-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
 module Caper.Utils.NondetClasses where
 
+import Data.Foldable
 import Control.Monad
 import Control.Monad.State
 import Control.Applicative
