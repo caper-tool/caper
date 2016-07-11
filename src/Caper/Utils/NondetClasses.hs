@@ -55,6 +55,12 @@ liftMaybe Nothing = mzero
 chooseFrom :: (Functor t, Foldable t, MonadPlus m) => t a -> m a
 chooseFrom = msum . fmap return
 
+class (Monad m) => MonadLabel m where
+        label :: String -> m ()
+
+instance (MonadLabel m) => MonadLabel (StateT s m) where
+        label = lift . label
+
 {-
 {- |Record the current state; execute the first computation; revert to the saved state;
     execute the second computation.  

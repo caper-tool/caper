@@ -84,6 +84,7 @@ import Control.Applicative
 import Data.Foldable
 import Control.Lens
 import Data.List (intercalate)
+import Data.Maybe
 
 import Caper.Utils.NondetClasses
 
@@ -649,6 +650,7 @@ valueCheck f = do
                 p <- ask
                 r <- liftIO $ valueProver p sf
                 logEvent $ ProverResult r
+                when (isNothing r) $ logEvent $ WarnProverNoAnswer "value"
                 return r
 
 -- |Check a first-order permissions formula (generating the appropriate logging events)
@@ -660,6 +662,7 @@ permissionCheck f = do
                 p <- ask
                 r <- liftIO $ permissionsProver p sf
                 logEvent $ ProverResult r
+                when (isNothing r) $ logEvent $ WarnProverNoAnswer "permissions"
                 return r
 
 

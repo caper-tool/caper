@@ -89,6 +89,8 @@ instance MonadHoist ChoiceM where
         hoist f (OrElse c1 c2 cont) = OrElse (hoist f c1) (hoist f c2) (hoist f . cont)
         hoist f (Cut c) = Cut (hoist f c)
 
+instance Monad m => MonadLabel (ChoiceM m) where
+        label _ = return ()
 
 firstChoiceT :: Monad m => ChoiceM m a -> MaybeT m a
 firstChoiceT = MaybeT . firstChoice

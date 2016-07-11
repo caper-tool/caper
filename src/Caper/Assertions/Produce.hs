@@ -33,11 +33,11 @@ import Caper.Predicates (PredicateLenses)
 
 class (MonadState s m, AssumptionLenses s, RegionLenses s, SymbStateLenses s,
         MonadReader r m, RTCGetter r, PredicateLenses r,
-        MonadRaise m, MonadDemonic m, MonadIO m) => ProduceMonad r s m
+        MonadRaise m, MonadDemonic m, MonadIO m, MonadLabel m) => ProduceMonad r s m
 
 instance (MonadState s m, AssumptionLenses s, RegionLenses s, SymbStateLenses s,
         MonadReader r m, RTCGetter r, PredicateLenses r,
-        MonadRaise m, MonadDemonic m, MonadIO m) => ProduceMonad r s m        
+        MonadRaise m, MonadDemonic m, MonadIO m, MonadLabel m) => ProduceMonad r s m        
 
 
 -- |Given a syntactic pure assertion, produce it by adding it as an assumption.
@@ -182,12 +182,13 @@ produceAssrt dirty (AssrtConj sp a1 a2) = produceAssrt dirty a1 >>
                                         produceAssrt dirty a2
 produceAssrt dirty (AssrtITE sp c a1 a2) =
   (do
-    liftIO (putStrLn $ "*** case: " ++ show c)
+    label $ "case: " ++ show c
     producePure c 
     produceAssrt dirty a1) <#>
           (do
-            liftIO (putStrLn $ "*** case: " ++ show (NotBAssrt sp c))
+            label $ "case: " ++ show (NotBAssrt sp c)
             producePure (NotBAssrt sp c)
             produceAssrt dirty a2)
 produceAssrt dirty (AssrtOr sp a1 a2) =
-  produceAssrt dirty a1 <#> produceAssrt dirty a2
+  (label ("left case: " ++ show a1) >> produceAssrt dirty a1)
+  <#> (label ("right case: " ++ show a2) >> produceAssrt dirty a2)

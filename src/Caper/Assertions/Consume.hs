@@ -31,12 +31,12 @@ import Caper.Assertions.Check
 class (MonadState s m, AssertionLenses s, RegionLenses s, SymbStateLenses s,
     MonadReader r m, RTCGetter r, PredicateLenses r, Provers r, DebugState s r,
     MonadRaise m, MonadLogger m, MonadPlus m, MonadOrElse m, Failure DeductionFailure m, MonadDemonic m,
-    MonadIO m) => ConsumeMonad r s m
+    MonadIO m, MonadLabel m) => ConsumeMonad r s m
 
 instance (MonadState s m, AssertionLenses s, RegionLenses s, SymbStateLenses s,
     MonadReader r m, RTCGetter r, PredicateLenses r, Provers r, DebugState s r,
     MonadRaise m, MonadLogger m, MonadPlus m, MonadOrElse m, Failure DeductionFailure m, MonadDemonic m,
-    MonadIO m) => ConsumeMonad r s m
+    MonadIO m, MonadLabel m) => ConsumeMonad r s m
 
 {-
         At some point, this whole module should probably be rewritten.
@@ -69,7 +69,7 @@ consumeVariable (WildCard _) =
 -- XXX: This is probably only used for named variables (no wildcards) so
 -- perhaps it would be wise to specialise it.
 consumeRegionVariable :: (MonadState s m, AssertionLenses s, SymbStateLenses s,
-        RegionLenses s, MonadPlus m, MonadRaise m) =>
+        RegionLenses s, MonadPlus m, MonadRaise m, MonadLabel m) =>
                 VarExpr -> m VariableID -> m VariableID
 consumeRegionVariable (Variable _ vname) fallback = do
         v <- use (SS.logicalVars . at vname)
@@ -77,6 +77,7 @@ consumeRegionVariable (Variable _ vname) fallback = do
                 Nothing -> do
                         -- Choose a known region
                         rv <- (chooseFrom =<< R.regionList) `mplus` fallback
+                        label $ "bind " ++ show vname ++ " as " ++ show rv
                         SS.logicalVars . at vname ?= rv
                         return rv
                 Just x -> do
@@ -84,7 +85,10 @@ consumeRegionVariable (Variable _ vname) fallback = do
                         -- bound then we try to unify with known regions.
                         bindVarAsE x VTRegionID
                         return x
-consumeRegionVariable (WildCard _) fallback = (chooseFrom =<< R.regionList) `mplus` fallback
+consumeRegionVariable (WildCard _) fallback = do
+        rv <- (chooseFrom =<< R.regionList) `mplus` fallback
+        label $ "bind region identifier as " ++ show rv
+        return rv
 
 consumeValueExpr :: (MonadState s m, AssertionLenses s, SymbStateLenses s,
         MonadRaise m) =>
@@ -129,7 +133,7 @@ consumePure = consumePure' False
 -}
 
 consumeCell :: (MonadPlus m, MonadState s m, AssertionLenses s,
-        SymbStateLenses s, MonadRaise m, MonadLogger m) =>
+        SymbStateLenses s, MonadRaise m, MonadLogger m, MonadLabel m) =>
         CellAssrt -> m ()
 -- Note: it shouldn't be necessary to check the number and type of arguments
 -- after the call to generateCellPred.
@@ -206,22 +210,22 @@ consumeAssrt (AssrtITE sp c a1 a2) = {-
             succeedIfInconsistent
             consumeAssrt a2)) `mplus` -}
       (do
-        liftIO $ putStrLn $ "*** asserting case " ++ show c
+        label $ "assert case " ++ show c
         consumePure c
         consumeAssrt a1) `mplus`
       (do
-        liftIO $ putStrLn $ "*** asserting case " ++ show (NotBAssrt sp c)
+        label $ "assert case " ++ show (NotBAssrt sp c)
         consumePure (NotBAssrt sp c)
         consumeAssrt a2) `mplus`
       (do
         a <- generatePure assumptionVariable c
-        liftIO $ putStrLn "*** performing case split"
+        label $ "case split"
         (do
-            liftIO $ putStrLn $ "*** case " ++ show c
+            label $ "case " ++ show c
             assumeE a
             consumeAssrt a1) <#>
           (do
-            liftIO $ putStrLn $ "*** case " ++ show (NotBAssrt sp c)
+            label $ "*** case " ++ show (NotBAssrt sp c)
             assumeFalseE a
             consumeAssrt a2))
   where
@@ -234,4 +238,5 @@ consumeAssrt (AssrtITE sp c a1 a2) = {-
                     if Set.member x avs then return x else mzero
     assumptionVariable (WildCard _) = mzero
 consumeAssrt (AssrtOr sp a1 a2) =
-        consumeAssrt a1 `mplus` consumeAssrt a2
+        (label ("left case: " ++ show a1) >> consumeAssrt a1)
+        `mplus` (label ("right case: " ++ show a2) >> consumeAssrt a2)

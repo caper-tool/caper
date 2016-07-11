@@ -112,7 +112,7 @@ mergeRegions r1 r2 = do
 -- Pre: the number and type of arguments should have been checked (otherwise an error may arise).
 produceMergeRegion :: (MonadState s m, AssumptionLenses s, RegionLenses s,
                 MonadReader r m, RTCGetter r, --MonadIO m,
-                MonadDemonic m) =>
+                MonadDemonic m, MonadLabel m) =>
                 VariableID -> Region -> m ()
 produceMergeRegion rvar region = do
                 regs <- use regions
@@ -121,6 +121,7 @@ produceMergeRegion rvar region = do
                 case AM.lookup rvar regs of
                         Nothing -> (do
                                 --liftIO $ putStrLn $ "NOT MERGE " ++ show rvar
+                                label $ "region " ++ show rvar ++ " is fresh"
                                 regions .= AM.insert rvar region regs
                                 forM_ rs (assume . DisequalityCondition rvar . fst)
                                 _ <- runMaybeT $ do
@@ -137,6 +138,7 @@ produceMergeRegion rvar region = do
                                 assume $ EqualityCondition rvar rid
                                 r' <- mergeRegions r region
                                 regions .= (AM.addAlias rvar rid) (AM.overwrite rid r' regs)
+                                label $ "region " ++ show rvar ++ " is " ++ show rid
                                 --liftIO $ putStrLn $ "MERGED"
                                 ) | (rid, r) <- rs]
                         (Just r) -> do
@@ -349,7 +351,8 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
 
 -- |Determine a list of possible thread (guarantee) transitions for a given
 -- parametrised region type and guard.
-checkGuaranteeTransitions :: (ProverM (WithAssertions s) r m, AssumptionLenses s, DebugState (WithAssertions s) r, MonadRaise m) => RegionType -> [Expr VariableID] -> Guard VariableID -> m [GuardedTransition VariableID]
+checkGuaranteeTransitions :: (ProverM (WithAssertions s) r m, AssumptionLenses s, DebugState (WithAssertions s) r, MonadRaise m) =>
+        RegionType -> [Expr VariableID] -> Guard VariableID -> m [GuardedTransition VariableID]
 checkGuaranteeTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem rt)
         where
                 bndVars :: TransitionRule -> Set.Set RTDVar
@@ -441,7 +444,7 @@ simpleGenerateGuaranteeCondition rt ps gd st0 st1 = msum (map checkTrans (rtTran
 
 -- |Generate a 'Condition' that captures the fact that two abstract
 -- states must be related by the guarantee for a region.   
-generateGuaranteeCondition :: (ProverM (WithAssertions s) r m, AssumptionLenses s, DebugState (WithAssertions s) r, MonadRaise m) =>
+generateGuaranteeCondition :: (ProverM (WithAssertions s) r m, AssumptionLenses s, DebugState (WithAssertions s) r, MonadRaise m, MonadLabel m) =>
     RegionType                      -- ^Type of the region
     -> [Expr VariableID]            -- ^Parameters for the region
     -> Guard VariableID             -- ^Guard for the region

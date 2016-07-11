@@ -210,9 +210,9 @@ sameGuardParametersType (ParameterGP _) (ParameterGP _) = Nothing
 sameGuardParametersType a _ = Just a
 
 class (MonadIO m, MonadPlus m, MonadOrElse m, MonadState s m, AssertionLenses s, MonadLogger m,
-    MonadReader r m, Provers r) => GuardCheckMonad s r m
+    MonadReader r m, Provers r, MonadLabel m) => GuardCheckMonad s r m
 instance (MonadIO m, MonadPlus m, MonadOrElse m, MonadState s m, AssertionLenses s, MonadLogger m,
-    MonadReader r m, Provers r) => GuardCheckMonad s r m
+    MonadReader r m, Provers r, MonadLabel m) => GuardCheckMonad s r m
 
 subtractPE :: GuardCheckMonad s r m =>
         PermissionExpression VariableID -> PermissionExpression VariableID ->
@@ -224,11 +224,13 @@ subtractPE l PEZero = return (Just l)
 subtractPE l s = (do -- TODO: frame some permission
                 assertTrue $ PAEq l s
                 justCheck
+                label $ "Take whole permissions guard: " ++ show s ++ "=" ++ show l
                 return Nothing) `mplus`
-        trace "Trying framing" (do
+        (do
                 ev <- newEvar "perm"
                 let eve = PEVar ev
                 assertTrue $ PAEq l (PESum s eve)
+                label $ "Frame permission: " ++ show s ++ " + " ++ show eve ++ "=" ++ show l
                 return (Just eve))
 
 -- |Given a guard parameter we have, take away a given guard parameter.
@@ -268,11 +270,12 @@ guardPrimitiveEntailmentM (GD g1) (GD g2) = if Map.null $ Map.differenceWith sam
 guardEntailment :: (GuardCheckMonad s r m) =>
                 GuardDeclr -> Guard VariableID -> Guard VariableID ->
                         m (Guard VariableID)
-guardEntailment gt g1 g2 = guardPrimitiveEntailmentM g1 g2 `mplus`
+guardEntailment gt g1 g2 = 
                         do
                                 let (gel, ger) = guardEquivalence gt g1 g2
-                                frame1 <- guardPrimitiveEntailmentM g1 gel
-                                guardPrimitiveEntailmentM (guardJoin frame1 ger) g2
+                                if gel == emptyGuard then guardPrimitiveEntailmentM g1 g2 else do
+                                        frame1 <- guardPrimitiveEntailmentM g1 gel
+                                        guardPrimitiveEntailmentM (guardJoin frame1 ger) g2
 
 guardEntailmentTL :: (GuardCheckMonad s r m) =>
                 TopLevelGuardDeclr -> Guard VariableID -> Guard VariableID ->
@@ -294,12 +297,13 @@ consumeGuard' :: (GuardCheckMonad s r m) =>
                 GuardDeclr ->
                 String -> GuardParameters VariableID ->
                 Guard VariableID -> m (Guard VariableID)
-consumeGuard' gt gname gpara g = consumeGuardNoType gname gpara g `mplus`
+consumeGuard' gt gname gpara g =
                 do
                         let (gel, ger) = guardEquivalence gt g
                                 (GD $ Map.insert gname gpara Map.empty)
-                        frame1 <- guardPrimitiveEntailmentM g gel
-                        consumeGuardNoType gname gpara (guardJoin frame1 ger)
+                        if gel == emptyGuard then consumeGuardNoType gname gpara g else do
+                                frame1 <- guardPrimitiveEntailmentM g gel
+                                consumeGuardNoType gname gpara (guardJoin frame1 ger)
 
 consumeGuard :: (GuardCheckMonad s r m) =>
                 TopLevelGuardDeclr ->

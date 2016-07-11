@@ -223,24 +223,28 @@ wrapRWST initial fin op = RWST $ \rd s0 -> do
 -- |Consumes a predicate.  Does not check that the predicate is well-formed.
 -- 
 -- FIXME: Case handling for PCells and other predicates
-consumePred :: (Monad m, MonadPlus m, MonadState s m, MonadLogger m,
+consumePred :: (Monad m, MonadPlus m, MonadState s m, MonadLogger m, MonadLabel m,
         AssertionLenses s, SymbStateLenses s) => Predicate -> m ()
 consumePred (PCell, [x, y]) = (do
                 [e1,e2] <- takingEachPredInstance PCell
+                label $ "Consume " ++ show x ++ "|->" ++ show y ++ " from " ++ show e1 ++ "|->" ++ show e2
                 assertEqual x e1
                 assertEqual y e2) `mplus`
         (do
                 [e1,e2] <- takingEachPredInstance PCells
+                label $ "Consume " ++ show x ++ "|->" ++ show y ++ " from " ++ show e1 ++ "|->#cells(" ++ show e2 ++ ")"
                 assertTrue $ e1 $<=$ x
                 assertTrue $ x $<$ e1 $+$ e2
                 yval <- newAvar "unk"
                 assertEqual y (var yval)
-                assertEqual e1 x `mplus`
+                (label "At left" >> assertEqual e1 x) `mplus`
                     (do
+                        label "Not at left"
                         addPredicate (PCells, [e1, toExpr (x $-$ e1)])
                         assertTrue $ e1 $<$ x)
-                assertEqual (e1 $+$ e2) (x $+$ VEConst 1) `mplus`
+                (label "At right" >> assertEqual (e1 $+$ e2) (x $+$ VEConst 1)) `mplus`
                     (do
+                        label "Not at right"
                         addPredicate (PCells, [toExpr (x $+$ VEConst 1), toExpr (e1 $+$ e2 $-$ x $-$ VEConst 1)])
                         assertTrue $ (x $+$ VEConst 1) $<$ (e1 $+$ e2)))
                 -- add justCheck to fail faster?
@@ -262,7 +266,7 @@ consumePred p@(pt, args) = do
         Predicate -> MSCheck r m ()
         -}
 consumePredicate :: 
-                      (SymbStateLenses s, AssertionLenses s, MonadLogger m,
+                      (SymbStateLenses s, AssertionLenses s, MonadLogger m, MonadLabel m,
                        MonadState s m, MonadPlus m, MonadReader r m, PredicateLenses r, MonadRaise m) =>
                       Predicate -> m ()
 consumePredicate p = do
@@ -352,7 +356,7 @@ symExLocalAssign target expr = do
 
 symExAllocate :: 
                    (MonadRaise m, MonadLogger m, Provers p, PredicateLenses p, MonadReader p m,
-                   SymbStateLenses s, MonadState s m, MonadIO m, MonadPlus m) =>
+                   SymbStateLenses s, MonadState s m, MonadIO m, MonadPlus m, MonadLabel m) =>
                    Maybe String -> AExpr -> m ()
 symExAllocate target lenExpr = do
                 lenval <- aexprToExpr lenExpr
@@ -364,7 +368,7 @@ symExAllocate target lenExpr = do
                 forM_ target $ \tvar -> progVars %= Map.insert tvar (var loc)
 
 symExWrite :: (SymbStateLenses s, MonadLogger m, MonadRaise m, Provers p, PredicateLenses p,
-                     MonadReader p m, MonadIO m, MonadState s m, MonadPlus m) =>
+                     MonadReader p m, MonadIO m, MonadState s m, MonadPlus m, MonadLabel m) =>
                     AExpr -> AExpr -> m ()
 symExWrite target expr = do
                 loc <- aexprToExpr target
@@ -375,7 +379,7 @@ symExWrite target expr = do
                 addPredicate (PCell, [loc, newval])
 
 symExRead :: (SymbStateLenses s, MonadRaise m, MonadLogger m, Provers p, PredicateLenses p,
-                MonadReader p m, MonadIO m, MonadState s m, MonadPlus m) =>
+                MonadReader p m, MonadIO m, MonadState s m, MonadPlus m, MonadLabel m) =>
                String -> AExpr -> m ()
 symExRead target eloc = do
                 loc <- aexprToExpr eloc
@@ -388,7 +392,7 @@ symExRead target eloc = do
 
 symExCAS :: (SymbStateLenses s, MonadRaise m, MonadLogger m, Provers p, PredicateLenses p,
                 MonadReader p m, MonadIO m, MonadState s m, MonadPlus m,
-                MonadDemonic m) =>
+                MonadDemonic m, MonadLabel m) =>
                 Maybe String -> AExpr -> AExpr -> AExpr -> m ()
 symExCAS rtn target old new = do
                 loc <- aexprToVExpr target
@@ -399,7 +403,7 @@ symExCAS rtn target old new = do
                         consumePredicate (PCell, [toExpr loc, var curv])
                         return curv
                 (do -- success branch
-                        liftIO $ putStrLn "* CAS succeeds"
+                        label "CAS succeeds"
                         assumeTrue $ VAEq (var curv) oldv
                         addPredicate (PCell, [toExpr loc, toExpr newv])
                         case rtn of
@@ -407,7 +411,7 @@ symExCAS rtn target old new = do
                             Just rtn' -> progVars %= Map.insert rtn' (VEConst 1)
                     ) <#>
                     (do -- failure branch
-                        liftIO $ putStrLn "* CAS fails"
+                        label "CAS fails"
                         assumeFalse $ VAEq (var curv) oldv
                         addPredicate (PCell, [toExpr loc, var curv])
                         case rtn of 
