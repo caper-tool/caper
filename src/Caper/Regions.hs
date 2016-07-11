@@ -356,7 +356,7 @@ checkGuaranteeTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitio
                 bndVars tr = Set.difference (freeVariables tr) (rtParamVars rt)
                 params = Map.fromList $ zip (map fst $ rtParameters rt) ps
                 checkTrans tr@(TransitionRule trgd prd prec post) = do
-                        liftIO $ putStrLn $ "+++ Params " ++ show params
+                        -- liftIO $ putStrLn $ "+++ Params " ++ show params
                         -- Compute a binding for fresh variables
                         bvmap <- freshInternals rtdvStr (bndVars tr)
                         let bvars = Map.elems bvmap
@@ -378,10 +378,10 @@ checkGuaranteeTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitio
                                     SomeGuardDeclr gdec -> do
                                             _ <- guardEntailment gdec gd (exprCASub' s trgd)
                                             return ()
-                                liftIO $ putStrLn "Entailment for guarantee"
-                                debugState
+                                --liftIO $ putStrLn "Entailment for guarantee"
+                                --debugState
                                 justCheck
-                                liftIO $ putStrLn "passed"
+                                --liftIO $ putStrLn "passed"
                                 -- We extract the assertions that condition the transition.
                                 -- That is, those that have variables which are locally bound for
                                 -- the action and occur in either the pre- or post-state.

@@ -190,6 +190,7 @@ atomicSymEx aop = do
         opnRegions =<< reader regionOpenLimit
         ors <- use openRegions
         liftIO $ putStrLn $ "OPENED REGIONS: " ++ show (map oregID ors)
+        debugState
         aop
         liftIO $ putStrLn $ "STILL OPENED REGIONS: " ++ show (map oregID ors)
         closeRegions
