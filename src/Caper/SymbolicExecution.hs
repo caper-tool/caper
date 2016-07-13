@@ -36,13 +36,13 @@ import Caper.DeductionFailure
     Symbolic execution.
 -}
 
-class (MonadRaise m, MonadIO m, MonadLogger m, MonadLabel m,
+class (MonadRaise m, MonadIO m, MonadLogger m, MonadLabel CapturedState m,
         MonadReader r m, Provers r, RTCGetter r, PredicateLenses r, SpecificationContext r, Configuration r,
         MonadPlus m, MonadOrElse m, Failure DeductionFailure m, OnFailure DeductionFailure m,
         MonadState s m, SymbStateLenses s, AssumptionLenses s, DebugState s r,
         RegionLenses s, MonadDemonic m, DebugState (WithAssertions s) r) => SymExMonad r s m
 
-instance (MonadRaise m, MonadIO m, MonadLogger m, MonadLabel m,
+instance (MonadRaise m, MonadIO m, MonadLogger m, MonadLabel CapturedState m,
         MonadReader r m, Provers r, RTCGetter r, PredicateLenses r, SpecificationContext r, Configuration r,
         MonadPlus m, MonadOrElse m, Failure DeductionFailure m, OnFailure DeductionFailure m,
         MonadState SymbState m, MonadDemonic m) => SymExMonad r SymbState m
@@ -79,10 +79,10 @@ closeRegions = do
             -- happen for regions that are created by the handler.
             admitChecks $ (flip (scopedMultiRetry rcl) handler) $ do
                 ors <- use openRegions
-                label $ "CLOSING REGIONS: " ++ show (map oregID ors)
+                labelS $ "CLOSING REGIONS: " ++ show (map oregID ors)
                 regs <- mapM updateState ors
                 mapM_ closeRegion regs
-            label $ "CLOSED REGIONS"
+            labelS $ "CLOSED REGIONS"
             logicalVars .= savedLVars
             openRegions .= []
         where
@@ -98,15 +98,14 @@ closeRegions = do
                 return (rid, rt, plstate, st1)
             closeRegion (rid, rt, plstate, st1) = do
                 interp <- msum $ map return (rtInterpretation rt)
-                label $ "Closing region " ++ show rid ++ " with interp " ++ show interp
+                labelS $ "Closing region " ++ show rid ++ " with interp " ++ show interp
                 logicalVars .= plstate -- Interpret logical variables wrt region parameters
                 st1' <- consumeValueExpr (siState interp)
                 assertEqual st1 st1'
                 forM_ (siConditions interp) consumePure
                 consumeAssrt (siInterp interp) -- Consume the interpretation
                 justCheck -- Validate the choice
-                label $ "Closed region " ++ show rid ++ " with interp " ++ show interp
-                debugState
+                labelS $ "Closed region " ++ show rid ++ " with interp " ++ show interp
             handler (MissingRegionByType rtid params st s) = Just $ do
                 rt <- lookupRType rtid
                 let vars = Set.unions (toSet st : map toSet params)
@@ -128,14 +127,14 @@ closeRegions = do
                     regTypeInstance = Just (RegionInstance rtid params),
                     regState = Just st,
                     regGuards = rtFullGuard rt}
-                label $ "Created region " ++ show rid ++ " of type " ++ show rt
+                labelS $ "Created region " ++ show rid ++ " of type " ++ show rt
                 
 
 openRegion :: SymExMonad r s m =>
     VariableID      -- ^Region identifier
     -> m ()
 openRegion rid = do
-        label $ "Open region " ++ show rid
+        labelS $ "Open region " ++ show rid
         -- Resolve the region
         regs <- use regions
         (rs, rg, rt, ps :: [Expr VariableID]) <- case AM.lookup rid regs of
@@ -158,7 +157,7 @@ openRegion rid = do
         -- For each region interpretation...
         dAll $ flip map (rtInterpretation rt) $ \interp -> 
             do
-                label $ "Opening region " ++ show rid ++ " with interp " ++ show interp  
+                labelS $ "Opening region " ++ show rid ++ " with interp " ++ show interp  
                 savedLVars <- use logicalVars
                 logicalVars .= plstate
                 -- ...assume we are in that state
@@ -189,18 +188,18 @@ atomicSymEx :: SymExMonad r s m =>
 atomicSymEx aop = do
         opnRegions =<< reader regionOpenLimit
         ors <- use openRegions
-        label $ "OPENED REGIONS: " ++ show (map oregID ors)
+        labelS $ "OPENED REGIONS: " ++ show (map oregID ors)
         aop
-        label $ "STILL OPENED REGIONS: " ++ show (map oregID ors)
+        labelS $ "STILL OPENED REGIONS: " ++ show (map oregID ors)
         closeRegions
     where
         opnRegions n
-            | n <= 0 = label $ "Open no regions"
+            | n <= 0 = labelS $ "Open no regions"
             | otherwise = opnRegions (n - 1) `mplus` oRegions n
         oRegions n
             | n <= 0 = return ()
             | otherwise = do
-                        label ("Open " ++ show n ++ " regions")
+                        labelS ("Open " ++ show n ++ " regions")
                         ars <- availableRegions
                         msum [openRegion r | r <- ars]
                         oRegions (n - 1)            
@@ -226,7 +225,7 @@ createRegionWithParams :: (SymExMonad r s m) =>
     -> m ()
 createRegionWithParams rtid params st = do
         rt <- lookupRType rtid
-        label $ "createRegionWithParams: " ++ rtRegionTypeName rt ++ show params
+        labelS $ "createRegionWithParams: " ++ rtRegionTypeName rt ++ show params
         --oldRegions <- use openRegions
         savedLVars <- use logicalVars
         interp' <- check $ do
@@ -248,7 +247,7 @@ createRegionWithParams rtid params st = do
             logicalVars .= plstate
             -- Non-deterministically choose the next interpretation
             interp' <- msum $ map return (rtInterpretation rt)
-            label $ "Constructing with interp " ++ show interp'
+            labelS $ "Constructing with interp " ++ show interp'
             -- Assert that we are in this interpretation
             st1 <- consumeValueExpr (siState interp')
             assertEqual st st1
@@ -260,7 +259,7 @@ createRegionWithParams rtid params st = do
                 regGuards = rtFullGuard rt}
             consumeAssrt (siInterp interp')
             return interp'
-        label $ "Constructed with interp " ++ show interp'
+        labelS $ "Constructed with interp " ++ show interp'
         logicalVars .= savedLVars
         --openRegions .= oldRegions
 
@@ -270,16 +269,14 @@ toSet = Set.fromList . toList
 missingRegionHandler :: (SymExMonad r s m) => m ()
 missingRegionHandler = --retry (liftIO $ putStrLn "registered missing region handler") handler >> retry (return ()) handler
         do
-                label "registered missing region handler"
+                labelS "registered missing region handler"
                 rcl <- reader regionConstructionLimit
                 multiRetry rcl handler
     where
         handler (MissingRegionByType rtid params st s) = Just $ do
-                label "invoked missing region handler"
-                debugState
+                labelS "invoked missing region handler"
                 createRegionWithParams rtid params st
-                label "created region"
-                debugState
+                labelS "created region"
 --      handler _ = Nothing
 
 data ExitMode = EMReturn (Maybe (ValueExpression VariableID)) | EMContinuation
@@ -322,8 +319,7 @@ symbolicExecute stmt cont = do
             -- If we reach an inconsistent state then we can stop
             whenConsistent $ do
                 stabiliseRegions
-                debugState
-                label $ ">>> " ++ take 30 (show stmt)
+                labelS $ ">>> " ++ take 30 (show stmt)
                 se stmt
     where
         ses [] = cont EMContinuation
@@ -334,11 +330,11 @@ symbolicExecute stmt cont = do
         se (IfElseStmt sp cond sthen selse) = do
                 bc <- bexprToValueCondition cond
                 (do -- then branch
-                        label $ "if branch on " ++ show cond
+                        labelS $ "if branch on " ++ show cond
                         assumeTrueE bc
                         se sthen) <#>
                     (do -- else branch
-                        label $ "else branch on " ++ show cond
+                        labelS $ "else branch on " ++ show cond
                         assumeFalseE bc
                         se selse)
         se (WhileStmt sp minv cond body) = symExLoop sp minv cond body
@@ -375,8 +371,7 @@ symbolicExecute stmt cont = do
                                 -- TODO: Eventually it might be good to be lazier about stabilising regions
                                 when stabiliseBeforeConsumePrecondition
                                     stabiliseRegions
-                                label $ "Consuming precondition: " ++ show sprec
-                                debugState
+                                labelS $ "Consuming precondition: " ++ show sprec
                                 contextualise "Consuming precondition" $
                                         check $ consumeAssrt sprec
                                 -- Need to stabilise the frame!!!!!!!!
@@ -391,8 +386,7 @@ symbolicExecute stmt cont = do
                                 logicalVars . at returnVariableName ?= retVar
                                 contextualise "Producing postcondition" $
                                         produceAssrt stabiliseAfterProducePostcondition spost
-                                label $ "Produced postcondition: " ++ show spost
-                                debugState
+                                labelS $ "Produced postcondition: " ++ show spost
                                 -- 'pop' the logical variables
                                 logicalVars .= savedLVars
                                 -- continue
@@ -422,8 +416,7 @@ symbolicExecute stmt cont = do
                                 -- TODO: Eventually it might be good to be lazier about stabilising regions
                                 when stabiliseBeforeConsumePrecondition
                                     stabiliseRegions
-                                label $ "Consuming precondition: " ++ show sprec
-                                debugState
+                                labelS $ "Consuming precondition: " ++ show sprec
                                 contextualise "Consuming precondition" $
                                         check $ consumeAssrt sprec
                                 -- Stabilise what remains
@@ -433,8 +426,7 @@ symbolicExecute stmt cont = do
                                 -- continue
                                 cont EMContinuation
         se (AssertStmt sp assrt) = contextualise (DescriptiveContext sp ("In assertion: " ++ show assrt)) $ do
-                label $ "assert " ++ show assrt
-                debugState
+                labelS $ "assert " ++ show assrt
                 savedLVars <- programVarsToLogicalVars
                 when stabiliseBeforeConsumeInvariant stabiliseRegions
                 missingRegionHandler
@@ -445,7 +437,6 @@ symbolicExecute stmt cont = do
                 contextualise "Producing assertion" $
                     produceAssrt stabiliseAfterProduceInvariant assrt
                 logicalVars .= savedLVars'
-                debugState
                 cont EMContinuation
         symExLoop sp minv cond body = do
                 -- use True as a default invariant
@@ -455,15 +446,13 @@ symbolicExecute stmt cont = do
                         savedLVars <- programVarsToLogicalVars
                         contextualise "Producing invariant" $
                             produceAssrt stabiliseAfterProduceInvariant inv
-                        label $ "Produced invariant: " ++ show inv
-                        debugState
+                        labelS $ "Produced invariant: " ++ show inv
                         logicalVars .= savedLVars
                 let consumeInv = do
                         savedLVars <- programVarsToLogicalVars
                         when stabiliseBeforeConsumeInvariant stabiliseRegions
-                        label $ "Consuming invariant: " ++ show inv
+                        labelS $ "Consuming invariant: " ++ show inv
                         missingRegionHandler
-                        debugState
                         contextualise "Consuming invariant" $
                             check $ consumeAssrt inv
                         logicalVars .= savedLVars
@@ -476,7 +465,7 @@ symbolicExecute stmt cont = do
                     lvv <- newAvar lv
                     progVars . at lv ?= var lvv
                 (do
-                        label $ "loop exit"
+                        labelS $ "loop exit"
                         -- produce the invariant (program variables)
                         produceInv
                         -- assume negative loop test
@@ -485,7 +474,7 @@ symbolicExecute stmt cont = do
                         -- continue
                         cont EMContinuation) <#>
                     (do
-                        label $ "loop body"
+                        labelS $ "loop body"
                         -- store the heap and regions for future use, abandoning them
                         restoreFrame <- frame
                         -- produce the invariant (program variables)
@@ -512,13 +501,12 @@ checkProcedure ::
 checkProcedure fd@(FunctionDeclr sp n opre opost args s) =
         contextualise fd $ contextualise ("Checking procedure '" ++ n ++ "'") $ do
             runAlternatingTD2 $ flip evalStateT (emptySymbStateWithVars args) $ do
-                label $ "Checking procedure '" ++ n ++ "'"
+                labelS $ "Checking procedure '" ++ n ++ "'"
                 -- Produce the precondition
                 logEvent $ InfoEvent $ "Producing precondition: " ++ show pre
                 contextualise "Producing precondition" $ produceAssrt
                     stabiliseAfterProducePrecondition
                     pre
-                debugState
                 symbolicExecute s postcheck                
     where
         pre = fromMaybe (defaultPrecondition sp) opre
@@ -532,9 +520,9 @@ checkProcedure fd@(FunctionDeclr sp n opre opost args s) =
                         logicalVars %= Map.insert returnVariableName retVar
                         missingRegionHandler
                         when stabiliseBeforeConsumePostcondition stabiliseRegions
-                        debugState
                         check $ consumeAssrt post
                         logEvent $ InfoEvent $ "Postcondition consumed."
+                        labelS $ "Postcondition consumed."
         postcheck EMContinuation = postcheck' Nothing
         postcheck (EMReturn ret) = postcheck' ret 
             

@@ -20,6 +20,8 @@ import qualified Caper.SymbolicState as SS
 import           Caper.Utils.AliasingMap ()
 import           Caper.Utils.NondetClasses
 import Caper.Predicates (PredicateLenses)
+import Caper.ProverStates
+
 {-
         At some point, this whole module should probably be rewritten.
         In particular, some consideration of where variables are bound to
@@ -32,12 +34,12 @@ import Caper.Predicates (PredicateLenses)
 -}
 
 class (MonadState s m, AssumptionLenses s, RegionLenses s, SymbStateLenses s,
-        MonadReader r m, RTCGetter r, PredicateLenses r,
-        MonadRaise m, MonadDemonic m, MonadIO m, MonadLabel m) => ProduceMonad r s m
+        MonadReader r m, RTCGetter r, PredicateLenses r, DebugState s r,
+        MonadRaise m, MonadDemonic m, MonadIO m, MonadLabel CapturedState m) => ProduceMonad r s m
 
 instance (MonadState s m, AssumptionLenses s, RegionLenses s, SymbStateLenses s,
-        MonadReader r m, RTCGetter r, PredicateLenses r,
-        MonadRaise m, MonadDemonic m, MonadIO m, MonadLabel m) => ProduceMonad r s m        
+        MonadReader r m, RTCGetter r, PredicateLenses r, DebugState s r,
+        MonadRaise m, MonadDemonic m, MonadIO m, MonadLabel CapturedState m) => ProduceMonad r s m        
 
 
 -- |Given a syntactic pure assertion, produce it by adding it as an assumption.

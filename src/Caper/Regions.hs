@@ -111,8 +111,8 @@ mergeRegions r1 r2 = do
 --
 -- Pre: the number and type of arguments should have been checked (otherwise an error may arise).
 produceMergeRegion :: (MonadState s m, AssumptionLenses s, RegionLenses s,
-                MonadReader r m, RTCGetter r, --MonadIO m,
-                MonadDemonic m, MonadLabel m) =>
+                MonadReader r m, RTCGetter r, DebugState s r,
+                MonadDemonic m, MonadLabel CapturedState m) =>
                 VariableID -> Region -> m ()
 produceMergeRegion rvar region = do
                 regs <- use regions
@@ -121,7 +121,7 @@ produceMergeRegion rvar region = do
                 case AM.lookup rvar regs of
                         Nothing -> (do
                                 --liftIO $ putStrLn $ "NOT MERGE " ++ show rvar
-                                label $ "region " ++ show rvar ++ " is fresh"
+                                labelS $ "region " ++ show rvar ++ " is fresh"
                                 regions .= AM.insert rvar region regs
                                 forM_ rs (assume . DisequalityCondition rvar . fst)
                                 _ <- runMaybeT $ do
@@ -138,7 +138,7 @@ produceMergeRegion rvar region = do
                                 assume $ EqualityCondition rvar rid
                                 r' <- mergeRegions r region
                                 regions .= (AM.addAlias rvar rid) (AM.overwrite rid r' regs)
-                                label $ "region " ++ show rvar ++ " is " ++ show rid
+                                labelS $ "region " ++ show rvar ++ " is " ++ show rid
                                 --liftIO $ putStrLn $ "MERGED"
                                 ) | (rid, r) <- rs]
                         (Just r) -> do
@@ -272,16 +272,14 @@ stabiliseRegion rid
                         let ps = var rid : ps0
                         -- resolve region type
                         rt <- lookupRType rtid
-                        liftIO $ putStrLn $ "Checking transitions for region: " ++ show rt ++ " " ++ show ps ++ " " ++ show gd
                         transitions <- checkTransitions rt ps gd
-                        liftIO $ putStrLn $ "Transitions are: " ++ show transitions
                         -- compute the closure relation
                         tcrel <- rely rt transitions -- computeClosureRelation (rtStateSpace rt) transitions
                         -- create a new state variable
                         newStateVar <- newAvar "state"
                         -- assume it is related to the old state
                         assumeTrue $ tcrel se (var newStateVar)
-                        liftIO $ putStrLn $ "RELY CONDITION : " ++ show (tcrel se (var newStateVar))
+                        -- label $ "RELY CONDITION : " ++ show (tcrel se (var newStateVar))
                         -- return the clean region with the new state
                         return $ Region
                                 False
@@ -344,8 +342,6 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
                         case guardCompat of
                           Left _ -> return []
                           Right cassms -> do
-                            liftIO $ putStrLn $ "Transition conditions for: " ++ show bvars ++ " " ++ (show (exprSub s prec)) ++ " ~> " ++ show (exprSub s post)
-                            liftIO $ mapM_ print cassms
                             let cond = foldBy FOFAnd FOFTrue $ valueConditions (const True) cassms
                             return [GuardedTransition bvars cond (exprSub s prec) (exprSub s post)]
 
@@ -444,7 +440,7 @@ simpleGenerateGuaranteeCondition rt ps gd st0 st1 = msum (map checkTrans (rtTran
 
 -- |Generate a 'Condition' that captures the fact that two abstract
 -- states must be related by the guarantee for a region.   
-generateGuaranteeCondition :: (ProverM (WithAssertions s) r m, AssumptionLenses s, DebugState (WithAssertions s) r, MonadRaise m, MonadLabel m) =>
+generateGuaranteeCondition :: (ProverM (WithAssertions s) r m, AssumptionLenses s, DebugState (WithAssertions s) r, MonadRaise m, MonadLabel CapturedState m) =>
     RegionType                      -- ^Type of the region
     -> [Expr VariableID]            -- ^Parameters for the region
     -> Guard VariableID             -- ^Guard for the region
@@ -454,7 +450,6 @@ generateGuaranteeCondition :: (ProverM (WithAssertions s) r m, AssumptionLenses 
 generateGuaranteeCondition rt params gd st0 st1
     | not (isFinite (rtStateSpace rt)) = do
         transitions <- checkGuaranteeTransitions rt params gd
-        liftIO $ putStrLn $ "Guarantee transitions: " ++ show transitions
         return $ ValueCondition $ foldl FOFOr (st0 $=$ st1) $ do
             GuardedTransition bvars cond e0 e1 <- transitions
             let c = FOFAnd (FOFAnd (st0 $=$ e0) (st1 $=$ e1)) cond

@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell, MultiParamTypeClasses #-}
+{-# LANGUAGE TemplateHaskell, MultiParamTypeClasses, FlexibleContexts, FlexibleInstances #-}
 module Caper.ProverStates where
 
 import Control.Lens
@@ -10,6 +10,8 @@ import Data.List (intercalate)
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad
+
+import Caper.Utils.NondetClasses
 
 import qualified Caper.TypingContext as TC
 import Caper.Logger
@@ -104,6 +106,12 @@ emptyAssertions = emptyWithAssertions
 class DebugState s r where
     showState :: r -> s -> String
 
+instance DebugState Assumptions r where
+        showState r = showAssumptions
+
+instance DebugState (WithAssertions Assumptions) r where
+        showState r = showAssertions
+
 debugState :: (MonadState s m, MonadReader r m, DebugState s r, MonadIO m) => m ()
 debugState = do
             r <- ask
@@ -121,3 +129,20 @@ type LVarBindings = Map String VariableID
 emptyLVars :: LVarBindings
 emptyLVars = Map.empty
 
+-- |A 'CapturedState' is a representation of the internal state
+-- at a point in time.
+newtype CapturedState = CapturedState String
+instance Show CapturedState where
+        show (CapturedState s) = s
+
+captureState :: (MonadState s m, MonadReader r m, DebugState s r) => m CapturedState
+captureState = do
+        r <- ask
+        s <- get
+        return $ CapturedState $ showState r s
+
+labelS :: (MonadState s m, MonadReader r m, DebugState s r, MonadLabel CapturedState m) =>
+        String -> m ()
+labelS l = do
+        s <- captureState
+        labelState s l

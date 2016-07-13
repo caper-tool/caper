@@ -17,16 +17,16 @@ import Caper.Utils.MonadHoist
 
 -- |'ChoiceM' datatype represents a non-deterministic choice of
 -- values of type a, having (lazy) side-effects in monad m.
-data ChoiceM m a =
-        Choice (ChoiceM m a) (ChoiceM m a)      -- A choice of two computations
+data ChoiceM s m a =
+        Choice (ChoiceM s m a) (ChoiceM s m a)      -- A choice of two computations
         | Result a                              -- A result
         | NoChoice                              -- This computation path fails to give a result
-        | Lazy (m (ChoiceM m a))                -- This computation path requires side-effects to continue
-        | forall b. OrElse (ChoiceM m b) (ChoiceM m b) (b -> ChoiceM m a)
-        | Cut (ChoiceM m a)                      -- Do not roll back beyond this point
+        | Lazy (m (ChoiceM s m a))                -- This computation path requires side-effects to continue
+        | forall b. OrElse (ChoiceM s m b) (ChoiceM s m b) (b -> ChoiceM s m a)
+        | Cut (ChoiceM s m a)                      -- Do not roll back beyond this point
 --                deriving (Functor)
 
-instance Functor m => Functor (ChoiceM m) where
+instance Functor m => Functor (ChoiceM s m) where
         fmap f (Choice x y) = Choice (fmap f x) (fmap f y)
         fmap f (Result r) = Result (f r)
         fmap _ NoChoice = NoChoice
@@ -37,7 +37,7 @@ instance Functor m => Functor (ChoiceM m) where
 
 -- |'Monad' instance for 'ChoiceM'.
 -- Binding composes non-deterministic computations
-instance Monad m => Monad (ChoiceM m) where
+instance Monad m => Monad (ChoiceM s m) where
         return = Result
         a >>= b = case a of
                         (Result r) -> b r
@@ -48,40 +48,40 @@ instance Monad m => Monad (ChoiceM m) where
                         (Cut x) -> Cut (x >>= b)
         fail s = trace s NoChoice
 
-instance (Applicative m, Monad m) => Applicative (ChoiceM m) where
+instance (Applicative m, Monad m) => Applicative (ChoiceM s m) where
         pure = Result
         (<*>) = ap
 
 -- | 'MonadPlus' instance for 'ChoiceM'.
 -- 'mplus' is a choice of two alternative computations
-instance Monad m => MonadPlus (ChoiceM m) where
+instance Monad m => MonadPlus (ChoiceM s m) where
         mzero = NoChoice
         mplus = Choice
 
-instance (Applicative m, Monad m) => Alternative (ChoiceM m) where
+instance (Applicative m, Monad m) => Alternative (ChoiceM s m) where
         empty = mzero
         (<|>) = mplus
 
 -- | 'MonadOrElse' instance for 'ChoiceM'.
-instance Monad m => MonadOrElse (ChoiceM m) where
+instance Monad m => MonadOrElse (ChoiceM s m) where
         orElse c1 c2 = OrElse c1 c2 return
 
-instance Monad m => MonadCut (ChoiceM m) where
+instance Monad m => MonadCut (ChoiceM s m) where
         cut = Cut
 
 -- | 'ChoiceM' is a monad transformer.
 -- 'lift' records the side-effects for lazy execution
-instance MonadTrans ChoiceM where
+instance MonadTrans (ChoiceM s) where
         lift = Lazy . liftM Result
 
-instance (MonadIO m) => MonadIO (ChoiceM m) where
+instance (MonadIO m) => MonadIO (ChoiceM s m) where
         liftIO = lift . liftIO
 
-instance MonadReader r m => MonadReader r (ChoiceM m) where
+instance MonadReader r m => MonadReader r (ChoiceM s m) where
         ask = lift ask
         local m = hoist (local m)
 
-instance MonadHoist ChoiceM where
+instance MonadHoist (ChoiceM s) where
         hoist f (Choice c1 c2) = Choice (hoist f c1) (hoist f c2)
         hoist _ (Result a) = Result a
         hoist _ NoChoice = NoChoice
@@ -89,14 +89,14 @@ instance MonadHoist ChoiceM where
         hoist f (OrElse c1 c2 cont) = OrElse (hoist f c1) (hoist f c2) (hoist f . cont)
         hoist f (Cut c) = Cut (hoist f c)
 
-instance Monad m => MonadLabel (ChoiceM m) where
-        label _ = return ()
+instance Monad m => MonadLabel s (ChoiceM s m) where
+        labelMaybe _ _ = return ()
 
-firstChoiceT :: Monad m => ChoiceM m a -> MaybeT m a
+firstChoiceT :: Monad m => ChoiceM s m a -> MaybeT m a
 firstChoiceT = MaybeT . firstChoice
 
 -- |Get the first successful choice (if any)
-firstChoice :: Monad m => ChoiceM m a -> m (Maybe a)
+firstChoice :: Monad m => ChoiceM s m a -> m (Maybe a)
 firstChoice c = firstChoice' c (return Nothing)
 {-
 firstChoice (Result a) = return $ Just a
@@ -118,7 +118,7 @@ firstChoice (OrElse x y z) = do
                                                         Nothing -> return Nothing
 -}
 
-firstChoice' :: Monad m => ChoiceM m a -> m (Maybe a) -> m (Maybe a)
+firstChoice' :: Monad m => ChoiceM s m a -> m (Maybe a) -> m (Maybe a)
 firstChoice' (Result a) _ = return $ Just a
 firstChoice' NoChoice bt = bt
 firstChoice' (Choice x y) bt = firstChoice' x (firstChoice' y bt) 
@@ -134,7 +134,7 @@ firstChoice' (Cut x) bt = firstChoice' x (return Nothing)
 -- |Get the first choice that doesn't require any side-effects
 -- to evaluate.
 -- BROKEN FOR OrElse, Cut
-firstAvailableChoice :: ChoiceM m a -> Maybe a
+firstAvailableChoice :: ChoiceM s m a -> Maybe a
 firstAvailableChoice (Result a) = Just a
 firstAvailableChoice (Choice x y) = case firstAvailableChoice x of
                                 (Just cx) -> Just cx
@@ -145,7 +145,7 @@ firstAvailableChoice _ = Nothing
 -- necessary).  The choice is pared from the returned ChoiceM.
 -- Only side-effects necessary to discover the first choice are
 -- executed.  DOES NOT RESPECT CUTS
-nextChoice :: Monad m => ChoiceM m a -> m (Maybe a, ChoiceM m a)
+nextChoice :: Monad m => ChoiceM s m a -> m (Maybe a, ChoiceM s m a)
 nextChoice (Result a) = return (Just a, NoChoice)
 nextChoice NoChoice = return (Nothing, NoChoice)
 nextChoice (Choice x y) = do
@@ -167,7 +167,7 @@ nextChoice (Cut x) = nextChoice x
 
 -- |Get all choices, performing side-effects as necessary
 -- DOES NOT RESPECT CUTS
-allChoices :: Monad m => ChoiceM m a -> m [a]
+allChoices :: Monad m => ChoiceM s m a -> m [a]
 allChoices c = do
                 (cx, rx) <- nextChoice c
                 case cx of
@@ -178,7 +178,7 @@ allChoices c = do
 
 -- |Get the first n choices, performing side-effects as necessary
 -- DOES NOT RESPECT CUTS
-takeChoices :: Monad m => Int -> ChoiceM m a -> m [a]
+takeChoices :: Monad m => Int -> ChoiceM s m a -> m [a]
 takeChoices 0 _ = return []
 takeChoices n c = do
                 (cx, rx) <- nextChoice c

@@ -22,6 +22,7 @@ import Caper.Parser.AST.Annotation (GuardDeclr(..), TopLevelGuardDeclr(..))
 import Caper.Logger
 import Caper.ProverDatatypes
 import Caper.Prover
+import Caper.ProverStates
 import Caper.Utils.NondetClasses
 import Caper.Utils.Mix
 import Caper.Exceptions
@@ -210,9 +211,9 @@ sameGuardParametersType (ParameterGP _) (ParameterGP _) = Nothing
 sameGuardParametersType a _ = Just a
 
 class (MonadIO m, MonadPlus m, MonadOrElse m, MonadState s m, AssertionLenses s, MonadLogger m,
-    MonadReader r m, Provers r, MonadLabel m) => GuardCheckMonad s r m
+    MonadReader r m, Provers r, DebugState s r, MonadLabel CapturedState m) => GuardCheckMonad s r m
 instance (MonadIO m, MonadPlus m, MonadOrElse m, MonadState s m, AssertionLenses s, MonadLogger m,
-    MonadReader r m, Provers r, MonadLabel m) => GuardCheckMonad s r m
+    MonadReader r m, Provers r, DebugState s r, MonadLabel CapturedState m) => GuardCheckMonad s r m
 
 subtractPE :: GuardCheckMonad s r m =>
         PermissionExpression VariableID -> PermissionExpression VariableID ->
@@ -224,13 +225,13 @@ subtractPE l PEZero = return (Just l)
 subtractPE l s = (do -- TODO: frame some permission
                 assertTrue $ PAEq l s
                 justCheck
-                label $ "Take whole permissions guard: " ++ show s ++ "=" ++ show l
+                labelS $ "Take whole permissions guard: " ++ show s ++ "=" ++ show l
                 return Nothing) `mplus`
         (do
                 ev <- newEvar "perm"
                 let eve = PEVar ev
                 assertTrue $ PAEq l (PESum s eve)
-                label $ "Frame permission: " ++ show s ++ " + " ++ show eve ++ "=" ++ show l
+                labelS $ "Frame permission: " ++ show s ++ " + " ++ show eve ++ "=" ++ show l
                 return (Just eve))
 
 -- |Given a guard parameter we have, take away a given guard parameter.

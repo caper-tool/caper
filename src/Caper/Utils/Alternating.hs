@@ -24,21 +24,21 @@ import Caper.Utils.NondetClasses
 import Caper.Utils.MonadHoist
 import Caper.Utils.Failure
 
-data AlternatingT e m a where
-    NoChoice :: AlternatingT e m a
-    Result :: a -> AlternatingT e m a
-    Lazy :: m (AlternatingT e m a) -> AlternatingT e m a
-    AngelicChoice :: AlternatingT e m a -> AlternatingT e m a -> AlternatingT e m a
-    DemonicChoice :: AlternatingT e m a -> AlternatingT e m a -> AlternatingT e m a
-    OrElse :: AlternatingT e m b -> AlternatingT e m b -> (b -> AlternatingT e m a) -> AlternatingT e m a
-    Cut :: AlternatingT e m a -> AlternatingT e m a
-    Success :: AlternatingT e m a
-    Failure :: e -> AlternatingT e m a
-    Retry :: AlternatingT e m a -> (e -> Maybe (AlternatingT e m a)) -> AlternatingT e m a
-    LocalRetry :: (b -> AlternatingT e m a) -> AlternatingT e m b -> (e -> Maybe (AlternatingT e m b)) ->  AlternatingT e m a
-    Label :: String -> AlternatingT e m a -> AlternatingT e m a
+data AlternatingT s e m a where
+    NoChoice :: AlternatingT s e m a
+    Result :: a -> AlternatingT s e m a
+    Lazy :: m (AlternatingT s e m a) -> AlternatingT s e m a
+    AngelicChoice :: AlternatingT s e m a -> AlternatingT s e m a -> AlternatingT s e m a
+    DemonicChoice :: AlternatingT s e m a -> AlternatingT s e m a -> AlternatingT s e m a
+    OrElse :: AlternatingT s e m b -> AlternatingT s e m b -> (b -> AlternatingT s e m a) -> AlternatingT s e m a
+    Cut :: AlternatingT s e m a -> AlternatingT s e m a
+    Success :: AlternatingT s e m a
+    Failure :: e -> AlternatingT s e m a
+    Retry :: AlternatingT s e m a -> (e -> Maybe (AlternatingT s e m a)) -> AlternatingT s e m a
+    LocalRetry :: (b -> AlternatingT s e m a) -> AlternatingT s e m b -> (e -> Maybe (AlternatingT s e m b)) ->  AlternatingT s e m a
+    Label :: Maybe s -> String -> AlternatingT s e m a -> AlternatingT s e m a
 
-instance Functor m => Functor (AlternatingT e m) where
+instance Functor m => Functor (AlternatingT s e m) where
     fmap _ NoChoice = NoChoice
     fmap f (Result r) = Result (f r)
     fmap f (Lazy k) = Lazy (fmap (fmap f) k)
@@ -50,9 +50,9 @@ instance Functor m => Functor (AlternatingT e m) where
     fmap _ (Failure e) = Failure e
     fmap f (Retry x h) = Retry (fmap f x) (fmap (fmap (fmap f)) h)
     fmap f (LocalRetry c x h) = LocalRetry (fmap f . c) x h
-    fmap f (Label s x) = Label s (fmap f x)
+    fmap f (Label st s x) = Label st s (fmap f x)
     
-instance Monad m => Monad (AlternatingT e m) where
+instance Monad m => Monad (AlternatingT s e m) where
     return = Result
     a >>= b = case a of
             NoChoice -> NoChoice
@@ -66,40 +66,40 @@ instance Monad m => Monad (AlternatingT e m) where
             Failure e -> Failure e
             Retry x h -> Retry (x >>= b) (fmap (fmap (>>= b)) h)
             LocalRetry c x h -> LocalRetry (c >=> b) x h
-            Label s x -> Label s (x >>= b)
+            Label st s x -> Label st s (x >>= b)
     fail s = trace s NoChoice
 
-instance Failure e (AlternatingT e m) where
+instance Failure e (AlternatingT s e m) where
     failure = Failure
 
-instance (Monad m) => OnFailure e (AlternatingT e m) where
+instance (Monad m) => OnFailure e (AlternatingT s e m) where
     retry = Retry
     localRetry = LocalRetry return
     
-instance (Applicative m, Monad m) => Applicative (AlternatingT e m) where
+instance (Applicative m, Monad m) => Applicative (AlternatingT s e m) where
     pure = Result
     (<*>) = ap
 
-instance Monad m => MonadPlus (AlternatingT e m) where
+instance Monad m => MonadPlus (AlternatingT s e m) where
     mzero = NoChoice
     mplus NoChoice x = x
     mplus x NoChoice = x
     mplus x y = AngelicChoice x y
     
-instance (Applicative m, Monad m) => Alternative (AlternatingT e m) where
+instance (Applicative m, Monad m) => Alternative (AlternatingT s e m) where
     empty = mzero
     (<|>) = mplus
     
-instance Monad m => MonadOrElse (AlternatingT e m) where
+instance Monad m => MonadOrElse (AlternatingT s e m) where
     orElse c1 c2 = OrElse c1 c2 return
 
-instance Monad m => MonadCut (AlternatingT e m) where
+instance Monad m => MonadCut (AlternatingT s e m) where
     cut = Cut
     
-instance MonadTrans (AlternatingT e) where
+instance MonadTrans (AlternatingT s e) where
     lift = Lazy . liftM return
 
-instance MonadHoist (AlternatingT e) where
+instance MonadHoist (AlternatingT s e) where
     hoist _ NoChoice = NoChoice
     hoist _ (Result r) = Result r
     hoist f (Lazy k) = Lazy (liftM (hoist f) (f k)) 
@@ -111,23 +111,23 @@ instance MonadHoist (AlternatingT e) where
     hoist f (Failure e) = Failure e
     hoist f (Retry x h) = Retry (hoist f x) (fmap (fmap (hoist f)) h)
     hoist f (LocalRetry c x h) = LocalRetry (hoist f . c) (hoist f x) (fmap (fmap (hoist f)) h)
-    hoist f (Label s x) = Label s (hoist f x)
+    hoist f (Label st s x) = Label st s (hoist f x)
 
-instance MonadIO m => MonadIO (AlternatingT e m) where
+instance MonadIO m => MonadIO (AlternatingT s e m) where
     liftIO = lift . liftIO
     
-instance MonadReader r m => MonadReader r (AlternatingT e m) where
+instance MonadReader r m => MonadReader r (AlternatingT s e m) where
     ask = lift ask
     local m = hoist (local m)
     
-instance Monad m => MonadDemonic (AlternatingT e m) where
+instance Monad m => MonadDemonic (AlternatingT s e m) where
     (<#>) = DemonicChoice
     succeed = Success
 
-instance Monad m => MonadLabel (AlternatingT e m) where
-    label l = Label l (Result ())
+instance Monad m => MonadLabel s (AlternatingT s e m) where
+    labelMaybe s l = Label s l (Result ())
     
-runAlternatingT' :: Monad m => AlternatingT e m a -> ([e] -> m (Either [e] [a])) -> m (Either [e] [a])
+runAlternatingT' :: Monad m => AlternatingT s e m a -> ([e] -> m (Either [e] [a])) -> m (Either [e] [a])
 runAlternatingT' NoChoice bt = bt []
 runAlternatingT' (Result a) _ = return $ Right [a]
 runAlternatingT' (Lazy k) bt = do
@@ -172,15 +172,15 @@ runAlternatingT' (LocalRetry c x h) bt = do
                 Right rs -> runAlternatingT' (msum (map return rs) >>= c) bt
         where
             bt' es = runAlternatingT' (msum [maybe (Failure e) id (h e) | e <- es]) (return . Left)
-runAlternatingT' (Label s a) bt = runAlternatingT' a bt
+runAlternatingT' (Label _ s a) bt = runAlternatingT' a bt
 
-runAlternatingT :: Monad m => AlternatingT e m a -> m (Maybe [a])
+runAlternatingT :: Monad m => AlternatingT s e m a -> m (Maybe [a])
 runAlternatingT a = liftM (either (const Nothing) Just) $ runAlternatingT' a (return . Left)
 
 mps :: MonadIO m => String -> m ()
 mps = liftIO . putStrLn
 
-runAlternatingTD' :: (Monad m, MonadIO m, Show e) => AlternatingT e m a -> ([e] -> m (Either [e] [(String, a)])) -> String -> m (Either [e] [(String, a)])
+runAlternatingTD' :: (Monad m, MonadIO m, Show e) => AlternatingT s e m a -> ([e] -> m (Either [e] [(String, a)])) -> String -> m (Either [e] [(String, a)])
 runAlternatingTD' NoChoice bt s = mps (s ++ "#") >> bt []
 runAlternatingTD' (Result a) _ s = mps (s ++ "$") >> (return $ Right [(s ++ "$", a)])
 runAlternatingTD' (Lazy k) bt s = do
@@ -230,47 +230,53 @@ runAlternatingTD' (LocalRetry c x h) bt s = do
         where
             bt' es = mps (s ++ "r1" ++ show es ++ ".") >>
                 runAlternatingTD' (msum [maybe (Failure e) id (h e) | e <- es]) (return . Left) (s ++ "r1.")
-runAlternatingTD' (Label l x) bt s = mps ("! " ++ l) >> runAlternatingTD' x bt s
+runAlternatingTD' (Label _ l x) bt s = mps ("! " ++ l) >> runAlternatingTD' x bt s
 
-runAlternatingTD :: (Monad m, MonadIO m, Show e) => AlternatingT e m a -> m (Maybe [a])
+runAlternatingTD :: (Monad m, MonadIO m, Show e) => AlternatingT s e m a -> m (Maybe [a])
 runAlternatingTD a = liftM (either (const Nothing) (Just . map snd)) $ runAlternatingTD' a (return . Left) ""
 
-runAlternatingTD2 :: (Monad m, MonadIO m, Show e) => AlternatingT e m () -> m Bool
+runAlternatingTD2 :: (Monad m, MonadIO m, Show e) => AlternatingT s e m () -> m Bool
 runAlternatingTD2 = liftM isJust . runAlternatingTD 
 
 
-data AltTree e m = ATAng [(String, AltTree e m)] | ATDem [(String, AltTree e m)] | ATLab String (AltTree e m) | ATWork (AlternatingT e m ())
+data AltTree s e m = ATAng [(Maybe s, String, AltTree s e m)] | ATDem [(Maybe s, String, AltTree s e m)] | ATLab (Maybe s) String (AltTree s e m) | ATWork (AlternatingT s e m ())
 
-data AltCtx e m = ACTop
-    | ACAng (AltCtx e m) [(String, AltTree e m)] String [(String, AltTree e m)]
-    | ACDem (AltCtx e m) [(String, AltTree e m)] String [(String, AltTree e m)]
-    | ACLab (AltCtx e m) String
+data AltCtx s e m = ACTop
+    | ACAng (AltCtx s e m) [(Maybe s, String, AltTree s e m)] (Maybe s) String [(Maybe s, String, AltTree s e m)]
+    | ACDem (AltCtx s e m) [(Maybe s, String, AltTree s e m)] (Maybe s) String [(Maybe s, String, AltTree s e m)]
+    | ACLab (AltCtx s e m) (Maybe s) String
 
-printContext :: (Monad m, MonadIO m) => AltCtx e m' -> m ()
+printContext :: (Monad m, MonadIO m) => AltCtx s e m' -> m ()
 printContext ACTop = return ()
-printContext (ACAng up _ l _) = printContext up >> mps ("A: " ++ l)
-printContext (ACDem up _ l _) = printContext up >> mps ("D: " ++ l)
-printContext (ACLab up l) = printContext up >> mps ("   " ++ l)
+printContext (ACAng up _ _ l _) = printContext up >> mps ("A: " ++ l)
+printContext (ACDem up _ _ l _) = printContext up >> mps ("D: " ++ l)
+printContext (ACLab up _ l) = printContext up >> mps ("   " ++ l)
 
-propagateSuccess :: AltCtx e m -> (AltCtx e m, AltTree e m)
+printState :: (Monad m, MonadIO m, Show s) => AltCtx s e m' -> m ()
+printState (ACAng _ _ (Just s) _ _) = mps $ "*** STATE ***\n" ++ show s ++ "\n*************"
+printState (ACDem _ _ (Just s) _ _) = mps $ "*** STATE ***\n" ++ show s ++ "\n*************"
+printState (ACLab _ (Just s) _) = mps $ "*** STATE ***\n" ++ show s ++ "\n*************"
+printState _ = return ()
+
+propagateSuccess :: AltCtx s e m -> (AltCtx s e m, AltTree s e m)
 propagateSuccess ACTop = (ACTop, ATWork Success)
-propagateSuccess (ACAng up _ _ _) = propagateSuccess up
-propagateSuccess (ACDem up x _ y) = (up, ATDem (x ++ y))
-propagateSuccess (ACLab up _) = propagateSuccess up
+propagateSuccess (ACAng up _ _ _ _) = propagateSuccess up
+propagateSuccess (ACDem up x _ _ y) = (up, ATDem (x ++ y))
+propagateSuccess (ACLab up _ _) = propagateSuccess up
 
-propagateFailure :: AltCtx e m -> (AltCtx e m, AltTree e m)
+propagateFailure :: AltCtx s e m -> (AltCtx s e m, AltTree s e m)
 propagateFailure ACTop = (ACTop, ATWork NoChoice)
-propagateFailure (ACAng up x _ y) = (up, ATAng (x ++ y))
-propagateFailure (ACDem up _ _ _) = propagateFailure up
-propagateFailure (ACLab up _) = propagateFailure up
+propagateFailure (ACAng up x _ _ y) = (up, ATAng (x ++ y))
+propagateFailure (ACDem up _ _ _ _) = propagateFailure up
+propagateFailure (ACLab up _ _) = propagateFailure up
 
-moveUp :: AltCtx e m -> AltTree e m -> (AltCtx e m, AltTree e m)
+moveUp :: AltCtx s e m -> AltTree s e m -> (AltCtx s e m, AltTree s e m)
 moveUp ACTop t = (ACTop, t)
-moveUp (ACAng up lft l rgt) t = (up, ATAng (lft ++ (l, t) : rgt))
-moveUp (ACDem up lft l rgt) t = (up, ATDem (lft ++ (l, t) : rgt))
-moveUp (ACLab up l) t = moveUp up (ATLab l t)
+moveUp (ACAng up lft s l rgt) t = (up, ATAng (lft ++ (s, l, t) : rgt))
+moveUp (ACDem up lft s l rgt) t = (up, ATDem (lft ++ (s, l, t) : rgt))
+moveUp (ACLab up s l) t = moveUp up (ATLab s l t)
 
-intera :: (Monad m, MonadIO m, Show e) => AltCtx e m -> AltTree e m -> m Bool
+intera :: (Monad m, MonadIO m, Show s, Show e) => AltCtx s e m -> AltTree s e m -> m Bool
 intera ACTop (ATWork NoChoice) = return False -- Failed
 intera ctx (ATWork NoChoice) = uncurry intera $ propagateFailure ctx
 intera ACTop (ATWork (Result ())) = return True
@@ -292,33 +298,35 @@ intera ctx (ATWork acs@(OrElse _ _ _)) = do
 intera ctx (ATWork (Cut x)) = intera ctx (ATWork x)
 intera ctx (ATWork (Retry x _)) = intera ctx (ATWork x)
 intera ctx (ATWork (LocalRetry c x _)) = intera ctx (ATWork (x >>= c))
-intera ctx (ATWork (Label l c)) = intera (ACLab ctx l) (ATWork c)
-intera ctx (ATLab l t) = intera (ACLab ctx l) t
+intera ctx (ATWork (Label s l c)) = intera (ACLab ctx s l) (ATWork c)
+intera ctx (ATLab s l t) = intera (ACLab ctx s l) t
 intera ctx (ATAng []) = do
                     printContext ctx
                     mps "Failure"
                     uncurry intera $ propagateFailure ctx
-intera ctx (ATAng [(l,a)]) = intera (ACLab ctx l) a
+intera ctx (ATAng [(s,l,a)]) = intera (ACLab ctx s l) a
 intera ctx t@(ATAng cs) = do
+                    printState ctx
                     printContext ctx
                     mps "Angelic choices:"
-                    opts <- iforM cs $ \i (a,ta) -> do
+                    opts <- iforM cs $ \i (s,a,ta) -> do
                                 mps (show i ++ ". " ++ a)
                                 let (top,_:rst) = splitAt i cs
-                                return (show i, intera (ACAng ctx top a rst) ta)
+                                return (show i, intera (ACAng ctx top s a rst) ta)
                     makeChoice $ ("quit", return False) : ("up", uncurry intera $ moveUp ctx t) : opts
 intera ctx (ATDem []) = do
                     printContext ctx
                     mps "Success"
                     uncurry intera $ propagateSuccess ctx
-intera ctx (ATDem [(l,d)]) = intera (ACLab ctx l) d
+intera ctx (ATDem [(s,l,d)]) = intera (ACLab ctx s l) d
 intera ctx t@(ATDem cs) = do
+                    printState ctx
                     printContext ctx
                     mps "Demonic choices:"
-                    opts <- iforM cs $ \i (a,ta) -> do
+                    opts <- iforM cs $ \i (s, a,ta) -> do
                                 mps (show i ++ ". " ++ a)
                                 let (top,_:rst) = splitAt i cs
-                                return (show i, intera (ACDem ctx top a rst) ta)
+                                return (show i, intera (ACDem ctx top s a rst) ta)
                     makeChoice $ ("quit", return False) : ("up", uncurry intera $ moveUp ctx t) : opts
 
 
@@ -336,7 +344,7 @@ makeChoice opts = do
 
 
 
-showAltT :: (Monad m, Show e) => AlternatingT e m () -> String
+showAltT :: (Monad m, Show e) => AlternatingT s e m () -> String
 showAltT (NoChoice) = "[Failure]"
 showAltT (Failure e) = "[Failure: " ++ show e ++ "]"
 showAltT (Result ()) = "[Success]"
@@ -348,13 +356,13 @@ showAltT (OrElse _ _ _) = "[Angelic Choice (or else)]"
 showAltT (Cut x) = showAltT x
 showAltT (Retry x _) = showAltT x
 showAltT (LocalRetry y x _) = showAltT (x >>= y)
-showAltT (Label l _) = l
+showAltT (Label _ l _) = l
 
 
-interactAlternatingT :: (Monad m, MonadIO m, Show e) => AlternatingT e m () -> m Bool
+interactAlternatingT :: (Monad m, MonadIO m, Show s, Show e) => AlternatingT s e m () -> m Bool
 interactAlternatingT = intera ACTop . ATWork
 
-runLazyAngelic :: (Monad m, Show e) => AlternatingT e m () -> m [(String, AltTree e m)]
+runLazyAngelic :: (Monad m, Show e) => AlternatingT s e m () -> m [(Maybe s, String, AltTree s e m)]
 runLazyAngelic NoChoice = return []
 runLazyAngelic (Failure _) = return [] -- TODO: Change to handle failure handling
 runLazyAngelic (Lazy k) = k >>= runLazyAngelic
@@ -370,10 +378,10 @@ runLazyAngelic (OrElse x y z) = do
 -- TODO: Don't ignore retries
 runLazyAngelic (Retry x h) = runLazyAngelic x
 runLazyAngelic (LocalRetry c x h) = runLazyAngelic (x >>= c)
-runLazyAngelic (Label l x) = return [(l, ATWork x)]
-runLazyAngelic o = return [(showAltT o, ATWork o)]
+runLazyAngelic (Label s l x) = return [(s, l, ATWork x)]
+runLazyAngelic o = return [(Nothing, showAltT o, ATWork o)]
 
-runLazyDemonic :: (Monad m, Show e) => AlternatingT e m () -> m [(String, AltTree e m)]
+runLazyDemonic :: (Monad m, Show e) => AlternatingT s e m () -> m [(Maybe s, String, AltTree s e m)]
 runLazyDemonic Success = return []
 runLazyDemonic (Result ()) = return []
 runLazyDemonic (Lazy k) = k >>= runLazyDemonic
@@ -384,5 +392,5 @@ runLazyDemonic (DemonicChoice x y) = do
 runLazyDemonic (Cut x) = runLazyDemonic x
 runLazyDemonic (Retry x h) = runLazyDemonic x
 runLazyDemonic (LocalRetry c x h) = runLazyDemonic (x >>= c)
-runLazyDemonic (Label l x) = return [(l, ATWork x)]
-runLazyDemonic o = return [(showAltT o, ATWork o)]
+runLazyDemonic (Label s l x) = return [(s, l, ATWork x)]
+runLazyDemonic o = return [(Nothing, showAltT o, ATWork o)]

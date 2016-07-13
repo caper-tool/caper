@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances, FlexibleContexts, MultiParamTypeClasses, FunctionalDependencies, UndecidableInstances #-}
 module Caper.Utils.NondetClasses where
 
 import Data.Foldable
@@ -55,11 +55,17 @@ liftMaybe Nothing = mzero
 chooseFrom :: (Functor t, Foldable t, MonadPlus m) => t a -> m a
 chooseFrom = msum . fmap return
 
-class (Monad m) => MonadLabel m where
-        label :: String -> m ()
+class (Monad m) => MonadLabel s m | m -> s where
+        labelMaybe :: Maybe s -> String -> m ()
 
-instance (MonadLabel m) => MonadLabel (StateT s m) where
-        label = lift . label
+label :: (MonadLabel s m) => String -> m ()
+label = labelMaybe Nothing
+
+labelState :: (MonadLabel s m) => s -> String -> m ()
+labelState s l = labelMaybe (Just s) l
+
+instance (MonadLabel s' m) => MonadLabel s' (StateT s m) where
+        labelMaybe s l = lift $ labelMaybe s l
 
 {-
 {- |Record the current state; execute the first computation; revert to the saved state;

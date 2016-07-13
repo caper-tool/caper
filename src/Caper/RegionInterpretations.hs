@@ -11,7 +11,6 @@ import Data.Foldable
 import Data.Maybe
 
 import Caper.Utils.Alternating
-import Caper.Utils.Failure
 
 import qualified Caper.Parser.AST.Annotation as AST
 import Caper.Parser.AST.Annotation (StateInterpretation(..))
@@ -27,7 +26,6 @@ import Caper.ProverStates
 import Caper.Assertions.Check
 import Caper.Assertions.Produce
 import Caper.Assertions.Consume
-import Caper.Predicates
 
 {--
 -- Actually, this is probably part of the AST...
@@ -150,10 +148,10 @@ checkStateInterpretationStability params si =
                     assertEqual state0 state1
                     -- Assert the conditions
                     forM_ (siConditions si) consumePure
-                    debugState
+                    -- debugState
                     -- Consume the concrete state
                     consumeAssrt (siInterp si)
-                    debugState
+                    -- debugState
                     use logicalVars >>= liftIO . putStrLn . show
         when (isNothing r) $
             raise UnstableStateInterpretation
