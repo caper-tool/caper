@@ -213,15 +213,17 @@ instance Show VariableType where
 
 
 type PermissionsProver = FOF PermissionAtomic String -> IO (Maybe Bool)
-type ValueProver = FOF ValueAtomic String -> IO (Maybe Bool)
+data ValueProver =
+        VPBasic (FOF ValueAtomic String -> IO (Maybe Bool))
+        | VPEnhanced (FOF ValueAtomic String -> IO (Maybe Bool)) ([FOF ValueAtomic VariableID] -> FOF ValueAtomic VariableID -> IO (Maybe Bool))
 
 class Provers a where
         permissionsProver :: a -> PermissionsProver
         valueProver :: a -> ValueProver
 
 data ProverRecord = Provers {
-                _permissionsProver :: FOF PermissionAtomic String -> IO (Maybe Bool),
-                _valueProver :: FOF ValueAtomic String -> IO (Maybe Bool),
+                _permissionsProver :: PermissionsProver,
+                _valueProver :: ValueProver,
                 _permissionsInfo :: IO String,
                 _valueInfo :: IO String
                 }

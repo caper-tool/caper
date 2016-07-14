@@ -337,7 +337,9 @@ isConsistent = do
                         rp <- checkConsistency (permissionsProver ps) (permissionVariables ass) (permissionAssumptions ass)
                         if rp == Just False then return $ Just False
                             else do
-                                rv <- checkConsistency (valueProver ps) (valueVariables ass) (valueAssumptions ass)
+                                rv <- case valueProver ps of
+                                        VPBasic vp -> checkConsistency vp (valueVariables ass) (valueAssumptions ass)
+                                        VPEnhanced _ vp -> liftM (not <$>) $ vp (valueAssumptions ass) FOFFalse
                                 return $ case (rp, rv) of
                                         (_, Just False) -> Just False
                                         (Just True, Just True) -> Just True
@@ -642,16 +644,38 @@ valueAvars :: (AssertionLenses a) => Getter a [VariableID]
 valueAvars = filterAvars treatAsValueJ --(\x -> (x == Just VTValue) || isNothing x)
 
 -- |Check a first-order value formula (generating the appropriate logging events)
+enhancedValueCheck :: (MonadIO m, MonadReader r m, Provers r, MonadLogger m) =>
+        [VariableID] -> [FOF ValueAtomic VariableID] -> FOF ValueAtomic VariableID -> m (Maybe Bool)
+enhancedValueCheck vavs lvalueAssumptions vasst = ask >>= \p -> case valueProver p of
+        VPBasic vp -> do
+                let sf = varToString <$> assumptionContext vavs lvalueAssumptions vasst
+                logEvent $ ProverInvocation ValueProverType (show sf)
+                r <- liftIO $ vp sf
+                logEvent $ ProverResult r
+                when (isNothing r) $ logEvent $ WarnProverNoAnswer "value"
+                return r
+        VPEnhanced _ vp -> do
+                logEvent $ ProverInvocation ValueProverType (show (lvalueAssumptions, vasst))
+                r <- liftIO $ vp lvalueAssumptions vasst
+                logEvent $ ProverResult r
+                when (isNothing r) $ logEvent $ WarnProverNoAnswer "value"
+                return r
+
+-- |Check a first-order value formula (generating the appropriate logging events)
 valueCheck :: (MonadIO m, MonadReader r m, Provers r, StringVariable v, MonadLogger m) =>
         FOF ValueAtomic v -> m (Maybe Bool)
 valueCheck f = do
                 let sf = varToString <$> f
                 logEvent $ ProverInvocation ValueProverType (show sf)
                 p <- ask
-                r <- liftIO $ valueProver p sf
+                let vp = case valueProver p of
+                        VPBasic vp -> vp
+                        VPEnhanced vp _ -> vp
+                r <- liftIO $ vp sf
                 logEvent $ ProverResult r
                 when (isNothing r) $ logEvent $ WarnProverNoAnswer "value"
                 return r
+
 
 -- |Check a first-order permissions formula (generating the appropriate logging events)
 permissionCheck :: (MonadIO m, MonadReader r m, Provers r, StringVariable v, MonadLogger m) =>
@@ -690,7 +714,7 @@ checkAssertions = do
                 vevs <- use valueEvars
                 vavs <- use valueAvars
                 let vasst = foldr FOFExists (foldBy FOFAnd FOFTrue valueAssertions) vevs
-                rv <- valueCheck $ assumptionContext vavs lvalueAssumptions vasst
+                rv <- enhancedValueCheck vavs lvalueAssumptions vasst 
                 return (rv == Just True)
 
 justCheck :: (MonadIO m, MonadPlus m, MonadState s m, AssertionLenses s,

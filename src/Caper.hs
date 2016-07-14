@@ -73,7 +73,8 @@ caperCommand CLVersion = do
             vpinfo <- _valueInfo provers
             putStrLn vpinfo
             (do
-                    r <- valueProver provers FOFTrue
+                    let vpp = (case (valueProver provers) of VPBasic vp -> vp; VPEnhanced vp _ -> vp)
+                    r <- vpp FOFTrue
                     case r of
                             Just True -> return ()
                             _ -> putStrLn "*** ERROR: The value prover could not prove True."

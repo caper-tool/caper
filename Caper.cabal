@@ -97,7 +97,7 @@ executable Caper
   if flag(z3ffi)
     build-depends:  z3 >=4.0.0
     cpp-options:    -Dz3ffi
-    other-modules:  Caper.Provers.Values.Z3, Caper.Provers.Permissions.SMT
+    other-modules:  Caper.Provers.Values.Z3, Caper.Provers.Permissions.SMT, Caper.Provers.Values.Z3plus
 
   if impl(ghc >= 7.10)
      cpp-options:   -Doverlap_pragmas

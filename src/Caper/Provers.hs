@@ -14,6 +14,7 @@ import Caper.Provers.Permissions.E
 import qualified Caper.Provers.Values.SBV as VP
 #ifdef z3ffi
 import qualified Caper.Provers.Values.Z3 as VP2
+import qualified Caper.Provers.Values.Z3plus as VP3
 import Caper.Provers.Permissions.SMT
 #endif
 import Caper.FirstOrder
@@ -55,11 +56,14 @@ proversFromConfig = do
                 pp <- liftIO $ memoIO pp0 -- cache results from the permissions prover
                 valProver <- get conf "Provers" "values"
                 timeout <- get conf "Z3Prover" "timeout"
-                let (vp, vi) = case valProver :: String of
+                (vp, vi) <- case valProver :: String of
 #ifdef z3ffi
-                        "z3-ffi" -> (VP2.valueCheck (Just timeout), VP2.valueProverInfo)
+                        "z3-ffi" -> return (VPBasic $ VP2.valueCheck (Just timeout), VP2.valueProverInfo)
+                        "z3-plus" -> do
+                                vp <- liftIO $ VP3.createEntailsChecker (Just timeout)
+                                return (VPEnhanced (VP2.valueCheck (Just timeout)) vp, VP3.valueProverInfo)
 #endif
-                        _ -> (VP.valueCheck (if timeout <= 0 then Nothing else Just $ (timeout - 1) `div` 1000 + 1), VP.valueProverInfo)
+                        _ -> return (VPBasic $ VP.valueCheck (if timeout <= 0 then Nothing else Just $ (timeout - 1) `div` 1000 + 1), VP.valueProverInfo)
                 return $ Provers pp vp ppi vi
                         
 -- |Initialise the provers from the configuration file.  Errors with the configuration
