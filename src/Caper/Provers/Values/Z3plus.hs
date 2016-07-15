@@ -1,6 +1,7 @@
 module Caper.Provers.Values.Z3plus where
 
 import Control.Monad
+import Control.Monad.IO.Class
 import Z3.Monad
 import Control.Concurrent.MVar
 import Data.List
@@ -17,7 +18,7 @@ data AssumptionEnvironment = AssumptionEnvironment {
 
 makeEmptyAssumptionEnvironment :: Maybe Int -> IO AssumptionEnvironment
 makeEmptyAssumptionEnvironment timeout = do
-        env <- newEnv Nothing stdOpts
+        env <- newEnv (Just AUFLIA) stdOpts
         flip evalZ3WithEnv env $ do
                 params <- mkParams
                 tmo <- mkStringSymbol "timeout"
@@ -62,13 +63,13 @@ convAtomic s (VALt e1 e2) = do
 
 convFOF :: (MonadZ3 z3) => (VariableID -> Maybe Int) -> FOF ValueAtomic VariableID -> z3 AST
 convFOF bdgs (FOFForAll v f) = do
-                si <- mkStringSymbol (varToString v)
-                x <- convFOF (\w -> if w == v then Just 0 else (1+) <$> bdgs v) f
+                si <- mkStringSymbol ("EE" ++ varToString v)
+                x <- convFOF (\w -> if w == v then Just 0 else (1+) <$> bdgs w) f
                 intS <- mkIntSort
                 mkForall [] [si] [intS] x
 convFOF bdgs (FOFExists v f) = do
-                si <- mkStringSymbol (varToString v)
-                x <- convFOF (\w -> if w == v then Just 0 else (1+) <$> bdgs v) f
+                si <- mkStringSymbol ("EE" ++ varToString v)
+                x <- convFOF (\w -> if w == v then Just 0 else (1+) <$> bdgs w) f
                 intS <- mkIntSort
                 mkExists [] [si] [intS] x
 convFOF bdgs (FOFAtom a) = convAtomic bdgs' a
@@ -90,6 +91,7 @@ convFOF bdgs FOFTrue = mkTrue
 updateAssumptions :: (MonadZ3 z3) => Assms -> [FOF ValueAtomic VariableID] -> z3 Assms
 updateAssumptions [] [] = return []
 updateAssumptions [] ams = do
+                        push
                         sequence_ $ (assert <=< convFOF (const Nothing)) <$> ams
                         return [ams]
 updateAssumptions (ams1 : ar) ams = case stripPrefix ams1 ams of
@@ -107,11 +109,16 @@ entailsCheck defAE mvAE ams ast = do
                         Just ae -> return ae
                         Nothing -> defAE
                 (assms', res) <- flip evalZ3WithEnv env $ do
-                        assms' <- updateAssumptions assms ams
-                        push
+                        assms' <- updateAssumptions assms (reverse ams)
                         res <- local $ do
                                 assert =<< convFOF (const Nothing) (FOFNot ast)
-                                check
+                                res <- check
+                                s2s <- solverToString
+                                liftIO $ putStrLn s2s
+                                when (res == Undef) $ do
+                                    reason <- solverGetReasonUnknown
+                                    liftIO $ putStrLn $ "UNKNOWN: " ++ reason
+                                return res
                         return (assms', res)
                 _ <- tryPutMVar mvAE (AssumptionEnvironment env assms')
                 return $ case res of
