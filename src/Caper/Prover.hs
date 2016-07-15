@@ -710,10 +710,11 @@ checkAssertions = do
             else do
                 -- Check the value assertions
                 let lvalueAssumptions = valueConditions (varIsVal bdgs) asms
-                let valueAssertions = valueConditions (varIsVal bdgs) asts
+                let valueAssertions = foldBy FOFAnd FOFTrue $ valueConditions (varIsVal bdgs) asts
                 vevs <- use valueEvars
                 vavs <- use valueAvars
-                let vasst = foldr FOFExists (foldBy FOFAnd FOFTrue valueAssertions) vevs
+                let vevs' = filter (`freeIn` valueAssertions) vevs
+                let vasst = foldr FOFExists valueAssertions vevs'
                 rv <- enhancedValueCheck vavs lvalueAssumptions vasst 
                 return (rv == Just True)
 
