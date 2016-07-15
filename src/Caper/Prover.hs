@@ -654,12 +654,12 @@ enhancedValueCheck vavs lvalueAssumptions vasst = ask >>= \p -> case valueProver
                 logEvent $ ProverResult r
                 when (isNothing r) $ logEvent $ WarnProverNoAnswer "value"
                 return r
-        VPEnhanced _ vp -> do
+        VPEnhanced vpb vp -> do
                 logEvent $ ProverInvocation ValueProverType (show (lvalueAssumptions, vasst))
                 r <- liftIO $ vp lvalueAssumptions vasst
                 logEvent $ ProverResult r
                 when (isNothing r) $ logEvent $ WarnProverNoAnswer "value"
-                return r
+                if (isNothing r) then (valueCheck $ assumptionContext vavs lvalueAssumptions vasst) else return r
 
 -- |Check a first-order value formula (generating the appropriate logging events)
 valueCheck :: (MonadIO m, MonadReader r m, Provers r, StringVariable v, MonadLogger m) =>
