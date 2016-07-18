@@ -6,6 +6,7 @@ import Z3.Monad
 import Control.Concurrent.MVar
 import Data.List
 import Control.Exception hiding (assert)
+import Data.Foldable
 
 import Caper.ProverDatatypes
 
@@ -101,35 +102,55 @@ updateAssumptions (ams1 : ar) ams = case stripPrefix ams1 ams of
         Just ams' -> (ams1 :) <$> updateAssumptions ar ams'
 
 
-entailsCheck :: IO AssumptionEnvironment -> MVar AssumptionEnvironment -> 
-        [FOF ValueAtomic VariableID] -> FOF ValueAtomic VariableID -> IO (Maybe Bool)
-entailsCheck defAE mvAE ams ast = do
-                oae <- tryTakeMVar mvAE
-                (AssumptionEnvironment env assms) <- case oae of
-                        Just ae -> return ae
-                        Nothing -> defAE
-                (assms', res) <- flip evalZ3WithEnv env $ do
-                        assms' <- updateAssumptions assms (reverse ams)
-                        res <- local $ do
-                                assert =<< convFOF (const Nothing) (FOFNot ast)
-                                res <- check
-                                s2s <- solverToString
-                                liftIO $ putStrLn s2s
-                                when (res == Undef) $ do
-                                    reason <- solverGetReasonUnknown
-                                    liftIO $ putStrLn $ "UNKNOWN: " ++ reason
-                                return res
-                        return (assms', res)
-                _ <- tryPutMVar mvAE (AssumptionEnvironment env assms')
+fallbackCheck :: Maybe Int -> [FOF ValueAtomic VariableID] -> FOF ValueAtomic VariableID -> IO (Maybe Bool)
+fallbackCheck timeout ams ast = evalZ3With Nothing stdOpts $ do
+                params <- mkParams
+                tmo <- mkStringSymbol "timeout"
+                paramsSetUInt params tmo (case timeout of
+                        Just x -> if x > 0 then toEnum x else 0
+                        Nothing -> 0)
+                solverSetParams params
+                let stmt0 = foldr FOFAnd (FOFNot ast) ams
+                let stmt1 = foldr FOFExists stmt0 (freeVariables stmt0)
+                assert =<< convFOF (const Nothing) stmt1
+                res <- check
                 return $ case res of
                         Sat -> Just False
                         Unsat -> Just True
                         _ -> Nothing
 
+
+entailsCheck :: Maybe Int -> MVar AssumptionEnvironment -> 
+        [FOF ValueAtomic VariableID] -> FOF ValueAtomic VariableID -> IO (Maybe Bool)
+entailsCheck timeout mvAE ams ast = do
+                oae <- tryTakeMVar mvAE
+                (AssumptionEnvironment env assms) <- case oae of
+                        Just ae -> return ae
+                        Nothing -> (makeEmptyAssumptionEnvironment timeout)
+                (assms', res, rtry) <- flip evalZ3WithEnv env $ do
+                        assms' <- updateAssumptions assms (reverse ams)
+                        (res, rtry) <- local $ do
+                                assert =<< convFOF (const Nothing) (FOFNot ast)
+                                res <- check
+                                --s2s <- solverToString
+                                --liftIO $ putStrLn s2s
+                                rtry <- if (res == Undef) then do
+                                            reason <- solverGetReasonUnknown
+                                            liftIO $ putStrLn $ "UNKNOWN: " ++ reason
+                                            return (reason == "(incomplete quantifiers)")
+                                        else return False
+                                return (res, rtry)
+                        return (assms', res, rtry)
+                _ <- tryPutMVar mvAE (AssumptionEnvironment env assms')
+                case res of
+                        Sat -> return $ Just False
+                        Unsat -> return $ Just True
+                        _ -> if rtry then fallbackCheck timeout ams ast else return Nothing
+
 createEntailsChecker :: Maybe Int -> IO ([FOF ValueAtomic VariableID] -> FOF ValueAtomic VariableID -> IO (Maybe Bool))
 createEntailsChecker timeout = do
                 mvAE <- newEmptyMVar
-                return (entailsCheck (makeEmptyAssumptionEnvironment timeout) mvAE)
+                return (entailsCheck timeout mvAE)
 
 valueProverInfo :: IO String
 valueProverInfo = (do
