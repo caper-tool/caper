@@ -31,7 +31,8 @@ data CommandLine =
         verifyFile :: FilePath,
         verbose :: Bool,
         cfgROL :: Int,
-        cfgRCL :: Int
+        cfgRCL :: Int,
+        cfgInteractive :: Bool
         }
 
 commandLineParser :: ParserSpec CommandLine
@@ -40,6 +41,7 @@ commandLineParser = CLVerify
     `andBy` boolFlag "v" `Descr` "verbose output"
     `andBy` optFlag defaultRegionOpenLimit "o" `Descr` "maximum number of regions to open [default: " ++ show defaultRegionOpenLimit ++ "]"
     `andBy` optFlag defaultRegionConstructionLimit "c" `Descr` "maximum number of regions to construct in one step [default: " ++ show defaultRegionConstructionLimit ++ "]"
+    `andBy` boolFlag "i" `Descr` "interactive verification"
 
 caperSpecialFlags :: [SpecialFlag CommandLine]
 caperSpecialFlags = 
@@ -89,13 +91,13 @@ caperCommand CLVersion = do
                             _ -> putStrLn "*** ERROR: The permissions prover could not prove True."
                     ) `catch` (\e -> putStrLn $ "*** ERROR: Invoking the permissions prover resulted in the following error:\n" ++ show (e :: SomeException))
             ) `catch` (\e -> putStrLn $ "*** ERROR: Failed to initialise provers:\n" ++ show (e :: SomeException))
-caperCommand (CLVerify file verb rol rcl) = do
+caperCommand (CLVerify file verb rol rcl inter) = do
         declrs <- parseFile file
         print declrs
         let funDecs = functionDeclrs declrs
         provers <- initProvers
         let filtLog = filterLogger (if verb then const True else logNotProver)
-        let configuration = ConfigurationContext { ccRegionOpenLimit = rol, ccRegionConstructionLimit = rcl }
+        let configuration = defaultConfiguration { ccRegionOpenLimit = rol, ccRegionConstructionLimit = rcl, ccInteractiveVerification = inter }
         result <- runOutLogger $ filtLog $ flip runReaderT [StringContext $ "File: \"" ++ file ++ "\"."] $ runRaiseT $ do
             (predTypings, regTypeTypings) <- typeDeclarations declrs
             let pc = createPredicateContext predTypings

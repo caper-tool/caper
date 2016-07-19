@@ -239,18 +239,27 @@ runAlternatingTD2 :: (Monad m, MonadIO m, Show e) => AlternatingT s e m () -> m 
 runAlternatingTD2 = liftM isJust . runAlternatingTD 
 
 
-data AltTree s e m = ATAng [(Maybe s, String, AltTree s e m)] | ATDem [(Maybe s, String, AltTree s e m)] | ATLab (Maybe s) String (AltTree s e m) | ATWork (AlternatingT s e m ())
+data AltTree s e m = ATAng [(Maybe s, String, AltTree s e m)]
+        | ATDem [(Maybe s, String, AltTree s e m)]
+        | ATLab (Maybe s) String (AltTree s e m)
+        | ATWork (AlternatingT s e m ())
+        | ATHandler (e -> Maybe (AlternatingT s e m ())) (AltTree s e m) [(e, AltTree s e m)]
 
 data AltCtx s e m = ACTop
     | ACAng (AltCtx s e m) [(Maybe s, String, AltTree s e m)] (Maybe s) String [(Maybe s, String, AltTree s e m)]
     | ACDem (AltCtx s e m) [(Maybe s, String, AltTree s e m)] (Maybe s) String [(Maybe s, String, AltTree s e m)]
     | ACLab (AltCtx s e m) (Maybe s) String
+    | ACTry (AltCtx s e m) (e -> Maybe (AlternatingT s e m ())) [(e, AltTree s e m)]
+    | ACCatch (AltCtx s e m) (e -> Maybe (AlternatingT s e m ())) (AltTree s e m) [(e, AltTree s e m)] e [(e, AltTree s e m)]
+    
 
-printContext :: (Monad m, MonadIO m) => AltCtx s e m' -> m ()
+printContext :: (Monad m, MonadIO m, Show e) => AltCtx s e m' -> m ()
 printContext ACTop = return ()
 printContext (ACAng up _ _ l _) = printContext up >> mps ("A: " ++ l)
 printContext (ACDem up _ _ l _) = printContext up >> mps ("D: " ++ l)
 printContext (ACLab up _ l) = printContext up >> mps ("   " ++ l)
+printContext (ACTry up _ es) = printContext up >> mps ("H: TRY (" ++ show (length es) ++ " exception(s))")
+printContext (ACCatch up _ t es1 e es2) = printContext up >> mps ("H: CATCH " ++ show e ++ " (default & " ++ (show $ length es1 + length es2) ++ " exception(s))")
 
 printState :: (Monad m, MonadIO m, Show s) => AltCtx s e m' -> m ()
 printState (ACAng _ _ (Just s) _ _) = mps $ "*** STATE ***\n" ++ show s ++ "\n*************"
@@ -263,28 +272,70 @@ propagateSuccess ACTop = (ACTop, ATWork Success)
 propagateSuccess (ACAng up _ _ _ _) = propagateSuccess up
 propagateSuccess (ACDem up x _ _ y) = (up, ATDem (x ++ y))
 propagateSuccess (ACLab up _ _) = propagateSuccess up
+propagateSuccess (ACTry up _ _) = propagateSuccess up
+propagateSuccess (ACCatch up _ _ _ _ _) = propagateSuccess up
 
-propagateFailure :: AltCtx s e m -> (AltCtx s e m, AltTree s e m)
-propagateFailure ACTop = (ACTop, ATWork NoChoice)
-propagateFailure (ACAng up x _ _ y) = (up, ATAng (x ++ y))
-propagateFailure (ACDem up _ _ _ _) = propagateFailure up
-propagateFailure (ACLab up _ _) = propagateFailure up
+propagateFailure :: Show e => Maybe e -> AltCtx s e m -> (AltCtx s e m, AltTree s e m)
+propagateFailure f ACTop = (ACTop, ATWork NoChoice)
+propagateFailure f (ACAng up x _ _ y) = (propagateFailureHandler f up, ATAng (x ++ y))
+propagateFailure f (ACDem up _ _ _ _) = propagateFailure f up
+propagateFailure f (ACLab up _ _) = propagateFailure f up
+propagateFailure f (ACTry up h es) = (propagateFailureHandler f up, ATAng [(Nothing, "CATCH " ++ show e, x) | (e, x) <- es ++ extraCatch])
+        where
+                extraCatch = chooseFrom $ do
+                        e <- f
+                        a <- h e
+                        return (e, ATWork a)
+propagateFailure f (ACCatch up h d x _ y) = (propagateFailureHandler f up, ATHandler h d (x ++ y))
+
+
+propagateFailureHandler :: Maybe e -> AltCtx s e m -> AltCtx s e m
+propagateFailureHandler Nothing = id
+propagateFailureHandler (Just e) = propagateFailureHandler' e
+
+propagateFailureHandler' :: e -> AltCtx s e m -> AltCtx s e m
+propagateFailureHandler' e ACTop = ACTop
+propagateFailureHandler' e (ACAng up a b c d) = (ACAng (propagateFailureHandler' e up) a b c d)
+propagateFailureHandler' e (ACDem up a b c d) = (ACDem (propagateFailureHandler' e up) a b c d)
+propagateFailureHandler' e (ACLab up a b) = (ACLab (propagateFailureHandler' e up) a b)
+propagateFailureHandler' e (ACTry up h es) = (ACTry (propagateFailureHandler' e up) h (es ++ chooseFrom (fmap ((,) e . ATWork) $ h e)))
+propagateFailureHandler' e (ACCatch up h a b c d) = (ACCatch (propagateFailureHandler' e up) h a b c d)
 
 moveUp :: AltCtx s e m -> AltTree s e m -> (AltCtx s e m, AltTree s e m)
 moveUp ACTop t = (ACTop, t)
 moveUp (ACAng up lft s l rgt) t = (up, ATAng (lft ++ (s, l, t) : rgt))
 moveUp (ACDem up lft s l rgt) t = (up, ATDem (lft ++ (s, l, t) : rgt))
 moveUp (ACLab up s l) t = moveUp up (ATLab s l t)
+moveUp (ACTry up h es) t = (up, ATHandler h t es)
+moveUp (ACCatch up h d x e y) t = (up, ATHandler h d (x ++ (e, t) : y))
+
+myFail :: (Monad m, MonadIO m, Show s, Show e) => AltCtx s e m -> Maybe e -> m ()
+myFail ctx f = do
+        printState ctx
+        printContext ctx 
+        mps $ case f of
+            Nothing -> "### Failure"
+            Just e -> "### Failure: " ++ show e
+        _ <- liftIO getLine
+        return ()
+
+mySuccess :: (Monad m, MonadIO m, Show s, Show e) => AltCtx s e m -> m ()
+mySuccess ctx = do
+        printState ctx
+        printContext ctx
+        mps "$$$ Success"
+        _ <- liftIO getLine
+        return ()
 
 intera :: (Monad m, MonadIO m, Show s, Show e) => AltCtx s e m -> AltTree s e m -> m Bool
-intera ACTop (ATWork NoChoice) = return False -- Failed
-intera ctx (ATWork NoChoice) = uncurry intera $ propagateFailure ctx
-intera ACTop (ATWork (Result ())) = return True
-intera ctx (ATWork (Result ())) = uncurry intera $ propagateSuccess ctx
-intera ACTop (ATWork (Failure _)) = return False -- Failed
-intera ctx (ATWork (Failure _)) = uncurry intera $ propagateFailure ctx
-intera ACTop (ATWork Success) = return True
-intera ctx (ATWork Success) = uncurry intera $ propagateSuccess ctx
+intera ctx@ACTop (ATWork NoChoice) = myFail ctx Nothing >> return False -- Failed
+intera ctx (ATWork NoChoice) = myFail ctx Nothing >> (uncurry intera $ propagateFailure Nothing ctx)
+intera ctx@ACTop (ATWork (Result ())) = mySuccess ctx >> return True
+intera ctx (ATWork (Result ())) = mySuccess ctx >> (uncurry intera $ propagateSuccess ctx)
+intera ctx@ACTop (ATWork (Failure f)) = myFail ctx (Just f) >> return False -- Failed
+intera ctx (ATWork (Failure f)) = myFail ctx (Just f) >> (uncurry intera $ propagateFailure (Just f) ctx)
+intera ctx@ACTop (ATWork Success) = mySuccess ctx >> return True
+intera ctx (ATWork Success) = mySuccess ctx >> (uncurry intera $ propagateSuccess ctx)
 intera ctx (ATWork (Lazy x)) = x >>= (intera ctx . ATWork)
 intera ctx (ATWork acs@(AngelicChoice _ _)) = do
                 acs' <- runLazyAngelic acs
@@ -296,14 +347,13 @@ intera ctx (ATWork acs@(OrElse _ _ _)) = do
                 acs' <- runLazyAngelic acs
                 intera ctx (ATAng acs')
 intera ctx (ATWork (Cut x)) = intera ctx (ATWork x)
-intera ctx (ATWork (Retry x _)) = intera ctx (ATWork x)
-intera ctx (ATWork (LocalRetry c x _)) = intera ctx (ATWork (x >>= c))
+intera ctx (ATWork (Retry x h)) = intera ctx (ATHandler h (ATWork x) [])
+intera ctx (ATWork (LocalRetry c x h)) = intera ctx (ATHandler (fmap (>>= c) . h) (ATWork (x >>= c)) [])
 intera ctx (ATWork (Label s l c)) = intera (ACLab ctx s l) (ATWork c)
 intera ctx (ATLab s l t) = intera (ACLab ctx s l) t
 intera ctx (ATAng []) = do
-                    printContext ctx
-                    mps "Failure"
-                    uncurry intera $ propagateFailure ctx
+                    myFail ctx Nothing
+                    uncurry intera $ propagateFailure Nothing ctx
 intera ctx (ATAng [(s,l,a)]) = intera (ACLab ctx s l) a
 intera ctx t@(ATAng cs) = do
                     printState ctx
@@ -315,8 +365,7 @@ intera ctx t@(ATAng cs) = do
                                 return (show i, intera (ACAng ctx top s a rst) ta)
                     makeChoice $ ("quit", return False) : ("up", uncurry intera $ moveUp ctx t) : opts
 intera ctx (ATDem []) = do
-                    printContext ctx
-                    mps "Success"
+                    mySuccess ctx
                     uncurry intera $ propagateSuccess ctx
 intera ctx (ATDem [(s,l,d)]) = intera (ACLab ctx s l) d
 intera ctx t@(ATDem cs) = do
@@ -328,7 +377,17 @@ intera ctx t@(ATDem cs) = do
                                 let (top,_:rst) = splitAt i cs
                                 return (show i, intera (ACDem ctx top s a rst) ta)
                     makeChoice $ ("quit", return False) : ("up", uncurry intera $ moveUp ctx t) : opts
-
+intera ctx (ATHandler h t []) = intera (ACTry ctx h []) t
+intera ctx tt@(ATHandler h t es) = do
+                    printState ctx
+                    printContext ctx
+                    mps "Exception handler choices:"
+                    mps "0. TRY"
+                    opts <- iforM es $ \i (e, ta) -> do
+                            mps (show (i+1) ++ ". CATCH " ++ show e)
+                            let (lft,_:rgt) = splitAt i es
+                            return (show (i+1), intera (ACCatch ctx h t lft e rgt) ta)
+                    makeChoice $ ("quit", return False) : ("up", uncurry intera $ moveUp ctx t) : ("0", intera (ACTry ctx h es) t) : opts
 
 makeChoice :: (Monad m, MonadIO m) => [(String, m a)] -> m a
 makeChoice opts = do
@@ -364,7 +423,7 @@ interactAlternatingT = intera ACTop . ATWork
 
 runLazyAngelic :: (Monad m, Show e) => AlternatingT s e m () -> m [(Maybe s, String, AltTree s e m)]
 runLazyAngelic NoChoice = return []
-runLazyAngelic (Failure _) = return [] -- TODO: Change to handle failure handling
+-- runLazyAngelic (Failure _) = return [] -- TODO: Change to handle failure handling
 runLazyAngelic (Lazy k) = k >>= runLazyAngelic
 runLazyAngelic (AngelicChoice x y) = do
                 x' <- runLazyAngelic x
@@ -376,8 +435,8 @@ runLazyAngelic (OrElse x y z) = do
                 y' <- runLazyAngelic (y >>= z)
                 return $ x' ++ y'
 -- TODO: Don't ignore retries
-runLazyAngelic (Retry x h) = runLazyAngelic x
-runLazyAngelic (LocalRetry c x h) = runLazyAngelic (x >>= c)
+--runLazyAngelic (Retry x h) = return [(Nothing, "HANDLER", ATHandler h (ATWork x) [])]
+--runLazyAngelic (LocalRetry c x h) = return [(Nothing, "HANDLER", ATHandler (fmap (>>= c) . h) (ATWork (x >>= c)) [])]
 runLazyAngelic (Label s l x) = return [(s, l, ATWork x)]
 runLazyAngelic o = return [(Nothing, showAltT o, ATWork o)]
 
@@ -390,7 +449,7 @@ runLazyDemonic (DemonicChoice x y) = do
                 y' <- runLazyDemonic y
                 return $ x' ++ y'
 runLazyDemonic (Cut x) = runLazyDemonic x
-runLazyDemonic (Retry x h) = runLazyDemonic x
-runLazyDemonic (LocalRetry c x h) = runLazyDemonic (x >>= c)
+--runLazyDemonic (Retry x h) = return [(Nothing, "HANDLER", ATHandler h (ATWork x) [])]
+--runLazyDemonic (LocalRetry c x h) = return [(Nothing, "HANDLER", ATHandler (fmap (>>= c) . h) (ATWork (x >>= c)) [])]
 runLazyDemonic (Label s l x) = return [(s, l, ATWork x)]
 runLazyDemonic o = return [(Nothing, showAltT o, ATWork o)]

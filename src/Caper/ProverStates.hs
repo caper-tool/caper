@@ -88,10 +88,11 @@ admitChecks o = do
                 return r
 
 check :: (AssumptionLenses s, MonadLogger m, Provers p, MonadReader p m,
-            MonadIO m, MonadState s m, MonadPlus m) =>
+            MonadIO m, MonadState s m, MonadPlus m, DebugState (WithAssertions s) p, MonadLabel CapturedState m) =>
            StateT (WithAssertions s) m a -> m a
 check c = admitChecks $ do
                 r <- c
+                labelS "Check assertions"
                 justCheck
                 return r
 

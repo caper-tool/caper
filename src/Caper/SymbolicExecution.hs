@@ -500,19 +500,23 @@ checkProcedure ::
         FunctionDeclr -> m Bool
 checkProcedure fd@(FunctionDeclr sp n opre opost args s) =
         contextualise fd $ contextualise ("Checking procedure '" ++ n ++ "'") $ do
-            runAlternatingTD2 $ flip evalStateT (emptySymbStateWithVars args) $ do
+            runAltT $ flip evalStateT (emptySymbStateWithVars args) $ do
+                logEvent $ InfoEvent $ "Checking procedure '" ++ n ++ "'"
                 labelS $ "Checking procedure '" ++ n ++ "'"
                 -- Produce the precondition
-                logEvent $ InfoEvent $ "Producing precondition: " ++ show pre
+                labelS $ "Producing precondition: " ++ show pre
                 contextualise "Producing precondition" $ produceAssrt
                     stabiliseAfterProducePrecondition
                     pre
                 symbolicExecute s postcheck                
     where
+        runAltT a = do
+                inter <- reader interactiveVerification
+                if inter then interactAlternatingT a else runAlternatingTD2 a
         pre = fromMaybe (defaultPrecondition sp) opre
         post = fromMaybe (defaultPostcondition sp) opost
         postcheck' res = contextualise ("Consuming postcondition: " ++ show post) $ whenConsistent $ do
-                        logEvent $ InfoEvent $ "Consuming postcondition: " ++ show post
+                        labelS $ "Consuming postcondition: " ++ show post
                         retVar <- newAvar returnVariableName
                         case res of
                             Just rv -> assumeTrue (VAEq (var retVar) rv)
@@ -521,7 +525,6 @@ checkProcedure fd@(FunctionDeclr sp n opre opost args s) =
                         missingRegionHandler
                         when stabiliseBeforeConsumePostcondition stabiliseRegions
                         check $ consumeAssrt post
-                        logEvent $ InfoEvent $ "Postcondition consumed."
                         labelS $ "Postcondition consumed."
         postcheck EMContinuation = postcheck' Nothing
         postcheck (EMReturn ret) = postcheck' ret 

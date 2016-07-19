@@ -366,7 +366,7 @@ symExLocalAssign target expr = do
                 progVars %= Map.insert target newval
 
 symExAllocate :: 
-                   (MonadRaise m, MonadLogger m, Provers p, PredicateLenses p, MonadReader p m,
+                   (MonadRaise m, MonadLogger m, Provers p, PredicateLenses p, MonadReader p m, DebugState (WithAssertions s) p,
                    SymbStateLenses s, MonadState s m, MonadIO m, MonadPlus m, MonadLabel CapturedState m) =>
                    Maybe String -> AExpr -> m ()
 symExAllocate target lenExpr = do
