@@ -37,8 +37,7 @@ executable Caper
                    template-haskell >=2.8,
                    transformers >=0.2,
                    argparser >=0.3.4,
-                   int-cast,
-                   unification-fd >=0.10
+                   int-cast
   hs-source-dirs:  src
   extensions:      CPP
   ghc-options:     -Wall -fno-warn-unused-matches -rtsopts -threaded

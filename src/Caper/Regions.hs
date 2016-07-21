@@ -244,7 +244,7 @@ cannotAliasStrong r1 r2 = use regions >>= return . not . AM.areAliases r1 r2
 -}                        
 
 -- |Stabilise all regions
-stabiliseRegions :: (ProverM s r m, RegionLenses s, RTCGetter r, DebugState s r, MonadRaise m) =>
+stabiliseRegions :: (ProverM s r m, RegionLenses s, RTCGetter r, DebugState s r, MonadRaise m, MonadLabel CapturedState m) =>
                         m ()
 stabiliseRegions = do
                         regs <- use regions
@@ -261,7 +261,7 @@ stabiliseRegion reg = if regDirty reg then
                                 return reg -}
 
 -- Stabilise a region
-stabiliseRegion :: (ProverM s r m, RTCGetter r, DebugState s r, MonadRaise m) =>
+stabiliseRegion :: (ProverM s r m, RTCGetter r, DebugState s r, MonadRaise m, MonadLabel CapturedState m) =>
                         VariableID -> Region -> m Region
 -- Not dirty, so nothing to do!
 stabiliseRegion rid
@@ -279,7 +279,7 @@ stabiliseRegion rid
                         newStateVar <- newAvar "state"
                         -- assume it is related to the old state
                         assumeTrue $ tcrel se (var newStateVar)
-                        -- label $ "RELY CONDITION : " ++ show (tcrel se (var newStateVar))
+                        labelS $ "Stabilising region " ++ show rid ++ " with Rely: " ++ show (tcrel se (var newStateVar))
                         -- return the clean region with the new state
                         return $ Region
                                 False
