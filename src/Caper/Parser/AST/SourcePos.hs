@@ -11,9 +11,9 @@ makeSourcePos :: Name -> Q [Dec]
 makeSourcePos nm = do
         inf <- reify nm
         case inf of
-                TyConI (DataD _ _ _ cs _) -> do
+                TyConI (DataD _ _ _ _ cs _) -> do
                         spcs <- mapM makeClause cs
-                        return [InstanceD [] (AppT (ConT ''HasSourcePos) (ConT nm)) [FunD 'sourcePos spcs]]
+                        return [InstanceD Nothing [] (AppT (ConT ''HasSourcePos) (ConT nm)) [FunD 'sourcePos spcs]]
                 _ -> fail "makeSourcePos: Expected the name of a data type"
         where
                 spn = mkName "sp"
@@ -32,10 +32,10 @@ makeSPEq :: Name -> Q [Dec]
 makeSPEq nm = do
         inf <- reify nm
         case inf of
-                TyConI (DataD _ _ _ cs _) -> do
+                TyConI (DataD _ _ _ _ cs _) -> do
                         spcs <- mapM makeClause cs
                         let spcs' = spcs ++ [Clause [WildP, WildP] (NormalB (ConE 'False)) []]
-                        return [InstanceD [] (AppT (ConT ''Eq) (ConT nm)) [FunD '(==) spcs']]
+                        return [InstanceD Nothing [] (AppT (ConT ''Eq) (ConT nm)) [FunD '(==) spcs']]
                 _ -> fail "makeSPEq: Expected the name of a data type"
         where
                 makeClause (NormalC n sts) = do

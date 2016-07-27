@@ -1,10 +1,12 @@
 module Caper.Provers.Values.Z3plus where
 
-import Control.Monad
+import Prelude hiding (sequence_,foldr)
+import Control.Monad hiding (sequence_)
 import Control.Monad.IO.Class
+import Control.Applicative
 import Z3.Monad
 import Control.Concurrent.MVar
-import Data.List
+import Data.List hiding (foldr)
 import Control.Exception hiding (assert)
 import Data.Foldable
 
