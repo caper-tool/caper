@@ -1,5 +1,7 @@
-{-# LANGUAGE TemplateHaskell #-}
-module Caper.Parser.AST.SourcePos where
+{-# LANGUAGE TemplateHaskell, CPP #-}
+module Caper.Parser.AST.SourcePos(
+  HasSourcePos(..), makeSourcePos, makeSPEq
+) where
 
 import Text.ParserCombinators.Parsec
 import Language.Haskell.TH
@@ -11,9 +13,15 @@ makeSourcePos :: Name -> Q [Dec]
 makeSourcePos nm = do
         inf <- reify nm
         case inf of
+#if MIN_VERSION_template_haskell(2,11,0)
                 TyConI (DataD _ _ _ _ cs _) -> do
                         spcs <- mapM makeClause cs
                         return [InstanceD Nothing [] (AppT (ConT ''HasSourcePos) (ConT nm)) [FunD 'sourcePos spcs]]
+#else
+                TyConI (DataD _ _ _ cs _) -> do
+                        spcs <- mapM makeClause cs
+                        return [InstanceD [] (AppT (ConT ''HasSourcePos) (ConT nm)) [FunD 'sourcePos spcs]]
+#endif
                 _ -> fail "makeSourcePos: Expected the name of a data type"
         where
                 spn = mkName "sp"
@@ -32,10 +40,17 @@ makeSPEq :: Name -> Q [Dec]
 makeSPEq nm = do
         inf <- reify nm
         case inf of
+#if MIN_VERSION_template_haskell(2,11,0)
                 TyConI (DataD _ _ _ _ cs _) -> do
                         spcs <- mapM makeClause cs
                         let spcs' = spcs ++ [Clause [WildP, WildP] (NormalB (ConE 'False)) []]
                         return [InstanceD Nothing [] (AppT (ConT ''Eq) (ConT nm)) [FunD '(==) spcs']]
+#else
+                TyConI (DataD _ _ _ cs _) -> do
+                        spcs <- mapM makeClause cs
+                        let spcs' = spcs ++ [Clause [WildP, WildP] (NormalB (ConE 'False)) []]
+                        return [InstanceD [] (AppT (ConT ''Eq) (ConT nm)) [FunD '(==) spcs']]
+#endif
                 _ -> fail "makeSPEq: Expected the name of a data type"
         where
                 makeClause (NormalC n sts) = do

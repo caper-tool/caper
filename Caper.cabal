@@ -32,7 +32,7 @@ executable Caper
                    directory >=1.2,
                    either >=4.3,
                    vector >=0.10,
-                   template-haskell >=2.11,
+                   template-haskell >=2.8,
                    transformers >=0.2,
                    argparser >=0.3.4,
                    int-cast
@@ -88,8 +88,7 @@ executable Caper
                    Caper.Utils.NondetClasses,
                    Caper.Utils.PMaybe,
                    Caper.Utils.SimilarStrings,
-                   Caper.DeductionFailure,
-                   Caper.FirstOrderSorted
+                   Caper.DeductionFailure
 
   if flag(z3ffi)
     build-depends:  z3 >=4.0.0
@@ -98,6 +97,8 @@ executable Caper
 
   if impl(ghc >= 7.10)
      cpp-options:   -Doverlap_pragmas
+  if impl(ghc < 8.0)
+    build-depends:  template-haskell <2.11
      
 executable Interpreter
   build-depends:   
@@ -120,6 +121,8 @@ executable Interpreter
                    Caper.Parser.AST.Code,
                    Caper.Parser.AST.SourcePos,
                    Caper.Parser.Parser
+  if impl(ghc < 8.0)
+    build-depends:  template-haskell <2.11
 
 executable RunTests
   build-depends:   
@@ -133,3 +136,6 @@ executable RunTests
                    containers >= 0.5
   hs-source-dirs:  Tests
   main-is:         RunTests.hs
+  if impl(ghc < 8.0)
+    build-depends:  template-haskell <2.11
+
