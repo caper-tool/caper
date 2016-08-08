@@ -32,7 +32,7 @@ import qualified Caper.Parser.AST as AST
 import Caper.Parser.AST.Annotation ()
 -- import Caper.DeclarationTyping
 import Caper.Assertions.Generate
-import Caper.ExceptionContext
+-- import Caper.ExceptionContext
 
 -- The internal representation of a region type identifier
 type RTId = Integer

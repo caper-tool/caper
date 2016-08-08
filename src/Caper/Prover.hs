@@ -80,7 +80,7 @@ import qualified Data.Set as Set
 import Control.Monad.State hiding (mapM_,mapM)
 import Control.Monad.Reader
 import Control.Monad.Exception
-import Control.Applicative
+-- -- import Control.Applicative
 import Data.Foldable
 import Control.Lens
 import Data.List (intercalate)

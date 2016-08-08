@@ -5,7 +5,22 @@
 {-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-module Caper.Guards where
+{-# OPTIONS_GHC -Wall #-}
+-- We should use explicit exports
+
+module Caper.Guards(
+  Guard(..),
+  GuardParameters(..),
+  WeakGuardType,
+  topLevelToWeakGuardType,
+  fullGuard,
+  checkGuardAtType,
+  toWeakGuardType,
+  validateGuardDeclr,
+  conservativeGuardLUBTL,
+  guardEntailmentTL
+)  where
+
 import Prelude hiding (mapM,sequence,foldl,mapM_,concatMap,foldr)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -15,7 +30,6 @@ import Data.Traversable
 import Data.List (intercalate)
 import Control.Monad.State hiding (mapM_,mapM,sequence)
 import Control.Monad.Reader hiding (mapM_,mapM,sequence)
-import Debug.Trace              -- TODO: get rid of this
 import Control.Lens hiding (op)
 
 import Caper.Parser.AST.Annotation (GuardDeclr(..), TopLevelGuardDeclr(..))
@@ -26,7 +40,6 @@ import Caper.ProverStates
 import Caper.Utils.NondetClasses
 import Caper.Utils.Mix
 import Caper.Exceptions
-import Caper.FreeVariables
 
 
 
@@ -34,11 +47,13 @@ data GuardParameterType =
                 UniqueGPT
                 | PermissionGPT
                 | ValueGPT
+--                | CountingGPT
                 deriving (Eq,Ord,Show)
 
 -- INVARIANT : instances of WeakGuardType must be non-empty
 type WeakGuardType = Set.Set (Map.Map String GuardParameterType)
 
+-- | Checks that each guard name occurs once - this is needed to ensure consitency of Capers internal representation
 validateGuardDeclr :: (MonadRaise m, Monad m) => TopLevelGuardDeclr -> m ()
 validateGuardDeclr ZeroGuardDeclr = return ()
 validateGuardDeclr (SomeGuardDeclr gt) = contextualise gt $ do
@@ -73,9 +88,10 @@ topLevelToWeakGuardType ZeroGuardDeclr = Set.singleton Map.empty
 topLevelToWeakGuardType (SomeGuardDeclr gt) = toWeakGuardType gt
 
 
-
+-- Unique, Permissisons, Parameterised, Counting... 
 data GuardParameters v = NoGP | PermissionGP (PermissionExpression v)
-    | ParameterGP (SetExpression v)
+    | ParameterGP (SetExpression v) 
+-- | CountingGP (ValueExpression v), from ProverDatatypes
         deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
 instance FreeVariables (GuardParameters v) v where
@@ -100,6 +116,8 @@ instance Show v => Show (Guard v) where
                         showone (s, PermissionGP perm) = s ++ "[" ++ show perm ++ "]"
                         showone (s, ParameterGP st) = s ++ show st 
 
+
+-- Probably to be pruned
 guardLift :: (Map.Map String (GuardParameters t)
                -> Map.Map String (GuardParameters v))
                -> Guard t -> Guard v
@@ -129,6 +147,7 @@ checkGuardAtType (GD g)
                 matchup (ParameterGP _) ValueGPT = True
                 matchup _ _ = False
 
+-- Possibly rename to something more sensible?
 gtToG :: StringVariable v => GuardParameterType -> GuardParameters v
 gtToG UniqueGPT = NoGP
 gtToG PermissionGPT = PermissionGP PEFull
@@ -137,10 +156,11 @@ gtToG ValueGPT = ParameterGP fullSet
 fullGuard :: StringVariable v => WeakGuardType -> Guard v
 fullGuard gt = GD $ Map.map gtToG (Set.findMin gt)
 
+-- Possibly not used anywhere
 fullGuards :: StringVariable v => WeakGuardType -> [Guard v]
 fullGuards = Prelude.map (GD . Map.map gtToG) . Set.toList
 
-
+-- not exported
 guardJoin :: Guard v -> Guard v -> Guard v
 guardJoin (GD g1) (GD g2) = GD $ Map.union g1 g2
 
@@ -177,7 +197,8 @@ matchesGuardDeclr (ParametrisedGD _ n) (GD g) = Map.member n g
 matchesGuardDeclr (ProductGD _ t1 t2) g = matchesGuardDeclr t1 g || matchesGuardDeclr t2 g
 matchesGuardDeclr (SumGD _ t1 t2) g = matchesGuardDeclr t1 g || matchesGuardDeclr t2 g
 
-
+-- We want to determine g_1 |?- g_2. We do so by finding g_1' ~ g_2' and checking whether
+-- g1 |- g1' * f and g2' * f |- g2 where the latter is non-key-changing entailments.
 guardEquivalence :: StringVariable v => GuardDeclr -> Guard v -> Guard v -> (Guard v, Guard v)
 -- ^Given a 'GuardDeclr' and a pair of guards, find a pair of guards that
 -- could be used to rewrite the first to entail the second.
@@ -196,6 +217,7 @@ guardEquivalence (SumGD _ gta1 gta2) gd1 gd2 =
                 where
                         ma = matchesGuardDeclr
                         -- fgf :: GuardDeclr -> Guard v -> Guard w
+                        -- fullGuardFor, needs a counting clause
                         fgf (NamedGD _ n) _ = GD $ Map.singleton n NoGP
                         fgf (PermissionGD _ n) _ = GD $ Map.singleton n (PermissionGP PEFull)
                         fgf (ParametrisedGD _ n) _ = GD $ Map.singleton n (ParameterGP fullSet)
@@ -203,7 +225,7 @@ guardEquivalence (SumGD _ gta1 gta2) gd1 gd2 =
                         fgf (SumGD _ gt1 gt2) g = if ma gt2 g then fgf gt2 g else fgf gt1 g
 guardEquivalence _ _ _ = (GD Map.empty, GD Map.empty)
 
-
+-- Relocate closer to use-site. 
 sameGuardParametersType :: GuardParameters v -> GuardParameters w -> Maybe (GuardParameters v)
 sameGuardParametersType NoGP NoGP = Nothing
 sameGuardParametersType (PermissionGP _) (PermissionGP _) = Nothing
@@ -224,7 +246,7 @@ subtractPE l PEFull = do
 subtractPE l PEZero = return (Just l)
 subtractPE l s = (do -- TODO: frame some permission
                 assertTrue $ PAEq l s
-                justCheck
+                justCheck -- is this a good idea to have? Maybe some profiling could reveal whether failing earlier is a win.
                 labelS $ "Take whole permissions guard: " ++ show s ++ "=" ++ show l
                 return Nothing) `mplus`
         (do
@@ -258,7 +280,7 @@ guardPrimitiveEntailmentM (GD g1) (GD g2) = if Map.null $ Map.differenceWith sam
                         r <- mapM subtrct k
                         return $ Map.union (Map.mapMaybe id r) rest
                 subtrct = uncurry subtractGP
-                {-
+                {- CAN BE DELETED
                 subtrct :: (MonadPlus m, MonadState s m, AssertionLenses s,
                         MonadLogger m) =>
                         (GuardParameters VariableID, GuardParameters VariableID) -> m (Maybe (GuardParameters VariableID))
