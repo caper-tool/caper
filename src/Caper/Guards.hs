@@ -219,13 +219,6 @@ guardEquivalence (SumGD _ gta1 gta2) gd1 gd2 =
                         fgf (SumGD _ gt1 gt2) g = if ma gt2 g then fgf gt2 g else fgf gt1 g
 guardEquivalence _ _ _ = (GD Map.empty, GD Map.empty)
 
--- Relocate closer to use-site. 
-sameGuardParametersType :: GuardParameters v -> GuardParameters w -> Maybe (GuardParameters v)
-sameGuardParametersType NoGP NoGP = Nothing
-sameGuardParametersType (PermissionGP _) (PermissionGP _) = Nothing
-sameGuardParametersType (ParameterGP _) (ParameterGP _) = Nothing
-sameGuardParametersType a _ = Just a
-
 class (MonadIO m, MonadPlus m, MonadOrElse m, MonadState s m, AssertionLenses s, MonadLogger m,
     MonadReader r m, Provers r, DebugState s r, MonadLabel CapturedState m) => GuardCheckMonad s r m
 instance (MonadIO m, MonadPlus m, MonadOrElse m, MonadState s m, AssertionLenses s, MonadLogger m,
@@ -264,6 +257,12 @@ subtractGP (ParameterGP s1) (ParameterGP s2) = do
                 return $ Just $ ParameterGP $ setDifference s1 s2
 subtractGP _ _ = mzero
 
+sameGuardParametersType :: GuardParameters v -> GuardParameters w -> Maybe (GuardParameters v)
+sameGuardParametersType NoGP NoGP = Nothing
+sameGuardParametersType (PermissionGP _) (PermissionGP _) = Nothing
+sameGuardParametersType (ParameterGP _) (ParameterGP _) = Nothing
+sameGuardParametersType a _ = Just a
+
 guardPrimitiveEntailmentM :: (GuardCheckMonad s r m) =>
                 Guard VariableID -> Guard VariableID -> m (Guard VariableID)
 guardPrimitiveEntailmentM (GD g1) (GD g2) = if Map.null $ Map.differenceWith sameGuardParametersType g2 g1 then liftM GD doGPEM else mzero
@@ -274,15 +273,6 @@ guardPrimitiveEntailmentM (GD g1) (GD g2) = if Map.null $ Map.differenceWith sam
                         r <- mapM subtrct k
                         return $ Map.union (Map.mapMaybe id r) rest
                 subtrct = uncurry subtractGP
-                {- CAN BE DELETED
-                subtrct :: (MonadPlus m, MonadState s m, AssertionLenses s,
-                        MonadLogger m) =>
-                        (GuardParameters VariableID, GuardParameters VariableID) -> m (Maybe (GuardParameters VariableID))
-                subtrct (NoGP, NoGP) = return Nothing
-                subtrct (PermissionGP pe1, PermissionGP pe2) = liftM (fmap PermissionGP) $ subtractPE pe1 pe2
-                subtrct _ = mzero -- Should be impossible
-                -}
-
 
 guardEntailment :: (GuardCheckMonad s r m) =>
                 GuardDeclr -> Guard VariableID -> Guard VariableID ->
