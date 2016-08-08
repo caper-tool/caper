@@ -18,7 +18,12 @@ module Caper.Guards(
   toWeakGuardType,
   validateGuardDeclr,
   conservativeGuardLUBTL,
-  guardEntailmentTL
+  guardEntailmentTL,
+  guardEntailment,
+  mergeGuards,
+  emptyGuard,
+  consumeGuard,
+  consumeGuardNoType    
 )  where
 
 import Prelude hiding (mapM,sequence,foldl,mapM_,concatMap,foldr)
@@ -95,7 +100,7 @@ data GuardParameters v = NoGP | PermissionGP (PermissionExpression v)
         deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
 instance FreeVariables (GuardParameters v) v where
-  foldrFree f x NoGP = x
+  foldrFree _ x NoGP = x
   foldrFree f x (PermissionGP pe) = foldr f x pe
   foldrFree f x (ParameterGP s) = foldrFree f x s
 
@@ -115,13 +120,6 @@ instance Show v => Show (Guard v) where
                         showone (s, NoGP) = s
                         showone (s, PermissionGP perm) = s ++ "[" ++ show perm ++ "]"
                         showone (s, ParameterGP st) = s ++ show st 
-
-
--- Probably to be pruned
-guardLift :: (Map.Map String (GuardParameters t)
-               -> Map.Map String (GuardParameters v))
-               -> Guard t -> Guard v
-guardLift f (GD x) = GD (f x)
 
 instance ExpressionCASub GuardParameters Expr where
     exprCASub _ NoGP = NoGP
@@ -155,10 +153,6 @@ gtToG ValueGPT = ParameterGP fullSet
 
 fullGuard :: StringVariable v => WeakGuardType -> Guard v
 fullGuard gt = GD $ Map.map gtToG (Set.findMin gt)
-
--- Possibly not used anywhere
-fullGuards :: StringVariable v => WeakGuardType -> [Guard v]
-fullGuards = Prelude.map (GD . Map.map gtToG) . Set.toList
 
 -- not exported
 guardJoin :: Guard v -> Guard v -> Guard v
