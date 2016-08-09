@@ -1,4 +1,19 @@
-module Caper.Provers.Values.Z3plus where
+-- |This module provides an implementation of entailment checking for value
+-- formulae using the Z3 theorem prover (via FFI) and making use of incremental
+-- proving.  The incremental prover progressively builds a context of
+-- assumptions (which may be pushed and popped) and so can reuse information
+-- between calls.  It is often significantly faster than the one-shot prover.
+-- However, it is less complete.  In particular, it doesn't handle
+-- quantification (or at least not much).  To handle this, we fall back to
+-- one-shot mode when the assertions contain quantifiers, or when invoking Z3
+-- results in "UNKNOWN (incomplete quantifiers)".
+--
+-- Note that this was developed against Z3 version 4.4.1.  Future changes to Z3
+-- may require updating this module.
+module Caper.Provers.Values.Z3plus(
+    valueProverInfo,
+    createEntailsChecker
+    ) where
 
 import Prelude hiding (sequence_,foldr)
 import Control.Monad hiding (sequence_)
@@ -12,14 +27,20 @@ import Data.Foldable
 
 import Caper.ProverDatatypes
 
+-- |A context of assumptions.  This is a list of lists of formulae, since we
+-- push and pop a list of assumptions at a time.
 type Assms = [[FOF ValueAtomic VariableID]]
 
-data AssumptionEnvironment = AssumptionEnvironment {
-        aeEnv :: Z3Env,
-        aeAssms :: Assms
-        }
+-- |An assumption environment is a Z3 environment together with a context of
+-- assumptions that correspond to the stack of assertions of the Z3
+-- environment.
+data AssumptionEnvironment = AssumptionEnvironment Z3Env Assms
 
-makeEmptyAssumptionEnvironment :: Maybe Int -> IO AssumptionEnvironment
+-- |Create an assumption environment with an empty stack of assumptions and
+-- with the given tiemout.
+makeEmptyAssumptionEnvironment ::
+    Maybe Int                       -- ^Optional timeout in milliseconds
+    -> IO AssumptionEnvironment
 makeEmptyAssumptionEnvironment timeout = do
         env <- newEnv (Just AUFLIA) stdOpts
         flip evalZ3WithEnv env $ do
@@ -31,13 +52,17 @@ makeEmptyAssumptionEnvironment timeout = do
                 solverSetParams params
         return $ AssumptionEnvironment env []
 
+-- |Convert a 'VariableID' to a Z3 AST representation.
 getAssmVar :: (MonadZ3 z3) => VariableID -> z3 AST
 getAssmVar v = do
         s <- mkStringSymbol $ varToString v
         mkIntVar s
 
-
-convExpression :: (MonadZ3 z3) => (v -> z3 AST) -> ValueExpression v -> z3 AST
+-- |Convert a 'ValueExpression' to a Z3 AST representation.
+convExpression :: (MonadZ3 z3) =>
+    (v -> z3 AST)           -- ^Variable representation
+    -> ValueExpression v    -- ^Expression to convert
+    -> z3 AST
 convExpression s (VEConst i) = mkInteger i
 convExpression s (VEVar v) = s v
 convExpression s (VEPlus e1 e2) = do
@@ -53,7 +78,11 @@ convExpression s (VETimes e1 e2) = do
                 c2 <- convExpression s e2
                 mkMul [c1, c2]
 
-convAtomic :: (MonadZ3 z3) => (v -> z3 AST) -> ValueAtomic v -> z3 AST
+-- |Convert a 'ValueAtomic' to a Z3 AST representation
+convAtomic :: (MonadZ3 z3) =>
+    (v -> z3 AST)           -- ^Variable representation
+    -> ValueAtomic v        -- ^Atomic proposition to convert
+    -> z3 AST
 convAtomic s (VAEq e1 e2) = do
                 c1 <- convExpression s e1
                 c2 <- convExpression s e2
@@ -63,8 +92,11 @@ convAtomic s (VALt e1 e2) = do
                 c2 <- convExpression s e2
                 mkLt c1 c2
 
-
-convFOF :: (MonadZ3 z3) => (VariableID -> Maybe Int) -> FOF ValueAtomic VariableID -> z3 AST
+-- |Convert a first-order value formula to a Z3 AST representation.
+convFOF :: (MonadZ3 z3) =>
+    (VariableID -> Maybe Int)       -- ^DeBrujin indices for bound variables
+    -> FOF ValueAtomic VariableID   -- ^Formula to convert
+    -> z3 AST
 convFOF bdgs (FOFForAll v f) = do
                 si <- mkStringSymbol ("EE" ++ varToString v)
                 x <- convFOF (\w -> if w == v then Just 0 else (1+) <$> bdgs w) f
@@ -90,8 +122,27 @@ convFOF bdgs (FOFNot f1) = mkNot =<< convFOF bdgs f1
 convFOF bdgs FOFFalse = mkFalse
 convFOF bdgs FOFTrue = mkTrue
 
+-- |Determine if a first-order formula has quantifiers apart from a prefix of
+-- existentials.
+nontrivialQuantifiers :: FOF a v -> Bool
+nontrivialQuantifiers (FOFExists _ f) = nontrivialQuantifiers f
+nontrivialQuantifiers f0 = anyQuantifiers f0
+    where
+        anyQuantifiers (FOFExists _ _) = True
+        anyQuantifiers (FOFForAll _ _) = True
+        anyQuantifiers (FOFAnd f1 f2) = anyQuantifiers f1 || anyQuantifiers f2
+        anyQuantifiers (FOFOr f1 f2) = anyQuantifiers f1 || anyQuantifiers f2
+        anyQuantifiers (FOFImpl f1 f2) = anyQuantifiers f1 || anyQuantifiers f2
+        anyQuantifiers (FOFNot f) = anyQuantifiers f
+        anyQuantifiers _ = False
+        
 
-updateAssumptions :: (MonadZ3 z3) => Assms -> [FOF ValueAtomic VariableID] -> z3 Assms
+-- |Given a context of assumptions representing the current Z3 environment,
+-- update the environment and context to match the list of assumptions given.
+updateAssumptions :: (MonadZ3 z3) =>
+    Assms                               -- ^Current assumption context
+    -> [FOF ValueAtomic VariableID]     -- ^Required assumptions
+    -> z3 Assms
 updateAssumptions [] [] = return []
 updateAssumptions [] ams = do
                         push
@@ -103,7 +154,9 @@ updateAssumptions (ams1 : ar) ams = case stripPrefix ams1 ams of
                 updateAssumptions [] ams
         Just ams' -> (ams1 :) <$> updateAssumptions ar ams'
 
-
+-- |Check if assumptions entail an assertion.  This uses Z3's one-shot solver.
+-- This is more complete, but slower than the incremental solver, so we use it
+-- as a fallback when we can't depend on the incremental solver.
 fallbackCheck :: Maybe Int -> [FOF ValueAtomic VariableID] -> FOF ValueAtomic VariableID -> IO (Maybe Bool)
 fallbackCheck timeout ams ast = evalZ3With Nothing stdOpts $ do
                 params <- mkParams
@@ -122,9 +175,23 @@ fallbackCheck timeout ams ast = evalZ3With Nothing stdOpts $ do
                         _ -> Nothing
 
 
-entailsCheck :: Maybe Int -> MVar AssumptionEnvironment -> 
-        [FOF ValueAtomic VariableID] -> FOF ValueAtomic VariableID -> IO (Maybe Bool)
-entailsCheck timeout mvAE ams ast = do
+-- |Check if assumptions entail an assertion.  This uses the incremental
+-- checker but will fall back to the one-shot checker if:
+--
+--  1. The assertion contains quantifiers other than a prefix of
+--     existentials.
+--  2. The solver returns unknown with the reason "(incomplete quantifiers)".
+--
+-- In both cases, it is more likely that the one-shot solver will do a better
+-- job.
+entailsCheck :: Maybe Int               -- ^Optional timeout in milliseconds
+    -> MVar AssumptionEnvironment       -- ^Shared assumption environment
+    -> [FOF ValueAtomic VariableID]     -- ^Assumptions
+    -> FOF ValueAtomic VariableID       -- ^Assertion
+    -> IO (Maybe Bool)
+entailsCheck timeout mvAE ams ast
+    | nontrivialQuantifiers ast = fallbackCheck timeout ams ast
+    | otherwise = do
                 oae <- tryTakeMVar mvAE
                 (AssumptionEnvironment env assms) <- case oae of
                         Just ae -> return ae
@@ -134,11 +201,11 @@ entailsCheck timeout mvAE ams ast = do
                         (res, rtry) <- local $ do
                                 assert =<< convFOF (const Nothing) (FOFNot ast)
                                 res <- check
-                                --s2s <- solverToString
-                                --liftIO $ putStrLn s2s
                                 rtry <- if (res == Undef) then do
+                                            -- s2s <- solverToString
                                             reason <- solverGetReasonUnknown
-                                            liftIO $ putStrLn $ "UNKNOWN: " ++ reason
+                                            -- liftIO $ appendFile "z3plus.log" $ s2s ++ "\n" ++ "UNKNOWN: " ++ reason ++ "\n"
+                                            -- liftIO $ putStrLn $ "UNKNOWN: " ++ reason
                                             return (reason == "(incomplete quantifiers)")
                                         else return False
                                 return (res, rtry)
@@ -149,11 +216,14 @@ entailsCheck timeout mvAE ams ast = do
                         Unsat -> return $ Just True
                         _ -> if rtry then fallbackCheck timeout ams ast else return Nothing
 
-createEntailsChecker :: Maybe Int -> IO ([FOF ValueAtomic VariableID] -> FOF ValueAtomic VariableID -> IO (Maybe Bool))
+-- |Initialise an incremental checker.
+createEntailsChecker :: Maybe Int -- ^Optional timeout in milliseconds
+    -> IO ([FOF ValueAtomic VariableID] -> FOF ValueAtomic VariableID -> IO (Maybe Bool))
 createEntailsChecker timeout = do
                 mvAE <- newEmptyMVar
                 return (entailsCheck timeout mvAE)
 
+-- |Obtain a string describing the value checker provided by this module.
 valueProverInfo :: IO String
 valueProverInfo = (do
         ver <- evalZ3 getVersion
