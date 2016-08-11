@@ -23,9 +23,9 @@ module Caper.Guards(
   mergeGuards,
   emptyGuard,
   consumeGuard,
-  consumeGuardNoType    
+  consumeGuardNoType
 )  where
-
+import Control.Applicative
 import Prelude hiding (mapM,sequence,foldl,mapM_,concatMap,foldr)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -47,13 +47,12 @@ import Caper.Utils.Mix
 import Caper.Exceptions
 
 
-
 data GuardParameterType =
-                UniqueGPT
-                | PermissionGPT
-                | ValueGPT
---                | CountingGPT
-                deriving (Eq,Ord,Show)
+    UniqueGPT
+  | PermissionGPT
+  | ValueGPT
+  | CountingGPT
+  deriving (Eq,Ord,Show)
 
 -- INVARIANT : instances of WeakGuardType must be non-empty
 type WeakGuardType = Set.Set (Map.Map String GuardParameterType)

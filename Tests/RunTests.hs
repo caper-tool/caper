@@ -1,13 +1,15 @@
+
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ExtendedDefaultRules #-}
 {-# OPTIONS_GHC -fno-warn-type-defaults #-}
 
-import Control.Applicative
-import Data.List(sort)
+-- import Control.Applicative
+-- import Data.List(sort)
+
 import Control.Monad (forM_,liftM,foldM)
 import Shelly
 import Prelude hiding (FilePath, lines, drop, concat, takeWhile)
-import System.Directory
+import qualified Prelude as Prelude
 import Data.Text hiding (last, length)
 import qualified Data.Text
 import System.FilePath hiding (FilePath)
@@ -15,15 +17,14 @@ import System.Environment
 import System.Console.ANSI
 import qualified Data.Map.Strict as Map
 import Data.Maybe (fromMaybe)
+import System.Console.GetOpt 
+import Data.String (fromString)
 
-caperPath = "dist/build/Caper/Caper"
-testsPath = "runtests/"
-rootPath = "../../../"
 
 data TestResult = Passed | Failed | Errored | Skipped
         deriving (Eq,Ord,Show)
 
---echoResult :: Text -> FilePath -> TestResult -> Sh ()
+echoResult :: FilePath -> Text -> TestResult -> Sh ()
 echoResult fname testName res = do
     echo_n $ concat ["[", pack $ takeFileName (unpack $ toTextIgnore fname), "] ",
         testName, ": "]
@@ -34,7 +35,8 @@ echoResult fname testName res = do
         Skipped -> echo "SKIPPED"
     liftIO (setSGR [])
 
-testFile rmap name = do
+testFile :: Num a => FilePath -> Map.Map TestResult a -> FilePath -> Sh (Map.Map TestResult a)
+testFile caperPath rmap name = do
     absCaperPath   <- absPath caperPath
     absName        <- absPath name
     contents       <- readfile absName
@@ -57,12 +59,46 @@ testFile rmap name = do
             echoR Skipped
             return $ Map.alter (Just . (+1) . fromMaybe 0) Skipped rmap
 
-
-main = shelly $ silently $ errExit False $ do
+runTests :: FilePath -> FilePath -> FilePath -> IO ()
+runTests rootPath testsPath caperPath = shelly $ silently $ errExit False $ do
     dir   <- liftIO getExecutablePath
+    echo_n (fromString dir)
     cd $ fromText $ pack $ takeDirectory dir
     cd rootPath
-    value <- pwd
     names <- findWhen (return . isSuffixOf ".t" . toTextIgnore) testsPath
-    m' <- foldM testFile (Map.empty :: Map.Map TestResult Int) names
+    m' <- foldM (testFile caperPath) (Map.empty :: Map.Map TestResult Int) names
     liftIO $ putStrLn $ Map.foldlWithKey (\s k v -> (s ++ show k ++ ": " ++ show v ++ "; ")) "" m'
+
+main :: IO ()
+main = do
+  args <- getArgs
+  conf <- parseConfiguration args
+  runTests (rootPath conf) (testsPath conf) (caperPath conf)
+
+data Configuration = Configuration {
+  rootPath :: FilePath,
+  testsPath :: FilePath,
+  caperPath :: FilePath
+  }
+
+defaultConfiguration :: Configuration
+defaultConfiguration = Configuration {
+  rootPath = "../../../",
+  testsPath = "runtests/",
+  caperPath = "dist/build/Caper/Caper"
+  }
+
+options :: [OptDescr (Configuration -> Configuration)]
+options = [
+  Option ['r'] ["rootpath"] (ReqArg (\path conf -> conf { rootPath = fromString path}) "PATH") "root path",
+  Option ['t'] ["testspath"] (ReqArg (\path conf -> conf { testsPath = fromString path}) "PATH") "tests path",
+  Option ['c'] ["caperpath"] (ReqArg (\path conf -> conf { caperPath = fromString path}) "PATH") "caper path"
+  ]
+
+parseConfiguration :: [String] -> IO Configuration
+parseConfiguration args =
+  case getOpt Permute options args of
+    (o, _, []) -> return $ Prelude.foldl (flip id) defaultConfiguration o
+    (_,_,errs) -> ioError . userError $ Prelude.concat errs ++ usageInfo header options
+    where
+      header = "Usage: RunTests [OPTION...]"
