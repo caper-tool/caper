@@ -90,10 +90,12 @@ defaultConfiguration = Configuration {
 
 options :: [OptDescr (Configuration -> Configuration)]
 options = [
-  Option ['r'] ["rootpath"] (ReqArg (\path conf -> conf { rootPath = fromString path}) "PATH") "root path",
-  Option ['t'] ["testspath"] (ReqArg (\path conf -> conf { testsPath = fromString path}) "PATH") "tests path",
-  Option ['c'] ["caperpath"] (ReqArg (\path conf -> conf { caperPath = fromString path}) "PATH") "caper path"
-  ]
+  Option ['r'] ["rootpath"] (ReqArg (\path conf -> conf { rootPath = fromString path}) "PATH")
+    "Path to the root directory of Caper repo",
+  Option ['t'] ["testspath"] (ReqArg (\path conf -> conf { testsPath = fromString path}) "PATH")
+  "Folder containing integration tests",
+  Option ['c'] ["caperpath"] (ReqArg (\path conf -> conf { caperPath = fromString path}) "PATH")
+  "Path to Caper executable under test" ]
 
 parseConfiguration :: [String] -> IO Configuration
 parseConfiguration args =
