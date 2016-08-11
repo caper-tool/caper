@@ -62,7 +62,6 @@ testFile caperPath rmap name = do
 runTests :: FilePath -> FilePath -> FilePath -> IO ()
 runTests rootPath testsPath caperPath = shelly $ silently $ errExit False $ do
     dir   <- liftIO getExecutablePath
-    echo_n (fromString dir)
     cd $ fromText $ pack $ takeDirectory dir
     cd rootPath
     names <- findWhen (return . isSuffixOf ".t" . toTextIgnore) testsPath
@@ -71,8 +70,7 @@ runTests rootPath testsPath caperPath = shelly $ silently $ errExit False $ do
 
 main :: IO ()
 main = do
-  args <- getArgs
-  conf <- parseConfiguration args
+  conf <- getArgs >>= parseConfiguration
   runTests (rootPath conf) (testsPath conf) (caperPath conf)
 
 data Configuration = Configuration {
