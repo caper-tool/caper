@@ -59,31 +59,33 @@ testFile caperPath rmap name = do
             echoR Skipped
             return $ Map.alter (Just . (+1) . fromMaybe 0) Skipped rmap
 
-runTests :: FilePath -> FilePath -> FilePath -> IO ()
-runTests rootPath testsPath caperPath = shelly $ silently $ errExit False $ do
+runTests :: Text -> FilePath -> FilePath -> FilePath -> IO ()
+runTests pattern rootPath testsPath caperPath = shelly $ silently $ errExit False $ do
     dir   <- liftIO getExecutablePath
     cd $ fromText $ pack $ takeDirectory dir
     cd rootPath
-    names <- findWhen (return . isSuffixOf ".t" . toTextIgnore) testsPath
+    names <- findWhen (return . ((&&) <$> isInfixOf pattern <*> isSuffixOf ".t") . toTextIgnore) testsPath
     m' <- foldM (testFile caperPath) (Map.empty :: Map.Map TestResult Int) names
     liftIO $ putStrLn $ Map.foldlWithKey (\s k v -> (s ++ show k ++ ": " ++ show v ++ "; ")) "" m'
 
 main :: IO ()
 main = do
   conf <- getArgs >>= parseConfiguration
-  runTests (rootPath conf) (testsPath conf) (caperPath conf)
+  runTests (pattern conf) (rootPath conf) (testsPath conf) (caperPath conf)
 
 data Configuration = Configuration {
   rootPath :: FilePath,
   testsPath :: FilePath,
-  caperPath :: FilePath
+  caperPath :: FilePath,
+  pattern :: Text
   }
 
 defaultConfiguration :: Configuration
 defaultConfiguration = Configuration {
   rootPath = "../../../",
   testsPath = "runtests/",
-  caperPath = "dist/build/Caper/Caper"
+  caperPath = "dist/build/Caper/Caper",
+  pattern = ""
   }
 
 options :: [OptDescr (Configuration -> Configuration)]
@@ -91,9 +93,11 @@ options = [
   Option ['r'] ["rootpath"] (ReqArg (\path conf -> conf { rootPath = fromString path}) "PATH")
     "Path to the root directory of Caper repo",
   Option ['t'] ["testspath"] (ReqArg (\path conf -> conf { testsPath = fromString path}) "PATH")
-  "Folder containing integration tests",
+    "Folder containing integration tests",
   Option ['c'] ["caperpath"] (ReqArg (\path conf -> conf { caperPath = fromString path}) "PATH")
-  "Path to Caper executable under test" ]
+    "Path to Caper executable under test",
+  Option ['p'] ["pattern"] (ReqArg (\pat conf -> conf { pattern = pack pat}) "PATTERN")
+    "Tests containing the pattern will be run"]
 
 parseConfiguration :: [String] -> IO Configuration
 parseConfiguration args =
