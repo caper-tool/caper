@@ -16,7 +16,7 @@ region Foo(r,x,p1,p2) {
 }
 
 function foo(x)
-  requires Foo(r,x,p1,p2,0) &*& r@PERM[p3] &*& p3 = p1 $ p2;
+  requires p1 != 0p &*& !(p2 # p2) &*& Foo(r,x,p1,p2,0) &*& r@PERM[p3] &*& p3 = p1 $ p2;
   ensures Foo(r,x,p1,p2,1);
 {
   [x] := 1;

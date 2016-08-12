@@ -1,4 +1,4 @@
-// NAME: Permission nonsense 1
+// NAME: Permission nonsense 2
 // RESULT: ACCEPT
 
 // DESCRIPTION: Tests permission compatability stuff
