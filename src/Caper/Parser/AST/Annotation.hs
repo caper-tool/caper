@@ -293,14 +293,17 @@ data TopLevelGuardDeclr = ZeroGuardDeclr | SomeGuardDeclr GuardDeclr
 
 data GuardDeclr = NamedGD SourcePos String
                 | PermissionGD SourcePos String
+                | CountingGD SourcePos String
                 | ProductGD SourcePos GuardDeclr GuardDeclr
-                | SumGD SourcePos GuardDeclr GuardDeclr
+                | SumGD SourcePos GuardDeclr GuardDeclr                
                 | ParametrisedGD SourcePos  String
+
 instance Show GuardDeclr where
         show (NamedGD _ n) = n
         show (PermissionGD _ n) = "%" ++ n
+        show (CountingGD _ n) = "|" ++ n ++ "|"
         show (ProductGD _ g1 g2) = "(" ++ show g1 ++ " * " ++ show g2 ++ ")"
-        show (SumGD _ g1 g2) =  "(" ++ show g1 ++ " + " ++ show g2 ++ ")"
+        show (SumGD _ g1 g2) =  "(" ++ show g1 ++ " + " ++ show g2 ++ ")"       
         show (ParametrisedGD _ n) = "#" ++ n
 
 instance Show TopLevelGuardDeclr where

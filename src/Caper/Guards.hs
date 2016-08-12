@@ -51,7 +51,7 @@ data GuardParameterType =
     UniqueGPT
   | PermissionGPT
   | ValueGPT
-  | CountingGPT
+  | CountingGPT  
   deriving (Eq,Ord,Show)
 
 -- INVARIANT : instances of WeakGuardType must be non-empty
@@ -67,6 +67,7 @@ validateGuardDeclr (SomeGuardDeclr gt) = contextualise gt $ do
                 vgt s (NamedGD _ n) = checkFresh s n
                 vgt s (PermissionGD _ n) = checkFresh s n
                 vgt s (ParametrisedGD _ n) = checkFresh s n
+                vgt s (CountingGD _ n) = checkFresh s n
                 vgt s (ProductGD _ gt1 gt2) = do
                                                 s1 <- vgt s gt1
                                                 vgt s1 gt2
