@@ -25,7 +25,7 @@ module Caper.Guards(
   consumeGuard,
   consumeGuardNoType
 )  where
-import Control.Applicative
+-- import Control.Applicative
 import Prelude hiding (mapM,sequence,foldl,mapM_,concatMap,foldr)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
@@ -87,6 +87,7 @@ toWeakGuardType (PermissionGD _ n) = Set.singleton $ Map.singleton n PermissionG
 toWeakGuardType (ParametrisedGD _ n) = Set.singleton $ Map.singleton n ValueGPT
 toWeakGuardType (ProductGD _ gt1 gt2) = mixWith Map.union (toWeakGuardType gt1) (toWeakGuardType gt2)
 toWeakGuardType (SumGD _ gt1 gt2) = Set.union (toWeakGuardType gt1) (toWeakGuardType gt2)
+toWeakGuardType (CountingGD _ n) = Set.singleton $ Map.singleton n CountingGPT
 
 topLevelToWeakGuardType :: TopLevelGuardDeclr -> WeakGuardType
 topLevelToWeakGuardType ZeroGuardDeclr = Set.singleton Map.empty
@@ -94,15 +95,17 @@ topLevelToWeakGuardType (SomeGuardDeclr gt) = toWeakGuardType gt
 
 
 -- Unique, Permissisons, Parameterised, Counting... 
-data GuardParameters v = NoGP | PermissionGP (PermissionExpression v)
-    | ParameterGP (SetExpression v) 
--- | CountingGP (ValueExpression v), from ProverDatatypes
-        deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
+data GuardParameters v = NoGP
+                       | PermissionGP (PermissionExpression v)
+                       | ParameterGP (SetExpression v) 
+                       | CountingGP (ValueExpression v)
+                       deriving (Show,Eq,Ord,Functor,Foldable,Traversable)
 
 instance FreeVariables (GuardParameters v) v where
   foldrFree _ x NoGP = x
   foldrFree f x (PermissionGP pe) = foldr f x pe
   foldrFree f x (ParameterGP s) = foldrFree f x s
+  foldrFree f x (CountingGP v) = foldr f x v
 
 newtype Guard v = GD (Map.Map String (GuardParameters v)) deriving (Eq,Ord,Functor,Foldable,Traversable)
 
@@ -119,15 +122,18 @@ instance Show v => Show (Guard v) where
                         doshow ll = intercalate " * " (map showone ll)
                         showone (s, NoGP) = s
                         showone (s, PermissionGP perm) = s ++ "[" ++ show perm ++ "]"
-                        showone (s, ParameterGP st) = s ++ show st 
+                        showone (s, ParameterGP st) = s ++ show st
+                        showone (s, CountingGP v) = s ++ "|" ++ show v ++ "|"
 
 instance ExpressionCASub GuardParameters Expr where
     exprCASub _ NoGP = NoGP
     exprCASub s (PermissionGP pe) = PermissionGP (exprSub s pe)
     exprCASub s (ParameterGP st) = ParameterGP (exprCASub s st)
+    exprCASub s (CountingGP v) = CountingGP (exprSub s v) --TODO(kja): Sanity Check
     exprCASub' _ NoGP = NoGP
     exprCASub' s (PermissionGP pe) = PermissionGP (exprSub s pe)
     exprCASub' s (ParameterGP st) = ParameterGP (exprCASub' s st)
+    exprCASub' s (CountingGP v) = CountingGP (exprSub s v) -- TODO(kja): Sanity check
 
 instance ExpressionCASub Guard Expr where
     exprCASub s (GD g) = GD $ Map.map (exprCASub s) g
@@ -143,6 +149,7 @@ checkGuardAtType (GD g)
                 matchup NoGP UniqueGPT = True
                 matchup (PermissionGP _) PermissionGPT = True
                 matchup (ParameterGP _) ValueGPT = True
+                matchup (CountingGP _) CountingGPT =  True
                 matchup _ _ = False
 
 -- Possibly rename to something more sensible?
@@ -150,6 +157,7 @@ gtToG :: StringVariable v => GuardParameterType -> GuardParameters v
 gtToG UniqueGPT = NoGP
 gtToG PermissionGPT = PermissionGP PEFull
 gtToG ValueGPT = ParameterGP fullSet
+gtToG CountingGPT = CountingGP $ VEConst 0
 
 fullGuard :: StringVariable v => WeakGuardType -> Guard v
 fullGuard gt = GD $ Map.map gtToG (Set.findMin gt)
@@ -176,6 +184,15 @@ mergeGuards (GD g1) (GD g2) = liftM GD $ sequence (Map.unionWith unionop (fmap r
                                                 assumeTrue $ SubsetEq (setIntersection s1 s2) emptySet
                                                 -- and return the union
                                                 return $ ParameterGP $ setUnion s1 s2
+                                        (CountingGP e1, CountingGP e2) -> do
+                                          assumeTrue $ ValueCondition $ FOFOr
+                                            (VEConst 0 $<$ e1)
+                                            (VEConst 0 $<$ e2)
+                                          assumeTrue $ ValueCondition $ FOFImpl
+                                            (FOFOr (e1 $<=$ VEConst 0)
+                                                    (e2 $<=$ VEConst 0))
+                                            (e1 $+$ e2 $<=$ VEConst 0)
+                                          return $ CountingGP (e1 $+$ e2)
                                         _ -> do
                                                 assumeContradiction
                                                 -- Since we've assumed false, it shouldn't
@@ -190,6 +207,7 @@ matchesGuardDeclr (PermissionGD _ n) (GD g) = Map.member n g
 matchesGuardDeclr (ParametrisedGD _ n) (GD g) = Map.member n g
 matchesGuardDeclr (ProductGD _ t1 t2) g = matchesGuardDeclr t1 g || matchesGuardDeclr t2 g
 matchesGuardDeclr (SumGD _ t1 t2) g = matchesGuardDeclr t1 g || matchesGuardDeclr t2 g
+matchesGuardDeclr (CountingGD _ n) (GD g) = Map.member n g
 
 -- We want to determine g_1 |?- g_2. We do so by finding g_1' ~ g_2' and checking whether
 -- g1 |- g1' * f and g2' * f |- g2 where the latter is non-key-changing entailments.
@@ -217,6 +235,7 @@ guardEquivalence (SumGD _ gta1 gta2) gd1 gd2 =
                         fgf (ParametrisedGD _ n) _ = GD $ Map.singleton n (ParameterGP fullSet)
                         fgf (ProductGD _ gt1 gt2) g = guardJoin (fgf gt1 g) (fgf gt2 g)
                         fgf (SumGD _ gt1 gt2) g = if ma gt2 g then fgf gt2 g else fgf gt1 g
+                        fgf (CountingGD _ n) _ = GD $ Map.singleton n $ CountingGP $ VEConst 0
 guardEquivalence _ _ _ = (GD Map.empty, GD Map.empty)
 
 class (MonadIO m, MonadPlus m, MonadOrElse m, MonadState s m, AssertionLenses s, MonadLogger m,
@@ -255,12 +274,29 @@ subtractGP (PermissionGP p1) (PermissionGP p2) =
 subtractGP (ParameterGP s1) (ParameterGP s2) = do
                 assertTrue $ SubsetEq s2 s1
                 return $ Just $ ParameterGP $ setDifference s1 s2
+subtractGP (CountingGP m) (CountingGP n) =
+  (do assertTrue $ m $=$ n
+      return Nothing)
+  `mplus`
+  (do assertTrue $ VEConst 0 $<$ m
+      f <-  VEVar <$> newEvar "f"
+      assertTrue $ VEConst 0 $<$ n
+      assertTrue $ VEConst 0 $<$ f
+      assertTrue $ n $+$ f $=$ m
+      return $ Just $ CountingGP f)
+  `mplus`
+  (do assertTrue $ m $<=$ VEConst 0
+      f <- VEVar <$> newEvar "f"
+      assertTrue $ n $+$ f $=$ m
+      assertTrue $ FOFOr (VEConst 0 $<$ n) (VEConst 0 $<$ f)
+      return $ Just $ CountingGP f)
 subtractGP _ _ = mzero
 
 sameGuardParametersType :: GuardParameters v -> GuardParameters w -> Maybe (GuardParameters v)
 sameGuardParametersType NoGP NoGP = Nothing
 sameGuardParametersType (PermissionGP _) (PermissionGP _) = Nothing
 sameGuardParametersType (ParameterGP _) (ParameterGP _) = Nothing
+sameGuardParametersType (CountingGP _) (CountingGP _) = Nothing
 sameGuardParametersType a _ = Just a
 
 guardPrimitiveEntailmentM :: (GuardCheckMonad s r m) =>
@@ -356,6 +392,7 @@ conservativeGuardLUB (ProductGD _ gd1 gd2) g1 g2 = do
                         gdnames (ParametrisedGD _ n) = Map.singleton n ()
                         gdnames (ProductGD _ gda gdb) = Map.union (gdnames gda) (gdnames gdb)
                         gdnames (SumGD _ gda gdb) = Map.union (gdnames gda) (gdnames gdb)
+                        gdnames (CountingGD _ n) = Map.singleton n ()
 conservativeGuardLUB (SumGD _ gd1 gd2) g1 g2 = 
                 case (ma gd1 g1, ma gd2 g1, ma gd1 g2, ma gd2 g2) of
                     (True, False, False, True) -> return $ fullGuard $ toWeakGuardType gd1
@@ -367,6 +404,30 @@ conservativeGuardLUB (SumGD _ gd1 gd2) g1 g2 =
                     _ -> error "conservativeGuardLUB: guard does not match expected type."
         where
             ma = matchesGuardDeclr
+conservativeGuardLUB (CountingGD _ n)  g1@(GD g1m) g2@(GD g2m) =
+                            case (Map.lookup n g1m, Map.lookup n g2m) of
+                                (Nothing, _) -> return g2
+                                (_, Nothing) -> return g1
+                                (Just (CountingGP e1), Just (CountingGP e2)) -> do
+                                    k <- liftM var $ newAvar ("k_" ++ n)
+                                    assumeTrue $ FOFImpl
+                                      (VEConst 0 $<$ e1)
+                                      (FOFOr (k $<=$ VEConst 0)
+                                             (e1 $<=$ k))
+                                    assumeTrue $ FOFImpl
+                                      (e1 $<=$ VEConst 0)
+                                      (FOFAnd (k $<=$ VEConst 0)
+                                              (e1 $<=$ k))
+                                    assumeTrue $ FOFImpl
+                                      (VEConst 0 $<$ e2)
+                                      (FOFOr (k $<=$ VEConst 0)
+                                             (e2 $<=$ k))
+                                    assumeTrue $ FOFImpl
+                                      (e2 $<=$ VEConst 0)
+                                      (FOFAnd (k $<=$ VEConst 0)
+                                              (e2 $<=$ k))                                    
+                                    return (GD $ Map.singleton n (CountingGP k))
+                                _ -> error "conservativeGuardLUB: guard does not match expected type."
 
 -- |Compute an underapproximation of the least upper bound of two guards.
 -- That is, compute a guard that is guaranteed to be entailed by the least

@@ -154,6 +154,15 @@ generateGuard handler condh = liftM G.GD . foldM tg' Map.empty
                             return $ Map.insert gname (G.ParameterGP (setUnion s0 s)) g
                         _ -> raise $ IncompatibleGuardOccurrences gname                            
         tg g (ParamGuard _ gname _) = raise $ SyntaxNotImplemented "guards with multiple parameters"
+        tg g (CountingGuard _ gname e) = do
+          v <- generateValueExpr handler e
+          case Map.lookup gname g of
+            Nothing -> return $ Map.insert gname (G.CountingGP v) g
+            Just (G.CountingGP v) -> do
+              -- TODO(kja): Conditions for merging guards
+              return $ Map.insert gname (G.CountingGP v) g
+            _ -> raise $ IncompatibleGuardOccurrences gname
+          
         tg g (ParamSetGuard _ gname [v] pcs) = do
                     let v' :: Either v v = Left $ varFromString v
                     let handler' vv@(Variable _ s) = if s == v then
@@ -186,7 +195,7 @@ guardToNameParam genv gd@(ParamGuard _ nm [e]) = contextualise gd $ do
                                 ve <- generateValueExpr genv e
                                 return (nm, G.ParameterGP (SetSingleton ve))
 guardToNameParam genv gd@(ParamGuard{}) = contextualise gd $                              
-                        raise $ SyntaxNotImplemented "guards with multiple parameters"
+                        raise $ SyntaxNotImplemented "guards with multiple parameters"                        
 guardToNameParam genv gd@(ParamSetGuard _ gname [v] pcs) = contextualise gd $ do
                     let v' = Left $ varFromString v
                     let handler' vv@(Variable _ s) = if s == v then
@@ -202,6 +211,9 @@ guardToNameParam genv gd@(ParamSetGuard _ gname [v] pcs) = contextualise gd $ do
                     return (gname, G.ParameterGP s)
 guardToNameParam genv gd@(ParamSetGuard{}) = contextualise gd $                              
                         raise $ SyntaxNotImplemented "guards with multiple parameters"
+guardToNameParam genv gd@(CountingGuard _ nm e) = contextualise gd $ do
+  v <- generateValueExpr genv e
+  return (nm, G.CountingGP v)
 
 generatePure :: (MonadRaise m, Monad m) =>
             (VarExpr -> m v) -> PureAssrt -> m (Condition v)

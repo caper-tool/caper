@@ -213,17 +213,21 @@ instance Show Predicate where
 -- |Guard assertions
 data Guard = NamedGuard SourcePos String                          -- ^Simple named guard
            | PermGuard SourcePos String PermExpr                  -- ^Guard with permission
-           | ParamGuard SourcePos String [ValExpr]                -- ^Parametrised guard
+           | ParamGuard SourcePos String [ValExpr]                -- ^Parametrised guard           
            | ParamSetGuard SourcePos String [String] [PureAssrt]  -- ^Parametrised set guard
+           | CountingGuard SourcePos String ValExpr
 instance Show Guard where
         show (NamedGuard _ n) = n
         show (PermGuard _ n pe) = n ++ "[" ++ show pe ++ "]"
         show (ParamGuard _ n paras) = n ++ "(" ++ intercalate "," (map show paras) ++ ")"
         show (ParamSetGuard _ n paras asserts ) = n ++ "{" ++ intercalate "," paras ++ "|" ++ intercalate "," (map show asserts) ++ "}"
+        show (CountingGuard _ n p) = n ++ "|" ++ show p ++ "|"
+
 instance FreeVariables Guard VarExpr where
     foldrFree _ x NamedGuard{} = x
     foldrFree f x (PermGuard _ _ pe) = foldrFree f x pe
     foldrFree f x (ParamGuard _ _ params) = foldrFree f x params
+    foldrFree f x (CountingGuard _ _ p) = foldrFree f x p
     foldrFree f x (ParamSetGuard _ _ bvs pas) = foldrFree f' x pas
       where
         f' v@(Variable _ s) = if s `elem` bvs then id else f v
@@ -347,6 +351,8 @@ instance Contextual Guard where
                 "In a parametrised guard named '" ++ n ++ "'"
         toContext (ParamSetGuard sp n _ _) = DescriptiveContext sp $
                 "In a set guard named '" ++ n ++ "'"
+        toContext (CountingGuard sp n _) = DescriptiveContext sp $
+          "In a counting guard named '" ++ n ++ "'"
 instance Contextual Guards where
         toContext (Guards sp rid _) = DescriptiveContext sp $
                 "In a guard assertion for region '" ++ rid ++ "'"

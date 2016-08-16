@@ -83,6 +83,7 @@ semi       = Token.semi       lexer -- parses a semicolon
 comma      = Token.comma      lexer -- parses a comma
 whiteSpace = Token.whiteSpace lexer -- parses whitespace
 symbol     = Token.symbol     lexer
+lexeme     = Token.lexeme     lexer
 
 rIdentifier :: Parser String
 rIdentifier =
@@ -578,25 +579,21 @@ guardAux :: Parser [Guard]
 guardAux =  parens (sepBy guard (reservedOp "*"))
         <|> (do { g <- guard; return [g] })
 
--- guard :: Parser Guard
--- guard = do pos <- getPosition
---            n <- identifier
---            pe <- optionMaybe $ brackets permissionExpression
---            case pe of
---              Nothing -> do paras <- optionMaybe $ parens (sepBy1 valueExpression comma)
---                            case paras of
---                              Nothing -> do param <- optionMaybe $ braces (do { s <- sepBy1 identifier comma; reservedOp "|"; c <- sepBy1 pureAssertion comma; return (s, c) })
---                                            case param of
---                                              Nothing -> return $ NamedGuard pos n
---                                              Just (s, c)  -> return $ ParamSetGuard pos n s c
---                              Just m  -> return $ ParamGuard pos n m
---              Just l  -> return $ PermGuard pos n l
-
 guard :: Parser Guard
 guard = try permGuard
+  <|> try countingGuard  
   <|> try paramGuard
   <|> try paramSetGuard
   <|> namedGuard
+
+countingGuard :: Parser Guard
+countingGuard = do
+  pos <- getPosition
+  n <- identifier
+  lexeme (char '|')
+  v <- valueExpression
+  lexeme (char '|')
+  return $ CountingGuard pos n v
 
 namedGuard :: Parser Guard
 namedGuard = do
@@ -614,7 +611,6 @@ paramSetGuard = do
     c <- sepBy1 pureAssertion comma
     return (s, c)
   return $ ParamSetGuard pos n s c
-
 
 paramGuard :: Parser Guard
 paramGuard = do
