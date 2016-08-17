@@ -129,6 +129,72 @@ checkGuardAtType (GD g)
                 matchup (ParameterGP _) ValueGPT = True
                 matchup _ _ = False
 
+basicGuardTypeCheck :: Guard v -> GuardDeclr -> Bool
+basicGuardTypeCheck (GD grd0) gdclr = case (do
+                    when (Map.null grd0) (Left True)
+                    chk gdclr grd0)
+                of
+                    Left True -> True
+                    _ -> False
+    where
+        takeKey = Map.updateLookupWithKey (\_ _ -> Nothing)
+        chk (NamedGD _ n) grd = let (res, grd') = takeKey n grd in
+                case res of
+                    Nothing -> Right grd
+                    Just NoGP -> if Map.null grd' then Left True else Right grd'
+                    _ -> Left False
+        chk (PermissionGD _ n) grd = let (res, grd') = takeKey n grd in
+                case res of
+                    Nothing -> Right grd
+                    Just (PermissionGP _) -> if Map.null grd' then Left True else Right grd'
+                    _ -> Left False
+        chk (ParametrisedGD _ n) grd = let (res, grd') = takeKey n grd in
+                case res of
+                    Nothing -> Right grd
+                    Just (ParameterGP _) -> if Map.null grd' then Left True else Right grd'
+                    _ -> Left False
+        chk (ProductGD _ gt1 gt2) grd = chk gt1 grd >>= chk gt2
+        chk (SumGD _ gt1 gt2) grd = chk gt1 grd >>= chk gt2
+                
+
+-- |Check that a guard conforms to the guard declaration, allowing for
+-- "neutral elements" -- i.e. G[0p], G|0| when they are allowed by the
+-- guard declaration.
+strongCheckGuardAtType :: (MonadState s m, AssumptionLenses s, MonadDemonic m) =>
+                Guard VariableID -> GuardDeclr -> m ()
+strongCheckGuardAtType grd@(GD g) dec = do
+        unless (basicGuardTypeCheck grd dec) succeed
+        let wkgt = toWeakGuardType dec
+        let conds0 = Set.foldr genConds (Just []) wkgt
+        case conds0 of
+            Nothing -> return ()
+            Just conds -> do
+                dAll [mapM_ assumeTrue cond | cond <- conds]
+    where
+        genConds :: Map.Map String GuardParameterType -> Maybe [[Condition VariableID]] -> Maybe [[Condition VariableID]]
+        genConds wgt cs = do
+                let intr = Map.intersection g wgt
+                let diff = Map.difference g wgt
+                guard $ not $ Map.null diff
+                if Map.null intr then cs
+                    else case diffZero diff of
+                        Nothing -> cs
+                        Just c -> (c :) <$> cs
+        diffZero :: Map.Map String (GuardParameters VariableID) -> Maybe [Condition VariableID]
+        -- Determines conditions for all the guards to be zero.
+        -- Nothing means this is impossible.
+        diffZero = foldr (combine . gpUnitCond) (Just [])
+        combine l r = (:) <$> l <*> r
+        gpUnitCond :: GuardParameters VariableID -> Maybe (Condition VariableID)
+        gpUnitCond NoGP = Nothing
+        gpUnitCond (PermissionGP pe) = Just $ toCondition $ PAEq pe PEZero
+        gpUnitCond (ParameterGP s) = Just $ toCondition $ SubsetEq s emptySet
+
+strongCheckGuardAtTLType :: (MonadState s m, AssumptionLenses s, MonadDemonic m) =>
+                Guard VariableID -> TopLevelGuardDeclr -> m ()
+strongCheckGuardAtTLType (GD g) ZeroGuardDeclr = unless (Map.null g) $ succeed
+strongCheckGuardAtTLType gd (SomeGuardDeclr gt) = strongCheckGuardAtType gd gt
+
 gtToG :: StringVariable v => GuardParameterType -> GuardParameters v
 gtToG UniqueGPT = NoGP
 gtToG PermissionGPT = PermissionGP PEFull

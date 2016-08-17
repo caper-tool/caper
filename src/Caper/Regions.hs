@@ -100,8 +100,7 @@ mergeRegions r1 r2 = do
                 case ti of
                         (Just (RegionInstance rtid _)) -> do
                                 res <- view resolveRType
-                                let gt = rtWeakGT $ res rtid
-                                unless (checkGuardAtType g gt) succeed --assumeContradiction
+                                strongCheckGuardAtTLType g (rtGuardType (res rtid))
                         _ -> return ()
                 return $ Region dirty ti s g
 
