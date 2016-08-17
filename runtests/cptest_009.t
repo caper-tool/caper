@@ -1,4 +1,4 @@
-// NAME: G|n| ~/~> G|1|
+// NAME: G|n| ~> G|1|, n != 0
 // RESULT: REJECT
 
 // DESCRIPTION: can always create a share, if not neutral
@@ -11,6 +11,6 @@ region Foo(r) {
 }
 
 function foo()
-  requires r@(G|n|);
+  requires r@(G|n|) &*& n != 0;
   ensures  r@(G|1|);
 {}

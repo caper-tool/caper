@@ -1,4 +1,4 @@
-// NAME: G|0| ~> G|-1| * G|1|
+// NAME: G|-1| ~> G|-2| * G|1|
 // RESULT: ACCEPT
 
 // DESCRIPTION: Producing the full guard on region creation
@@ -11,6 +11,6 @@ region Foo(r) {
 }
 
 function foo()
-  requires r@(G|0|);
-  ensures  r@(G|-1| * G|1|);
+  requires r@(G|-1|);
+  ensures  r@(G|-2| * G|1|);
 {}

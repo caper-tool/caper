@@ -1,4 +1,4 @@
-// NAME: G|n| * G|3| ~> G|n+3|, n > 0
+// NAME: G|n| * G|3| ~> G|n+3|, 0 <= n
 // RESULT: ACCEPT
 
 // DESCRIPTION: Producing the full guard on region creation
@@ -11,6 +11,6 @@ region Foo(r) {
 }
 
 function foo()
-  requires r@(G|n| * G|3|) &*& n > 0;
+  requires r@(G|n| * G|3|) &*& 0 <= n;
   ensures  r@(G|n+3|);
 {}

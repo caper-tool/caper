@@ -1,4 +1,4 @@
-// NAME: { true } skip { r@(G|0|) * Foo(r,0) }
+// NAME: { true } skip { r@(G|-1|) * Foo(r,0) }
 // RESULT: ACCEPT
 
 // DESCRIPTION: Producing the full guard on region creation
@@ -12,5 +12,5 @@ region Foo(r) {
 
 function foo()
   requires true;
-  ensures  r@(G|0|) &*& Foo(r,0);
+  ensures  r@(G|-1|) &*& Foo(r,0);
 {}

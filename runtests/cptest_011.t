@@ -1,8 +1,8 @@
-// NAME: G|n| * G|3| ~> G|n+3|
+// NAME: G|1| * G|-1| inconsistent
 // RESULT: ACCEPT
 
 // DESCRIPTION: 
-region Foo(r) {
+region R(r) {
   guards |G|;
   interpretation {
     0 : true;
@@ -11,6 +11,6 @@ region Foo(r) {
 }
 
 function foo()
-  requires r@(G|n| * G|3|);
-  ensures  r@(G|n+3|);
+  requires R(r,0) &*& r@(G|-1|) &*& r@(G|1|);
+  ensures  false;
 {}
