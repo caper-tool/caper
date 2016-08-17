@@ -90,7 +90,7 @@ mergeValueExpressions :: (MonadState s m, AssumptionLenses s) =>
         ValueExpression VariableID -> m (ValueExpression VariableID)
 mergeValueExpressions ve1 ve2 = assumeTrue (ve1 $=$ ve2) >> return ve1
 
-mergeRegions :: (MonadState s m, AssumptionLenses s, MonadReader r m, RTCGetter r, MonadDemonic m) =>
+mergeRegions :: (MonadState s m, AssumptionLenses s, MonadReader r m, RTCGetter r, MonadDemonic m, DebugState s r, MonadLabel CapturedState m) =>
         Region -> Region -> m Region
 mergeRegions r1 r2 = do
                 let dirty = regDirty r1 || regDirty r2

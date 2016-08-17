@@ -160,7 +160,7 @@ basicGuardTypeCheck (GD grd0) gdclr = case (do
 -- |Check that a guard conforms to the guard declaration, allowing for
 -- "neutral elements" -- i.e. G[0p], G|0| when they are allowed by the
 -- guard declaration.
-strongCheckGuardAtType :: (MonadState s m, AssumptionLenses s, MonadDemonic m) =>
+strongCheckGuardAtType :: (MonadState s m, AssumptionLenses s, MonadDemonic m, MonadReader r m, DebugState s r, MonadLabel CapturedState m) =>
                 Guard VariableID -> GuardDeclr -> m ()
 strongCheckGuardAtType grd@(GD g) dec = do
         unless (basicGuardTypeCheck grd dec) succeed
@@ -169,7 +169,7 @@ strongCheckGuardAtType grd@(GD g) dec = do
         case conds0 of
             Nothing -> return ()
             Just conds -> do
-                dAll [mapM_ assumeTrue cond | cond <- conds]
+                dAll [mapM_ assumeTrue cond >> labelS ("Guard type empty case: " ++ show cond) | cond <- conds]
     where
         genConds :: Map.Map String GuardParameterType -> Maybe [[Condition VariableID]] -> Maybe [[Condition VariableID]]
         genConds wgt cs = do
@@ -190,7 +190,7 @@ strongCheckGuardAtType grd@(GD g) dec = do
         gpUnitCond (PermissionGP pe) = Just $ toCondition $ PAEq pe PEZero
         gpUnitCond (ParameterGP s) = Just $ toCondition $ SubsetEq s emptySet
 
-strongCheckGuardAtTLType :: (MonadState s m, AssumptionLenses s, MonadDemonic m) =>
+strongCheckGuardAtTLType :: (MonadState s m, AssumptionLenses s, MonadDemonic m, MonadReader r m, DebugState s r, MonadLabel CapturedState m) =>
                 Guard VariableID -> TopLevelGuardDeclr -> m ()
 strongCheckGuardAtTLType (GD g) ZeroGuardDeclr = unless (Map.null g) $ succeed
 strongCheckGuardAtTLType gd (SomeGuardDeclr gt) = strongCheckGuardAtType gd gt
