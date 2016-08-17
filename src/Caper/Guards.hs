@@ -157,7 +157,7 @@ gtToG :: StringVariable v => GuardParameterType -> GuardParameters v
 gtToG UniqueGPT = NoGP
 gtToG PermissionGPT = PermissionGP PEFull
 gtToG ValueGPT = ParameterGP fullSet
-gtToG CountingGPT = CountingGP $ VEConst 0
+gtToG CountingGPT = CountingGP $ VEConst (-1)
 
 fullGuard :: StringVariable v => WeakGuardType -> Guard v
 fullGuard gt = GD $ Map.map gtToG (Set.findMin gt)
@@ -186,8 +186,8 @@ mergeGuards (GD g1) (GD g2) = liftM GD $ sequence (Map.unionWith unionop (fmap r
                                                 return $ ParameterGP $ setUnion s1 s2
                                         (CountingGP e1, CountingGP e2) -> do
                                           assumeTrue $ ValueCondition $ FOFOr
-                                            (VEConst 0 $<$ e1)
-                                            (VEConst 0 $<$ e2)
+                                            (VEConst 0 $<=$ e1)
+                                            (VEConst 0 $<=$ e2)
                                           assumeTrue $ ValueCondition $ FOFImpl
                                             (FOFOr (e1 $<=$ VEConst 0)
                                                     (e2 $<=$ VEConst 0))
@@ -274,22 +274,8 @@ subtractGP (PermissionGP p1) (PermissionGP p2) =
 subtractGP (ParameterGP s1) (ParameterGP s2) = do
                 assertTrue $ SubsetEq s2 s1
                 return $ Just $ ParameterGP $ setDifference s1 s2
-subtractGP (CountingGP m) (CountingGP n) =
-  (do assertTrue $ m $=$ n
-      return Nothing)
-  `mplus`
-  (do assertTrue $ VEConst 0 $<$ m
-      f <-  VEVar <$> newEvar "f"
-      assertTrue $ VEConst 0 $<$ n
-      assertTrue $ VEConst 0 $<$ f
-      assertTrue $ n $+$ f $=$ m
-      return $ Just $ CountingGP f)
-  `mplus`
-  (do assertTrue $ m $<=$ VEConst 0
-      f <- VEVar <$> newEvar "f"
-      assertTrue $ n $+$ f $=$ m
-      assertTrue $ FOFOr (VEConst 0 $<$ n) (VEConst 0 $<$ f)
-      return $ Just $ CountingGP f)
+subtractGP (CountingGP m) (CountingGP n) = undefined
+  
 subtractGP _ _ = mzero
 
 sameGuardParametersType :: GuardParameters v -> GuardParameters w -> Maybe (GuardParameters v)
