@@ -88,7 +88,7 @@ lexeme     = Token.lexeme     lexer
 rIdentifier :: Parser String
 rIdentifier =
   do s <- upper
-     r <- try identifier <|> return [] --172|7
+     r <- try identifier <|> return []
      return $ s : r
 
 pIdentifier :: Parser String
