@@ -339,9 +339,8 @@ refreshLefts f = fmap refresh f
 
 
 instance (ExpressionSub a e, Functor a, Foldable a, Functor e, Monad e) => ExpressionCASub (FOF a) e where
-        exprCASub s0 = refreshLefts . helpFOFSub id (fmap Right . s0) 
+        exprCASub s0 = refreshLefts . helpFOFSub id (fmap Right . s0)
         exprCASub' s0 = refreshLefts . helpFOFSub (varFromString . varToString) (fmap Right . s0)
-
 
 ($=$) :: (ValueExpressionCastable a v, ValueExpressionCastable b v) => a v -> b v -> FOF ValueAtomic v
 ($=$) x y = FOFAtom $ toValueExpr x `VAEq` toValueExpr y
@@ -367,7 +366,7 @@ instance Show v => Show (SetExpression v) where
 instance FreeVariables (SetExpression v) v where
     foldrFree f x (SetBuilder v' cond) = foldrFree (\v -> if v == v' then id else f v) x cond
     foldrFree f x (SetSingleton e) = foldr f x e
-    
+
 instance (ExpressionSub ValueExpression e, Functor e, Monad e) => ExpressionCASub SetExpression e where
     exprCASub s (SetBuilder v e) = refreshLefts $ SetBuilder (Left v)
                                 (helpFOFSub id (\x -> if x == v then return (Left v) else (fmap Right . s) x) e)

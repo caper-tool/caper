@@ -1,5 +1,5 @@
 // NAME: G|n| ~> G|1|, n != 0
-// RESULT: REJECT
+// RESULT: ACCEPT
 
 // DESCRIPTION: can always create a share, if not neutral
 region Foo(r) {

@@ -25,6 +25,9 @@ module Caper.Guards(
   emptyGuard,
   consumeGuard,
   consumeGuardNoType,
+  combineCountingGuard,
+  combineParametrisedGuard,
+  combinePermissionGuard
 )  where
 -- import Control.Applicative
 import Prelude hiding (mapM,sequence,foldl,mapM_,concatMap,foldr)
@@ -238,6 +241,26 @@ fullGuard gt = GD $ Map.map gtToG (Set.findMin gt)
 guardJoin :: Guard v -> Guard v -> Guard v
 guardJoin (GD g1) (GD g2) = GD $ Map.union g1 g2
 
+combineCountingGuard ::  ValueExpression v -> ValueExpression v -> (GuardParameters v, Condition v)
+combineCountingGuard n m = (gp, cond)
+  where
+    cond = toCondition $
+      ((VEConst 0 $<=$ n) `FOFAnd` (VEConst 0 $<=$ m))
+      `FOFOr` ((n $<$ VEConst 0) `FOFAnd` (VEConst 0 $<=$ m) `FOFAnd` (n $+$ m $<$ VEConst 0))
+      `FOFOr` ((m $<$ VEConst 0) `FOFAnd` (VEConst 0 $<=$ n) `FOFAnd` (n $+$ m $<$ VEConst 0))
+    gp = CountingGP $ n $+$ m
+
+combineParametrisedGuard :: (Refreshable v, StringVariable v, Ord v) => SetExpression v -> SetExpression v -> (GuardParameters v, Condition v)
+combineParametrisedGuard s1 s2 = (gp, cond)
+  where
+    cond = toCondition $ SubsetEq (setIntersection s1 s2) emptySet
+    gp = ParameterGP $ setUnion s1 s2
+
+combinePermissionGuard :: PermissionExpression v -> PermissionExpression v -> (GuardParameters v, Condition v)
+combinePermissionGuard p1 p2 = (gp, cond)
+  where
+    cond = toCondition $ PADis p1 p2
+    gp = PermissionGP $ PESum p1 p2
 
 -- Merge two guards, generating assumptions in the process
 mergeGuards :: (MonadState s m, AssumptionLenses s) =>
@@ -249,24 +272,22 @@ mergeGuards (GD g1) (GD g2) = liftM GD $ sequence (Map.unionWith unionop (fmap r
                                 v2 <- p2
                                 case (v1, v2) of
                                         (PermissionGP perm1, PermissionGP perm2) -> do
-                                                assumeTrue $ PADis perm1 perm2
-                                                return $ PermissionGP $ PESum perm1 perm2
+                                          let (combined, condition) = combinePermissionGuard perm1 perm2
+                                          assumeTrue condition
+                                          return combined
                                         (ParameterGP s1, ParameterGP s2) -> do
-                                                -- Assume the intersection is empty (disjointness)
-                                                assumeTrue $ SubsetEq (setIntersection s1 s2) emptySet
-                                                -- and return the union
-                                                return $ ParameterGP $ setUnion s1 s2
+                                          let (combined, condition) = combineParametrisedGuard s1 s2
+                                          assumeTrue condition
+                                          return combined
                                         (CountingGP n, CountingGP m) -> do
-                                          assumeTrue $ toCondition $
-                                            ((VEConst 0 $<=$ n) `FOFAnd` (VEConst 0 $<=$ m))
-                                            `FOFOr` ((n $<$ VEConst 0) `FOFAnd` (VEConst 0 $<=$ m) `FOFAnd` (n $+$ m $<$ VEConst 0))
-                                            `FOFOr` ((m $<$ VEConst 0) `FOFAnd` (VEConst 0 $<=$ n) `FOFAnd` (n $+$ m $<$ VEConst 0))
-                                          return $ CountingGP $ n $+$ m
+                                          let (combined, condition) = combineCountingGuard n m
+                                          assumeTrue condition
+                                          return combined
                                         _ -> do
-                                                assumeContradiction
-                                                -- Since we've assumed false, it shouldn't
-                                                -- matter what we return here...
-                                                return v1
+                                          assumeContradiction
+                                          -- Since we've assumed false, it shouldn't
+                                          -- matter what we return here...
+                                          return v1
 
 -- |Assuming the guard conforms to a parent guard type, checks
 -- if the guard matches the given (sub)guard type declaration.

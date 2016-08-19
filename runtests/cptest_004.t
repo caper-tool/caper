@@ -12,5 +12,5 @@ region Foo(r) {
 
 function foo()
   requires true;
-  ensures  r@(G|-1|) &*& Foo(r,0);
+  ensures  Foo(r,0) &*& r@(G|-1|);
 {}
