@@ -32,7 +32,7 @@ import qualified Caper.Parser.AST as AST
 import Caper.Parser.AST.Annotation ()
 -- import Caper.DeclarationTyping
 import Caper.Assertions.Generate
-import Caper.ExceptionContext
+-- import Caper.ExceptionContext
 
 -- The internal representation of a region type identifier
 type RTId = Integer
@@ -284,7 +284,7 @@ isTransitive rt = do
             liftIO $ putStrLn $ "Transitivity check " ++ show (isJust m) ++ " for region type " ++ show rt
             return (isJust m)
 
-checkForClosure :: (MonadIO m, MonadPlus m, MonadOrElse m, MonadLogger m, MonadReader r m, Provers r, MonadLabel CapturedState m) =>
+checkForClosure :: (MonadIO m, MonadPlus m, MonadOrElse m, MonadLogger m, MonadReader r m, Provers r, MonadLabel CapturedState m, MonadDemonic m) =>
         RegionType -> TransitionRule -> TransitionRule -> m ()
 checkForClosure rt tr1 tr2 = flip evalStateT emptyAssumptions $ do
         -- Generate parameters for the region

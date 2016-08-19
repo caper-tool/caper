@@ -4,7 +4,7 @@ module Caper.Utils.NondetClasses where
 import Data.Foldable
 import Control.Monad hiding (msum)
 import Control.Monad.State hiding (msum)
-import Control.Applicative
+-- -- import Control.Applicative
 
 import Caper.Utils.MonadHoist
 

@@ -9,7 +9,7 @@ import qualified Data.Map as Map
 import Data.List (intercalate)
 import Control.Monad.Reader
 import Control.Monad.State
-import Control.Monad
+-- import Control.Monad
 
 import Caper.Utils.NondetClasses
 

@@ -119,6 +119,6 @@ caperCommand (CLVerify file verb rol rcl inter) = do
                     putStrLn "REJECTED"
                      
 
-main::IO()
+main :: IO ()
 main = caperApp caperCommand
 

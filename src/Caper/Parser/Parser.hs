@@ -83,11 +83,12 @@ semi       = Token.semi       lexer -- parses a semicolon
 comma      = Token.comma      lexer -- parses a comma
 whiteSpace = Token.whiteSpace lexer -- parses whitespace
 symbol     = Token.symbol     lexer
+lexeme     = Token.lexeme     lexer
 
 rIdentifier :: Parser String
 rIdentifier =
   do s <- upper
-     r <- identifier
+     r <- try identifier <|> return []
      return $ s : r
 
 pIdentifier :: Parser String
@@ -168,6 +169,7 @@ guardDeclarationTerm =  parens guardDeclaration
                     <|> permissionGuardDeclaration
                     <|> namedGuardDeclaration
                     <|> parametrisedGuardDeclaration
+                    <|> countingGuardDeclaration
 
 permissionGuardDeclaration =
   do pos <- getPosition
@@ -185,6 +187,13 @@ parametrisedGuardDeclaration =
      reservedOp "#"
      n   <- identifier
      return $ ParametrisedGD pos n
+
+countingGuardDeclaration =
+  do pos <- getPosition
+     reservedOp "|"
+     n <- identifier
+     reservedOp "|"
+     return $ CountingGD pos n
 
 interpretation :: Parser StateInterpretation
 interpretation =
@@ -571,18 +580,52 @@ guardAux =  parens (sepBy guard (reservedOp "*"))
         <|> (do { g <- guard; return [g] })
 
 guard :: Parser Guard
-guard = do pos <- getPosition
-           n <- identifier
-           pe <- optionMaybe $ brackets permissionExpression
-           case pe of
-             Nothing -> do paras <- optionMaybe $ parens (sepBy1 valueExpression comma)
-                           case paras of
-                             Nothing -> do param <- optionMaybe $ braces (do { s <- sepBy1 identifier comma; reservedOp "|"; c <- sepBy1 pureAssertion comma; return (s, c) })
-                                           case param of
-                                             Nothing -> return $ NamedGuard pos n
-                                             Just (s, c)  -> return $ ParamSetGuard pos n s c
-                             Just m  -> return $ ParamGuard pos n m
-             Just l  -> return $ PermGuard pos n l
+guard = try permGuard
+  <|> try countingGuard  
+  <|> try paramGuard
+  <|> try paramSetGuard
+  <|> namedGuard
+
+countingGuard :: Parser Guard
+countingGuard = do
+  pos <- getPosition
+  n <- identifier
+  lexeme (char '|')
+  v <- valueExpression
+  lexeme (char '|')
+  return $ CountingGuard pos n v
+
+namedGuard :: Parser Guard
+namedGuard = do
+  pos <- getPosition
+  n <- identifier
+  return $ NamedGuard pos n
+
+paramSetGuard :: Parser Guard
+paramSetGuard = do
+  pos <- getPosition
+  n <- identifier
+  (s,c) <- braces $ do
+    s <- sepBy1 identifier comma
+    reservedOp "|"
+    c <- sepBy1 pureAssertion comma
+    return (s, c)
+  return $ ParamSetGuard pos n s c
+
+paramGuard :: Parser Guard
+paramGuard = do
+  pos <- getPosition
+  n <- identifier
+  paras <- parens (sepBy1 valueExpression comma)
+  return $ ParamGuard pos n paras
+
+permGuard :: Parser Guard
+permGuard = do
+  pos <- getPosition
+  n <- identifier
+  pe <- brackets permissionExpression
+  return $ PermGuard pos n pe
+
 
 -- |Parse an 'AnyExpr', provided it's followed by ',', ';' or ')'.
 anyExpression :: Parser AnyExpr

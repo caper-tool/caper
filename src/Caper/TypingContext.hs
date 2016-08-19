@@ -8,7 +8,7 @@ import qualified Data.Set as Set
 import Control.Monad.State hiding (mapM_)
 import Control.Monad.Exception
 import Data.List hiding (foldl, foldr)
-import Data.Monoid
+-- -- import Data.Monoid
 import Data.Typeable
 
 data TypeUnificationException v t = TypeUnificationException v t t
