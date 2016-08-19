@@ -16,6 +16,6 @@ docs/design.pdf
 *.log
 *.bbl
 *.blg
-.stackwork/
+.stack-work/
 TAGS
 stack.yaml
