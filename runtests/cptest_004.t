@@ -1,4 +1,4 @@
-// NAME: { true } skip { r@(G|-1|) * Foo(r,0) }
+// NAME: { true } skip { Foo(r,0) &*& r@(G|-1|) }
 // RESULT: ACCEPT
 
 // DESCRIPTION: Producing the full guard on region creation
