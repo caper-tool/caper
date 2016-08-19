@@ -266,7 +266,7 @@ typeGuard :: (MonadState TypingState m, MonadRaise m)
         => (String -> Typed)
         -> Guard
         -> m ()
-typeGuard  resVar (NamedGuard _ _) = return ()
+typeGuard resVar (NamedGuard _ _) = return ()
 typeGuard resVar (PermGuard _ _ pe) = mapM_
         (typeVarExprAs VTPermission resVar) (freeL pe)
 typeGuard resVar (ParamGuard _ _ args) = mapM_ (typeVarExprAs VTValue resVar) (freeL args)
@@ -274,7 +274,7 @@ typeGuard resVar (ParamSetGuard _ _ vs pas) = mapM_ (typeVarExprAs VTValue resVa
         where
           notbnd (Variable _ v) = not $ v `elem` vs
           notbnd _ = False -- might as well throw away wildcards immediately
-
+typeGuard resVar (CountingGuard _ _ ve) = mapM_ (typeVarExprAs VTValue resVar) (freeL ve)
 
 typeAssrt :: (MonadState TypingState m, MonadRaise m)
         => (String -> Typed)
