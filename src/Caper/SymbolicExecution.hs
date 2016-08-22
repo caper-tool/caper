@@ -104,6 +104,7 @@ closeRegions = do
                 assertEqual st1 st1'
                 forM_ (siConditions interp) consumePure
                 consumeAssrt (siInterp interp) -- Consume the interpretation
+                labelS $ "Checking assertions"
                 justCheck -- Validate the choice
                 labelS $ "Closed region " ++ show rid ++ " with interp " ++ show interp
             handler (MissingRegionByType rtid params st s) = Just $ do

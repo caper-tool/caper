@@ -147,6 +147,7 @@ instance Show a => Show (ValueExpression a) where
         show (VEConst n) = show n
         show (VEVar v) = show v
         show (VEPlus e1 e2) = "(" ++ show e1 ++ " + " ++ show e2 ++  ")"
+        show (VEMinus (VEConst 0) e2) = "(-" ++ show e2 ++ ")"
         show (VEMinus e1 e2) = "(" ++ show e1 ++ " - " ++ show e2 ++  ")"
         show (VETimes e1 e2) = "(" ++ show e1 ++ " * " ++ show e2 ++  ")"
 
