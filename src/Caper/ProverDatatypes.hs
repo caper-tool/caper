@@ -10,11 +10,14 @@ module Caper.ProverDatatypes (
 import Prelude hiding (sequence,foldl,foldr,elem,mapM_,mapM,notElem)
 -- -- import Control.Applicative
 import Control.Monad.State hiding (mapM_,mapM)
+import Control.Arrow
 import Data.Foldable
 -- -- import Data.Traversable
 import Data.Typeable
+import Data.Either
 import Data.Functor.Identity
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 
 import Caper.FreeVariables
 
@@ -22,6 +25,9 @@ import Caper.FreeVariables
 
 class Refreshable v where
         freshen :: v -> [v]
+
+nearFreshen :: Refreshable v => v -> [v]
+nearFreshen = ap (:) freshen
 
 freshWRT :: (Refreshable v, Eq v, Foldable t) => v -> t v -> v
 freshWRT v e = head [vv | vv <- v : freshen v, vv `notElem` e]
@@ -305,9 +311,13 @@ literalToFOF :: Literal a v -> FOF a v
 literalToFOF (LPos a) = FOFAtom a
 literalToFOF (LNeg a) = FOFNot $ FOFAtom a
 
+-- |This class provides capture-avoiding substitution
 class ExpressionCASub c e where
-        exprCASub :: (Refreshable v, Eq v) => (v -> e v) -> c v -> c v
-        exprCASub' :: (Refreshable w, Eq v, Eq w, StringVariable v, StringVariable w) => (v -> e w) -> c v -> c w
+        -- |Apply a substitution function on the free variables, renaming the bound variables to avoid capture
+        exprCASub :: (Refreshable v, Ord v) => (v -> e v) -> c v -> c v
+        -- |Apply a substitution function on the free variables (mapping to a new variable type), renaming the
+        -- bound variables to avoid capture.
+        exprCASub' :: (Refreshable w, Ord v, Ord w, StringVariable v, StringVariable w) => (v -> e w) -> c v -> c w
 
 instance ExpressionCASub c e => ExpressionCASub (Literal c) e where
         exprCASub s (LPos c) = LPos $ exprCASub s c
@@ -315,33 +325,51 @@ instance ExpressionCASub c e => ExpressionCASub (Literal c) e where
         exprCASub' s (LPos c) = LPos $ exprCASub' s c
         exprCASub' s (LNeg c) = LNeg $ exprCASub' s c
 
-helpFOFSub :: forall a e v w. (ExpressionSub a e, Functor a, Foldable a, Functor e, Monad e, Refreshable w, Eq v, Eq w)
-    => (v -> w) -> (v -> e (Either w w)) -> FOF a v -> FOF a (Either w w)
-helpFOFSub straight = helpSub
+-- |Helper function for capture-avoiding substitution in 'FOF'.
+-- A bound variable @v@ is mapped to @Left v@.
+-- Unbound variables @w@ are substituted to @Right <$> subFun w@.
+helpFOFSub :: forall a e v w. (ExpressionSub a e, Functor a, Foldable a, Functor e, Applicative e, Eq v, Eq w) =>
+        (v -> e w)      -- ^Substitution
+        -> (v -> Bool)  -- ^Determine if variable is bound
+        -> FOF a v      -- ^Formula to substitute in
+        -> FOF a (Either v w)
+helpFOFSub subFun isBnd0 = helpSub isBnd0
         where
-                helpSub s (FOFForAll v p) = let v' = Left (straight v) in 
-                        FOFForAll v' (helpSub (\x -> if x == v then return v' else s x) p)
-                helpSub s (FOFExists v p) = let v' = Left (straight v) in
-                        FOFExists v' (helpSub (\x -> if x == v then return v' else s x) p)
-                helpSub s (FOFAtom a) = FOFAtom (exprSub s a)
-                helpSub s (FOFAnd p1 p2) = FOFAnd (helpSub s p1) (helpSub s p2)
-                helpSub s (FOFOr p1 p2) = FOFOr (helpSub s p1) (helpSub s p2)
-                helpSub s (FOFImpl p1 p2) = FOFImpl (helpSub s p1) (helpSub s p2)
-                helpSub s (FOFNot p) = FOFNot (helpSub s p)
+                helpSub isBnd (FOFForAll v p) = FOFForAll (Left v) (helpSub (\x -> x == v || isBnd x) p)
+                helpSub isBnd (FOFExists v p) = FOFExists (Left v) (helpSub (\x -> x == v || isBnd x) p)
+                helpSub isBnd (FOFAtom a) = FOFAtom (exprSub (\v -> if isBnd v then pure (Left v) else fmap Right (subFun v)) a)
+                helpSub isBnd (FOFAnd p1 p2) = FOFAnd (helpSub isBnd p1) (helpSub isBnd p2)
+                helpSub isBnd (FOFOr p1 p2) = FOFOr (helpSub isBnd p1) (helpSub isBnd p2)
+                helpSub isBnd (FOFImpl p1 p2) = FOFImpl (helpSub isBnd p1) (helpSub isBnd p2)
+                helpSub isBnd (FOFNot p) = FOFNot (helpSub isBnd p)
                 helpSub _ FOFFalse = FOFFalse
                 helpSub _ FOFTrue = FOFTrue
 
-refreshLefts :: (Eq b, Refreshable b, FreeVariables (a (Either b b)) (Either b b), Functor a) =>
-        a (Either b b) -> a b
-refreshLefts f = fmap refresh f
-    where
-            refresh (Left v) = head $ filter (\x -> not $ freeIn (Right x) f) (v : freshen v)
-            refresh (Right v) = v
 
+refreshLefts :: (Functor a, Foldable a, Ord v, Ord w) => (v -> [w]) -> a (Either v w) -> a w
+refreshLefts frsh s = fmap sb s
+        where
+                (lfts, rgts) = Set.fromList *** Set.fromList $ partitionEithers $ toList s
+                fStep (mp, rgs) v = let w = head [w | w <- frsh v, w `notElem` rgs] in
+                                        (Map.insert v w mp, Set.insert w rgs)
+                (fmp, _) = foldl fStep (Map.empty, rgts) lfts
+                sb (Left v) = Map.findWithDefault (error "no substitution for variable") v fmp
+                sb (Right w) = w
+
+{-
+debugSomething :: (Show (f String), Ord v, Foldable f, Functor f) => f v -> f v
+debugSomething sthg = trace (show sthg') sthg
+        where
+                updMap (m0, n) v
+                        | v `Map.member` m0 = (m0, n)
+                        | otherwise         = (Map.insert v (show n) m0, n+1)
+                (mp,_) = foldl updMap (Map.empty,0) sthg
+                sthg' = fmap (\v -> Map.findWithDefault (error "") v mp) sthg
+-}
 
 instance (ExpressionSub a e, Functor a, Foldable a, Functor e, Monad e) => ExpressionCASub (FOF a) e where
-        exprCASub s0 = refreshLefts . helpFOFSub id (fmap Right . s0)
-        exprCASub' s0 = refreshLefts . helpFOFSub (varFromString . varToString) (fmap Right . s0)
+        exprCASub s0 = refreshLefts nearFreshen . helpFOFSub s0 (const False)
+        exprCASub' s0 = refreshLefts (nearFreshen . varFromString . varToString) . helpFOFSub s0 (const False)
 
 ($=$) :: (ValueExpressionCastable a v, ValueExpressionCastable b v) => a v -> b v -> FOF ValueAtomic v
 ($=$) x y = FOFAtom $ toValueExpr x `VAEq` toValueExpr y
@@ -369,12 +397,10 @@ instance FreeVariables (SetExpression v) v where
     foldrFree f x (SetSingleton e) = foldr f x e
 
 instance (ExpressionSub ValueExpression e, Functor e, Monad e) => ExpressionCASub SetExpression e where
-    exprCASub s (SetBuilder v e) = refreshLefts $ SetBuilder (Left v)
-                                (helpFOFSub id (\x -> if x == v then return (Left v) else (fmap Right . s) x) e)
+    exprCASub s (SetBuilder v e) = refreshLefts nearFreshen $ SetBuilder (Left v) $ helpFOFSub s (==v) e
     exprCASub s (SetSingleton e) = SetSingleton $ exprSub s e
-    exprCASub' s (SetBuilder v e) = let v' = (Left $ varFromString $ varToString v) in
-                refreshLefts $ SetBuilder v'
-                                (helpFOFSub (varFromString . varToString) (\x -> if x == v then return v' else (fmap Right . s) x) e)
+    exprCASub' s (SetBuilder v e) = refreshLefts (nearFreshen . varFromString . varToString) $
+                                        SetBuilder (Left v) $ helpFOFSub s (==v) e
     exprCASub' s (SetSingleton e) = SetSingleton $ exprSub s e
 
 -- |The empty set.
@@ -394,10 +420,10 @@ toSetBuilder se = SetBuilder v c
 
 setUnion :: (StringVariable v, Refreshable v, Ord v) => SetExpression v -> SetExpression v -> SetExpression v
 setUnion a0 b0 = case (toSetBuilder a0, toSetBuilder b0) of
-        ss@(SetBuilder va ca, SetBuilder vb cb) ->
-            let v = va `freshWRTFree` ss in  
+        ss@(SetBuilder va ca, SetBuilder vb cb) -> 
+            let v = va `freshWRTFree` ss in
             SetBuilder v (FOFOr (exprCASub (\v' -> VEVar $ if v' == va then v else v') ca)
-                                (exprCASub (\v' -> VEVar $ if v' == vb then v else v') cb)) 
+                                (exprCASub (\v' -> VEVar $ if v' == vb then v else v') cb))
         _ -> undefined
 
 setIntersection :: (StringVariable v, Refreshable v, Ord v) => SetExpression v -> SetExpression v -> SetExpression v
@@ -622,10 +648,12 @@ makeEquality v (VariableExpr ve) = EqualityCondition v ve
 setAssertionToValueFOF :: (Ord v, Refreshable v) => SetAssertion v -> FOF ValueAtomic v
 setAssertionToValueFOF (SubsetEq (SetSingleton e1) (SetSingleton e2)) = e1 $=$ e1
 setAssertionToValueFOF (SubsetEq (SetSingleton e) (SetBuilder v a)) = exprCASub (\v' -> if v == v' then e else var v') a
-setAssertionToValueFOF (SubsetEq (SetBuilder v a) s2) = FOFForAll v $ FOFImpl a
+setAssertionToValueFOF ss@(SubsetEq (SetBuilder v a) s2) = 
+        let v0 = v `freshWRTFree` ss in
+                        FOFForAll v0 $ FOFImpl (exprCASub (\v' -> if v == v' then VEVar v0 else VEVar v') a)
                                     (case s2 of
-                                        SetSingleton e -> FOFAtom $ VAEq (var v) e
-                                        SetBuilder v' a' -> exprCASub (\v'' -> if v' == v'' then VEVar v else VEVar v'') a') 
+                                        SetSingleton e -> FOFAtom $ VAEq (var v0) e
+                                        SetBuilder v' a' -> exprCASub (\v'' -> if v' == v'' then VEVar v0 else VEVar v'') a') 
 
 -- |Pull out the value conditions from a list of conditions; the first argument is used to
 -- determine if a given variable should be treated as a value variable.

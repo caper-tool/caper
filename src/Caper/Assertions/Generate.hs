@@ -175,7 +175,7 @@ generateGuard handler condh = liftM G.GD . foldM tg' Map.empty
                     let vcs = valueConditions (const True) cs
                     unless (length cs == length vcs) $
                       raise $ SyntaxNotImplemented "permission/non-value conditions in set expressions" -- TODO: This should probably be a different exception
-                    let s = refreshLefts $ SetBuilder v' (foldBy FOFAnd FOFTrue vcs)
+                    let s = refreshLefts nearFreshen $ SetBuilder v' (foldBy FOFAnd FOFTrue vcs)
                     case Map.lookup gname g of
                         Nothing -> return $ Map.insert gname (G.ParameterGP s) g
                         Just (G.ParameterGP s0) -> do
@@ -208,7 +208,7 @@ guardToNameParam genv gd@(ParamSetGuard _ gname [v] pcs) = contextualise gd $ do
                     let vcs = valueConditions (const True) cs
                     unless (length cs == length vcs) $
                       raise $ SyntaxNotImplemented "permission/non-value conditions in set expressions" -- TODO: This should probably be a different exception
-                    let s = refreshLefts $ SetBuilder v' (foldBy FOFAnd FOFTrue vcs)
+                    let s = refreshLefts nearFreshen $ SetBuilder v' (foldBy FOFAnd FOFTrue vcs)
                     return (gname, G.ParameterGP s)
 guardToNameParam genv gd@(ParamSetGuard{}) = contextualise gd $                              
                         raise $ SyntaxNotImplemented "guards with multiple parameters"
