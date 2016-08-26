@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, BangPatterns, MultiParamTypeClasses, FlexibleContexts #-}
+{-# LANGUAGE RankNTypes, BangPatterns, MultiParamTypeClasses, FlexibleContexts, DeriveFunctor, DeriveFoldable, FlexibleInstances #-}
 module Caper.RegionTypes where
 
 import Prelude hiding (notElem, mapM_, foldr)
@@ -15,6 +15,7 @@ import Control.Lens
 import Data.Maybe
 import Data.List (intercalate)
 import Data.IntCast
+import Data.Tuple (swap)
 import Text.ParserCombinators.Parsec (SourcePos)
 
 import Caper.Utils.SimilarStrings
@@ -110,23 +111,25 @@ ssSize _ = mzero
 
 
 
-data TransitionRule = TransitionRule
+data GeneralTransitionRule v = TransitionRule
         {
                 -- The guard that is required to perform the transition
-                trGuard :: Guard RTDVar,
+                trGuard :: Guard v,
                 -- Some (pure) predicate that conditions the transition
-                trPredicate :: [Condition RTDVar],
+                trPredicate :: [Condition v],
                 -- An expression describing the state to transition from
-                trPreState :: ValueExpression RTDVar,
+                trPreState :: ValueExpression v,
                 -- An expression describing the state to transition to
-                trPostState :: ValueExpression RTDVar
-        }
+                trPostState :: ValueExpression v
+        } deriving (Functor, Foldable)
 
-instance Show TransitionRule where
+type TransitionRule = GeneralTransitionRule RTDVar
+
+instance (Show a) => Show (GeneralTransitionRule a) where
         show (TransitionRule gd prd prec post) =
                 show prd ++ " | " ++ show gd ++ " : " ++ show prec ++ " ~> " ++ show post
 
-instance FreeVariables TransitionRule RTDVar where
+instance FreeVariables (GeneralTransitionRule a) a where
     foldrFree f b tr = foldr f (foldr f (foldrFree f (foldrFree f b (trGuard tr)) (trPredicate tr)) (trPreState tr)) (trPostState tr) 
 
 varExprToRTDVar :: (Monad m) => AST.VarExpr -> StateT [RTDVar] m RTDVar
@@ -268,8 +271,9 @@ declrsToRegionTypeContext declrs typings = do
                     let !stateSpace = computeStateSpace interps
                     transitions <- mapM (actionToTransitionRule (map fst params)) acts
                     let rt0 = RegionType sp rtnam params gddec stateSpace transitions False interps Nothing
-                    isTrans <- isTransitive rt0
-                    let rt = rt0 { rtIsTransitive = isTrans }
+                    rt1 <- if isFinite stateSpace then return rt0 else iterateAddTransitions 4 rt0
+                    isTrans <- isTransitive rt1
+                    let rt = if isTrans then rt1 { rtIsTransitive = isTrans } else rt0
                     accumulate typings (nextRTId + 1)
                         (ac {
                             rtcIds = Map.insert rtnam nextRTId (rtcIds ac),
@@ -317,9 +321,65 @@ checkForClosure rt tr1 tr2 = flip evalStateT emptyAssumptions $ do
                  logEvent (InfoEvent $ "Transitivity check failed for clauses " ++ show tr1 ++ " and " ++ show tr2)
                  mzero
     where
-        transParams new = foldrFreeM (transParam new)
-        transParam new param pmap = if param `Map.member` pmap then return pmap else do
-                        v <- new (varToString param)
-                        return $ Map.insert param v pmap
         sub :: Map.Map RTDVar VariableID -> RTDVar -> Expr VariableID
-        sub pmap v = toExpr $ Identity $ Map.findWithDefault (error "checkForClosure: variable not found") v pmap 
+        sub pmap v = toExpr $ Identity $ Map.findWithDefault (error "checkForClosure: variable not found") v pmap
+
+transParams :: (StringVariable k, FreeVariables t k, Ord k, Monad m) =>
+        (String -> m a) -> Map k a -> t -> m (Map k a)
+transParams newVar = foldrFreeM (transParam newVar)
+        where
+                transParam newVar param pmap = if param `Map.member` pmap then return pmap else do
+                        v <- newVar (varToString param)
+                        return $ Map.insert param v pmap
+
+composeTransitions ::
+        RegionType -> TransitionRule -> TransitionRule -> TransitionRule
+composeTransitions rt tr1 tr2 = fixVars (TransitionRule grd cnd prestate poststate)
+    where
+        ((grd,prestate,poststate,pmapr),Assumptions{_assmAssumptions=cnd}) = flip runState emptyAssumptions $ do
+                -- Generate parameters for the region
+                pmaplst <- forM (rtParameters rt) $ \(param, ptype) -> do
+                    v <- newAvar (varToString param)
+                    bindVarAs v ptype
+                    return (param, v)
+                let pmap = Map.fromList pmaplst
+                -- Generate the parameters for the transitions
+                pmap1 <- transParams newAvar pmap tr1
+                pmap2 <- transParams newAvar pmap tr2
+                -- Assume that the conditions hold
+                mapM_ (assume . exprCASub' (sub pmap1)) (trPredicate tr1)
+                mapM_ (assume . exprCASub' (sub pmap2)) (trPredicate tr2)
+                -- Assume that the post-state of tr1 is the pre-state of tr2
+                assumeTrue $ exprSub (sub pmap1) (trPostState tr1) $=$ exprSub (sub pmap2) (trPreState tr2)
+                -- Compute (conservatively) the upper bound of the two guards
+                grd0 <- conservativeGuardLUBTL (rtGuardType rt)
+                            (exprCASub' (sub pmap1) (trGuard tr1)) (exprCASub' (sub pmap2) (trGuard tr2))
+                return (grd0,
+                        exprSub (sub pmap1) (trPreState tr1),
+                        exprSub (sub pmap2) (trPostState tr2),
+                        Map.fromList (map swap pmaplst))
+        sub :: Map.Map RTDVar VariableID -> RTDVar -> Expr VariableID
+        sub pmap v = toExpr $ Identity $ Map.findWithDefault (error "composeTransitions: variable not found") v pmap
+        fixVars = refreshLefts frshv . fmap (\x -> maybe (Left x) Right (Map.lookup x pmapr))
+        frshv (VIDNamed s) = nearFreshen (RTDVar s)
+        frshv (VIDInternal s) = nearFreshen (RTDVar s)
+        frshv (VIDExistential s) = nearFreshen (RTDVar s)
+
+addComposedTransitions :: (MonadIO m, MonadLogger m, MonadReader r m, Provers r) =>
+        RegionType -> m (RegionType, Bool)
+addComposedTransitions rt0 = foldM addOne (rt0,True) [(tr1,tr2)| tr1 <- rtTransitionSystem rt0, tr2 <- rtTransitionSystem rt0]
+        where
+                addOne (rt,closedSoFar) (tr1, tr2) = do
+                        m <- runAlternatingT $ checkForClosure rt tr1 tr2
+                        case m of
+                                Just _ -> return (rt,closedSoFar)
+                                Nothing -> return (rt{rtTransitionSystem = composeTransitions rt tr1 tr2 : rtTransitionSystem rt},False)
+
+iterateAddTransitions :: (MonadIO m, MonadLogger m, MonadReader r m, Provers r) =>
+        Int -> RegionType -> m RegionType
+iterateAddTransitions n rt
+        | n > 0 = do
+                        (rt', b) <- addComposedTransitions rt
+                        if b then return rt' else iterateAddTransitions (n-1) rt'
+        | otherwise = return rt
+

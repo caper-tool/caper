@@ -442,7 +442,7 @@ setDifference a0 b0 = case (toSetBuilder a0, toSetBuilder b0) of
                                 (FOFNot $ exprCASub (\v' -> VEVar $ if v' == vb then v else v') cb)) 
         _ -> undefined
 
-data SetAssertion v = SubsetEq (SetExpression v) (SetExpression v) deriving (Eq, Ord, Foldable)
+data SetAssertion v = SubsetEq (SetExpression v) (SetExpression v) deriving (Eq, Ord, Functor, Foldable)
 
 instance (ExpressionCASub SetExpression e) => ExpressionCASub SetAssertion e where
     exprCASub s (SubsetEq s1 s2) = SubsetEq (exprCASub s s1) (exprCASub s s2)
@@ -461,7 +461,7 @@ data Condition v = PermissionCondition (FOF PermissionAtomic v)
                 | EqualityCondition v v
                 | DisequalityCondition v v
                 | SetCondition (Literal SetAssertion v)
-                deriving (Eq, Ord, Foldable)
+                deriving (Eq, Ord, Functor, Foldable)
 
 
 -- |The 'ConditionProp' class allows us to convert other types to 'Condition's
