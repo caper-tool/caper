@@ -290,7 +290,7 @@ mergeGuards (GD g1) (GD g2) = liftM GD $ sequence (Map.unionWith unionop (fmap r
                                           return v1
 
 -- |Assuming the guard conforms to a parent guard type, checks
--- if the guard matches the given (sub)guard type declaration.
+-- if the guard (potentially) matches the given (sub)guard type declaration.
 matchesGuardDeclr :: GuardDeclr -> Guard v -> Bool
 matchesGuardDeclr (NamedGD _ n) (GD g) = Map.member n g
 matchesGuardDeclr (PermissionGD _ n) (GD g) = Map.member n g
@@ -327,6 +327,36 @@ guardEquivalence (SumGD _ gta1 gta2) gd1 gd2 =
                         fgf (SumGD _ gt1 gt2) g = if ma gt2 g then fgf gt2 g else fgf gt1 g
                         fgf (CountingGD _ n) _ = GD $ Map.singleton n $ CountingGP $ VEConst (-1)
 guardEquivalence _ _ _ = (GD Map.empty, GD Map.empty)
+
+-- XXX: I'm not entirely sure this is going to be OK...
+guardEquivalences :: (MonadPlus m, StringVariable v) => GuardDeclr -> Guard v -> Guard v -> m (Guard v, Guard v)
+-- ^Given a 'GuardDeclr' and a pair of guards, find a pairs of guards that
+-- could be used to rewrite the first to entail the second.
+-- This assumes the guards conform to the guard type.
+guardEquivalences (ProductGD _ gta1 gta2) gd1 gd2 = do
+                (gd3a, gd4a) <- guardEquivalences gta1 gd1 gd2
+                (gd3b, gd4b) <- guardEquivalences gta2 gd1 gd2
+                return (guardJoin gd3a gd3b, guardJoin gd4a gd4b)
+guardEquivalences (SumGD _ gta1 gta2) gd1 gd2 = msum $
+                                        [guardEquivalences gta1 gd1 gd2 | m11, m12] ++
+                                        [return (fg1, fg2) | m11, m22, fg1 <- fgf gta1 gd1, fg2 <- fgf gta2 gd2] ++
+                                        [guardEquivalences gta2 gd1 gd2 | m21, m22] ++
+                                        [return (fg1, fg2) | m21, m12, fg1 <- fgf gta2 gd1, fg2 <- fgf gta1 gd2] ++
+                                        [return (GD Map.empty, GD Map.empty) | (not (m11 && m12) && not (m21 && m22))]
+                where
+                        ma = matchesGuardDeclr
+                        m11 = ma gta1 gd1
+                        m12 = ma gta1 gd2
+                        m21 = ma gta2 gd1
+                        m22 = ma gta2 gd2
+                        fgf (NamedGD _ n) _ = return $ GD $ Map.singleton n NoGP
+                        fgf (PermissionGD _ n) _ = return $ GD $ Map.singleton n (PermissionGP PEFull)
+                        fgf (ParametrisedGD _ n) _ = return $ GD $ Map.singleton n (ParameterGP fullSet)
+                        fgf (CountingGD _ n) _ = return $ GD $ Map.singleton n $ CountingGP $ VEConst (-1)
+                        fgf (ProductGD _ gt1 gt2) g = guardJoin <$> (fgf gt1 g) <*> (fgf gt2 g)
+                        fgf (SumGD _ gt1 gt2) g = (guard (ma gt1 g || (not $ ma gt2 g)) >> fgf gt1 g) `mplus` (guard (ma gt2 g) >> fgf gt2 g)
+guardEquivalences _ _ _ = return (GD Map.empty, GD Map.empty)
+
 
 class (MonadIO m, MonadPlus m, MonadOrElse m, MonadState s m, AssertionLenses s, MonadLogger m,
     MonadReader r m, Provers r, DebugState s r, MonadLabel CapturedState m) => GuardCheckMonad s r m
@@ -396,7 +426,7 @@ guardEntailment :: (GuardCheckMonad s r m) =>
                         m (Guard VariableID)
 guardEntailment gt g1 g2 = 
                         do
-                                let (gel, ger) = guardEquivalence gt g1 g2
+                                (gel, ger) <- guardEquivalences gt g1 g2
                                 if gel == emptyGuard then guardPrimitiveEntailmentM g1 g2 else do
                                         frame1 <- guardPrimitiveEntailmentM g1 gel
                                         guardPrimitiveEntailmentM (guardJoin frame1 ger) g2
@@ -423,7 +453,7 @@ consumeGuard' :: (GuardCheckMonad s r m) =>
                 Guard VariableID -> m (Guard VariableID)
 consumeGuard' gt gname gpara g =
                 do
-                        let (gel, ger) = guardEquivalence gt g
+                        (gel, ger) <- guardEquivalences gt g
                                 (GD $ Map.insert gname gpara Map.empty)
                         if gel == emptyGuard then consumeGuardNoType gname gpara g else do
                                 frame1 <- guardPrimitiveEntailmentM g gel
