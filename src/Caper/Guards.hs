@@ -427,7 +427,11 @@ guardEntailment :: (GuardCheckMonad s r m) =>
 guardEntailment gt g1 g2 = 
                         do
                                 (gel, ger) <- guardEquivalences gt g1 g2
-                                if gel == emptyGuard then guardPrimitiveEntailmentM g1 g2 else do
+                                if gel == emptyGuard then (do
+                                        labelS $ "No guard rewrite"
+                                        guardPrimitiveEntailmentM g1 g2)
+                                  else do
+                                        labelS $ "Rewrite guard " ++ show g1 ++ " to " ++ show g2
                                         frame1 <- guardPrimitiveEntailmentM g1 gel
                                         guardPrimitiveEntailmentM (guardJoin frame1 ger) g2
 
@@ -455,7 +459,11 @@ consumeGuard' gt gname gpara g =
                 do
                         (gel, ger) <- guardEquivalences gt g
                                 (GD $ Map.insert gname gpara Map.empty)
-                        if gel == emptyGuard then consumeGuardNoType gname gpara g else do
+                        if gel == emptyGuard then do
+                                labelS $ "No guard rewrite"
+                                consumeGuardNoType gname gpara g
+                            else do
+                                labelS $ "Rewrite guard " ++ show gel ++ " to " ++ show ger
                                 frame1 <- guardPrimitiveEntailmentM g gel
                                 consumeGuardNoType gname gpara (guardJoin frame1 ger)
 
