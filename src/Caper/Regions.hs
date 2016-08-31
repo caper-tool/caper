@@ -27,6 +27,7 @@ import Caper.DeductionFailure
 import Caper.ProverStates
 import Caper.Guards
 import Caper.Transitions
+import qualified Caper.TypingContext as TC
 
 data RegionInstance = RegionInstance {
         riType :: RTId,
@@ -273,7 +274,7 @@ stabiliseRegion rid
                         rt <- lookupRType rtid
                         transitions <- checkTransitions rt ps gd
                         -- compute the closure relation
-                        tcrel <- rely rt transitions -- computeClosureRelation (rtStateSpace rt) transitions
+                        tcrel <- rely rt transitions
                         -- create a new state variable
                         newStateVar <- newAvar "state"
                         -- assume it is related to the old state
@@ -321,13 +322,18 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
                                 -- combine guards
                                 gd' <- mergeGuards gd (exprCASub' s trgd)
                                 -- We extract the assumptions that condition the transition.
-                                -- That is, those that have variables which are locally bound for
-                                -- the action, and occur in either the pre- or post-state.
-                                -- These variables are bound to be value variables, and so all such
-                                -- conditions will be value-convertible.
+                                -- Currently, this takes all assumptions that involve value variables
+                                -- that are in the transition.  We can only take conditions that
+                                -- are value-convertible (since they will form part of a rely relation).
+                                -- Previously, we only considered conditions with variables occurring in
+                                -- the pre- or post-state.  However, this is restrictive when we have
+                                -- other variables that are related to these variables and are themselves
+                                -- conditioned.  This new version may be overly inclusive (i.e. include
+                                -- conditions that are universally true).  This is probably not a big
+                                -- problem.
                                 assms <- use assumptions
-                                let isDynVar = (`Set.member` Set.fromList (concatMap toList [prec, post]))
-                                let cvars = Map.elems $ Map.filterWithKey (\k _ -> isDynVar k) bvmap
+                                bndgs <- use bindings
+                                let cvars = [v | v <- Map.elems bvmap, TC.lookup v bndgs == TC.JustType VTValue]
                                 let isCvar = (`Set.member` Set.fromList cvars)
                                 let cassms = filter (any isCvar . freeVariables) assms
                                 -- check the guard matches the guard type

@@ -69,10 +69,11 @@ instance Contextual RegionType where
                 "In a region type declaration named '" ++ rtRegionTypeName rt ++ "'"
 
 instance Show RegionType where
-        show (RegionType _ nm params gt ss ts _ interp _) =
+        show (RegionType _ nm params gt ss ts ttv interp _) =
                 "region " ++ nm ++ "(" ++ intercalate "," (map (show . fst) params) ++ ") {\n" ++
                 "  guards : " ++ show gt ++ "\n" ++
                 "  transitions {\n    " ++ intercalate "\n    " (map show ts) ++ "\n  }\n" ++
+                (if ttv then "  #Transitive\n" else "  #NotTransitive\n") ++
                 "}"
 
 rtWeakGT :: RegionType -> WeakGuardType
@@ -271,9 +272,11 @@ declrsToRegionTypeContext declrs typings = do
                     let !stateSpace = computeStateSpace interps
                     transitions <- mapM (actionToTransitionRule (map fst params)) acts
                     let rt0 = RegionType sp rtnam params gddec stateSpace transitions False interps Nothing
-                    rt1 <- if isFinite stateSpace then return rt0 else iterateAddTransitions 4 rt0
-                    isTrans <- isTransitive rt1
-                    let rt = if isTrans then rt1 { rtIsTransitive = isTrans } else rt0
+                    rt <- case isFinite stateSpace of
+                        True -> do
+                                isTrans <- isTransitive rt0
+                                return $ rt0 {rtIsTransitive = isTrans}
+                        False -> attemptClosure rt0
                     accumulate typings (nextRTId + 1)
                         (ac {
                             rtcIds = Map.insert rtnam nextRTId (rtcIds ac),
@@ -290,9 +293,13 @@ isTransitive rt = do
 
 checkForClosure :: (MonadIO m, MonadPlus m, MonadOrElse m, MonadLogger m, MonadReader r m, Provers r, MonadLabel CapturedState m, MonadDemonic m) =>
         RegionType -> TransitionRule -> TransitionRule -> m ()
-checkForClosure rt tr1 tr2 = flip evalStateT emptyAssumptions $ do
+checkForClosure rt = checkForClosure' (rtParameters rt) (rtGuardType rt) (rtTransitionSystem rt)
+
+checkForClosure' :: (MonadIO m, MonadPlus m, MonadOrElse m, MonadLogger m, MonadReader r m, Provers r, MonadLabel CapturedState m, MonadDemonic m) =>
+        [(RTDVar,VariableType)] -> AST.TopLevelGuardDeclr -> [TransitionRule] -> TransitionRule -> TransitionRule -> m ()
+checkForClosure' params gt trs tr1 tr2 = flip evalStateT emptyAssumptions $ do
         -- Generate parameters for the region
-        pmap <- liftM Map.fromList $ forM (rtParameters rt) $ \(param, ptype) -> do
+        pmap <- liftM Map.fromList $ forM params $ \(param, ptype) -> do
             v <- newAvar (varToString param)
             bindVarAs v ptype
             return (param, v)
@@ -308,13 +315,13 @@ checkForClosure rt tr1 tr2 = flip evalStateT emptyAssumptions $ do
         -- so we are done.  
         whenConsistent $ do
             -- Otherwise, compute (conservatively) the upper bound of the two guards 
-            grd <- conservativeGuardLUBTL (rtGuardType rt)
+            grd <- conservativeGuardLUBTL gt
                     (exprCASub' (sub pmap1) (trGuard tr1)) (exprCASub' (sub pmap2) (trGuard tr2))
             -- Try to find a third transition that subsumes the sequencing.
-            (msum $ flip map (rtTransitionSystem rt) $ \tr3 -> check $ do
+            (msum $ flip map trs $ \tr3 -> check $ do
                 pmap3 <- transParams newEvar pmap tr3
                 mapM_ (assert . exprCASub' (sub pmap3)) (trPredicate tr3)
-                _ <- guardEntailmentTL (rtGuardType rt) grd (exprCASub' (sub pmap3) (trGuard tr3))
+                _ <- guardEntailmentTL gt grd (exprCASub' (sub pmap3) (trGuard tr3))
                 assertTrue $ exprSub (sub pmap1) (trPreState tr1) $=$ exprSub (sub pmap3) (trPreState tr3)
                 assertTrue $ exprSub (sub pmap2) (trPostState tr2) $=$ exprSub (sub pmap3) (trPostState tr3))
               `mplus` do
@@ -323,6 +330,36 @@ checkForClosure rt tr1 tr2 = flip evalStateT emptyAssumptions $ do
     where
         sub :: Map.Map RTDVar VariableID -> RTDVar -> Expr VariableID
         sub pmap v = toExpr $ Identity $ Map.findWithDefault (error "checkForClosure: variable not found") v pmap
+
+notSubsumedBy :: (MonadIO m, MonadLogger m, MonadReader r m, Provers r) =>
+        [(RTDVar,VariableType)] -- ^Region parameters
+        -> AST.TopLevelGuardDeclr   -- ^Guard type
+        -> TransitionRule
+        -> TransitionRule
+        -> m Bool
+notSubsumedBy params gt tr1 tr2 = liftM isNothing $ runAlternatingT $ flip evalStateT emptyAssumptions $ do
+        -- Generate parameters for the region
+        pmap <- liftM Map.fromList $ forM params $ \(param, ptype) -> do
+            v <- newAvar (varToString param)
+            bindVarAs v ptype
+            return (param, v)
+        -- Generate the parameters for the first transition
+        pmap1 <- transParams newAvar pmap tr1
+        -- Assume that the conditions for the first transition hold
+        mapM_ (assume . exprCASub' (sub pmap1)) (trPredicate tr1)
+        check $ do
+                -- Generate the parameters for the second transition
+                pmap2 <- transParams newEvar pmap tr2
+                -- Assert that the conditions for the second transition hold
+                mapM_ (assert . exprCASub' (sub pmap2)) (trPredicate tr2)
+                -- Assert guard entailment
+                _ <- guardEntailmentTL gt (exprCASub' (sub pmap1) (trGuard tr1)) (exprCASub' (sub pmap2) (trGuard tr2))
+                -- Assert equality for the pre and post states
+                assertTrue $ exprSub (sub pmap1) (trPreState tr1) $=$ exprSub (sub pmap2) (trPreState tr2)
+                assertTrue $ exprSub (sub pmap1) (trPostState tr1) $=$ exprSub (sub pmap2) (trPostState tr2)
+    where
+        sub :: Map.Map RTDVar VariableID -> RTDVar -> Expr VariableID
+        sub pmap v = toExpr $ Identity $ Map.findWithDefault (error "notSubsumedBy: variable not found") v pmap
 
 transParams :: (StringVariable k, FreeVariables t k, Ord k, Monad m) =>
         (String -> m a) -> Map k a -> t -> m (Map k a)
@@ -333,12 +370,12 @@ transParams newVar = foldrFreeM (transParam newVar)
                         return $ Map.insert param v pmap
 
 composeTransitions ::
-        RegionType -> TransitionRule -> TransitionRule -> TransitionRule
-composeTransitions rt tr1 tr2 = fixVars (TransitionRule grd cnd prestate poststate)
+        [(RTDVar,VariableType)] -> AST.TopLevelGuardDeclr -> TransitionRule -> TransitionRule -> TransitionRule
+composeTransitions params gt tr1 tr2 = fixVars (TransitionRule grd cnd prestate poststate)
     where
         ((grd,prestate,poststate,pmapr),Assumptions{_assmAssumptions=cnd}) = flip runState emptyAssumptions $ do
                 -- Generate parameters for the region
-                pmaplst <- forM (rtParameters rt) $ \(param, ptype) -> do
+                pmaplst <- forM params $ \(param, ptype) -> do
                     v <- newAvar (varToString param)
                     bindVarAs v ptype
                     return (param, v)
@@ -352,7 +389,7 @@ composeTransitions rt tr1 tr2 = fixVars (TransitionRule grd cnd prestate poststa
                 -- Assume that the post-state of tr1 is the pre-state of tr2
                 assumeTrue $ exprSub (sub pmap1) (trPostState tr1) $=$ exprSub (sub pmap2) (trPreState tr2)
                 -- Compute (conservatively) the upper bound of the two guards
-                grd0 <- conservativeGuardLUBTL (rtGuardType rt)
+                grd0 <- conservativeGuardLUBTL gt
                             (exprCASub' (sub pmap1) (trGuard tr1)) (exprCASub' (sub pmap2) (trGuard tr2))
                 return (grd0,
                         exprSub (sub pmap1) (trPreState tr1),
@@ -361,9 +398,44 @@ composeTransitions rt tr1 tr2 = fixVars (TransitionRule grd cnd prestate poststa
         sub :: Map.Map RTDVar VariableID -> RTDVar -> Expr VariableID
         sub pmap v = toExpr $ Identity $ Map.findWithDefault (error "composeTransitions: variable not found") v pmap
         fixVars = refreshLefts frshv . fmap (\x -> maybe (Left x) Right (Map.lookup x pmapr))
-        frshv (VIDNamed s) = nearFreshen (RTDVar s)
+        frshv (VIDNamed s) = nearFreshen (RTDVar s) 
         frshv (VIDInternal s) = nearFreshen (RTDVar s)
         frshv (VIDExistential s) = nearFreshen (RTDVar s)
+
+generateComposedTransitions :: (MonadIO m, MonadLogger m, MonadReader r m, Provers r) =>
+        [(RTDVar,VariableType)] -- ^Region parameters
+        -> AST.TopLevelGuardDeclr   -- ^Guard type
+        -> [TransitionRule]     -- ^Old transitions
+        -> [TransitionRule]     -- ^New transitions
+        -> m ([TransitionRule], [TransitionRule])
+generateComposedTransitions params gt oldtrs0 newtrs0 = foldM genOne (oldtrs0 ++ newtrs0, []) trPairs
+        where
+                trPairs = [(tr1,tr2) | tr1 <- oldtrs0 ++ newtrs0, tr2 <- newtrs0] ++ [(tr1,tr2) | tr1 <- newtrs0, tr2 <- oldtrs0]
+                genOne (oldtrs, newtrs) (tr1, tr2) = do
+                        m <- runAlternatingT $ checkForClosure' params gt (oldtrs ++ newtrs) tr1 tr2
+                        case m of
+                                Just _ -> return (oldtrs, newtrs)
+                                Nothing -> do
+                                        logEvent (InfoEvent $ "Transitivity check failed for actions:\n  " ++ show tr1 ++ "\n  " ++ show tr2)
+                                        let tr' = composeTransitions params gt tr1 tr2
+                                        let notSub x = do
+                                                res <- notSubsumedBy params gt x tr'
+                                                unless res $ logEvent $ InfoEvent $ "Action\n  " ++ show x ++ "\nis subsumed by\n  " ++ show tr'
+                                                return res
+                                        oldtrs' <- filterM notSub oldtrs
+                                        newtrs' <- filterM notSub newtrs
+                                        return (oldtrs', tr' : newtrs')
+
+attemptClosure :: (MonadIO m, MonadLogger m, MonadReader r m, Provers r) =>
+        RegionType -> m RegionType
+attemptClosure rt@(RegionType{rtParameters = params, rtGuardType = gt, rtTransitionSystem = trs0}) = ac 5 [] trs0
+        where
+                ac n oldtrs [] = return rt{rtTransitionSystem = oldtrs, rtIsTransitive = True}
+                ac n oldtrs newtrs
+                        | n <= 0 = return rt{rtIsTransitive = False}
+                        | otherwise = do
+                                (oldtrs', newtrs') <- generateComposedTransitions params gt oldtrs newtrs
+                                ac (n - 1) oldtrs' newtrs'
 
 addComposedTransitions :: (MonadIO m, MonadLogger m, MonadReader r m, Provers r) =>
         RegionType -> m (RegionType, Bool)
@@ -373,7 +445,7 @@ addComposedTransitions rt0 = foldM addOne (rt0,True) [(tr1,tr2)| tr1 <- rtTransi
                         m <- runAlternatingT $ checkForClosure rt tr1 tr2
                         case m of
                                 Just _ -> return (rt,closedSoFar)
-                                Nothing -> return (rt{rtTransitionSystem = composeTransitions rt tr1 tr2 : rtTransitionSystem rt},False)
+                                Nothing -> return (rt{rtTransitionSystem = composeTransitions (rtParameters rt) (rtGuardType rt) tr1 tr2 : rtTransitionSystem rt},False)
 
 iterateAddTransitions :: (MonadIO m, MonadLogger m, MonadReader r m, Provers r) =>
         Int -> RegionType -> m RegionType

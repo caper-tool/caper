@@ -177,6 +177,10 @@ runAlternatingT' (Label _ s a) bt = runAlternatingT' a bt
 runAlternatingT :: Monad m => AlternatingT s e m a -> m (Maybe [a])
 runAlternatingT a = liftM (either (const Nothing) Just) $ runAlternatingT' a (return . Left)
 
+runAlternatingT2 :: (Monad m, MonadIO m, Show e) => AlternatingT s e m () -> m Bool
+runAlternatingT2 = liftM isJust . runAlternatingT 
+
+
 mps :: MonadIO m => String -> m ()
 mps = liftIO . putStrLn
 

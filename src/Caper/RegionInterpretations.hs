@@ -130,7 +130,7 @@ checkStateInterpretationStability ::
         -> m ()
 checkStateInterpretationStability params si = 
     contextualise si $ unless (isTriviallyStable (siInterp si)) $ do
-        r <- runAlternatingT $ flip evalStateT emptySymbState $ do
+        r <- runAlternatingTD $ flip evalStateT emptySymbState $ do
                 -- Produce the abstract state
                 state0 <- produceValueExpr (siState si)
                 -- Assume the conditions
