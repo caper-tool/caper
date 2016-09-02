@@ -164,7 +164,7 @@ data RegionTypeContext = RegionTypeContext
 instance Show RegionTypeContext where
     show (RegionTypeContext ids rts) = Map.foldWithKey showRegion "" ids
         where
-            showRegion rname rid rest = rname ++ ": " ++ show (Map.lookup rid rts) ++ "\n"
+            showRegion rname rid rest = rname ++ ": " ++ show (Map.lookup rid rts) ++ "\n" ++ rest
 
 -- |The region type context with no region types.
 emptyRegionTypeContext :: RegionTypeContext
