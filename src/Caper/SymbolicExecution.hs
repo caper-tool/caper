@@ -129,6 +129,7 @@ closeRegions = do
                     regState = Just st,
                     regGuards = rtFullGuard rt}
                 labelS $ "Created region " ++ show rid ++ " of type " ++ show rt
+            handler _ = Nothing
                 
 
 openRegion :: SymExMonad r s m =>
@@ -278,7 +279,7 @@ missingRegionHandler = --retry (liftIO $ putStrLn "registered missing region han
                 labelS "invoked missing region handler"
                 createRegionWithParams rtid params st
                 labelS "created region"
---      handler _ = Nothing
+        handler _ = Nothing
 
 data ExitMode = EMReturn (Maybe (ValueExpression VariableID)) | EMContinuation
 
@@ -396,7 +397,7 @@ symbolicExecute stmt cont = do
                         rtn <- aexprToVExpr rexp
                         cont $ EMReturn (Just rtn)
         se (ReturnStmt _ Nothing) = cont $ EMReturn Nothing
-        se (SkipStmt _) = cont EMContinuation
+        se (SkipStmt _) = atomicSymEx (return ()) >> cont EMContinuation
         se (ForkStmt sp pname args) = do
                         spec <- view (specifications . at pname)
                         contextualise (DescriptiveContext sp ("In a fork of function '" ++ pname ++ "'")) $ case spec of
