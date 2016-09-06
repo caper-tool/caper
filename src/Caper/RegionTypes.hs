@@ -318,7 +318,7 @@ checkForClosure' params gt trs tr1 tr2 = flip evalStateT emptyAssumptions $ do
             grd <- conservativeGuardLUBTL gt
                     (exprCASub' (sub pmap1) (trGuard tr1)) (exprCASub' (sub pmap2) (trGuard tr2))
             -- Try to find a third transition that subsumes the sequencing.
-            (msum $ flip map trs $ \tr3 -> check $ do
+            (msum $ flip map trs $ \tr3 -> checkNoAbduce $ do
                 pmap3 <- transParams newEvar pmap tr3
                 mapM_ (assert . exprCASub' (sub pmap3)) (trPredicate tr3)
                 _ <- guardEntailmentTL gt grd (exprCASub' (sub pmap3) (trGuard tr3))
@@ -347,7 +347,7 @@ notSubsumedBy params gt tr1 tr2 = liftM isNothing $ runAlternatingT $ flip evalS
         pmap1 <- transParams newAvar pmap tr1
         -- Assume that the conditions for the first transition hold
         mapM_ (assume . exprCASub' (sub pmap1)) (trPredicate tr1)
-        check $ do
+        checkNoAbduce $ do
                 -- Generate the parameters for the second transition
                 pmap2 <- transParams newEvar pmap tr2
                 -- Assert that the conditions for the second transition hold

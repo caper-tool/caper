@@ -16,7 +16,9 @@ import Data.List (intercalate)
 import Data.Traversable
 import Data.Maybe
 
+import Caper.Utils.Failure
 import Caper.Utils.NondetClasses
+
 import Caper.Logger
 import Caper.ProverDatatypes
 import Caper.Prover
@@ -367,7 +369,7 @@ symExLocalAssign target expr = do
 
 symExAllocate :: 
                    (MonadRaise m, MonadLogger m, Provers p, PredicateLenses p, MonadReader p m, DebugState (WithAssertions s) p,
-                   SymbStateLenses s, MonadState s m, MonadIO m, MonadPlus m, MonadLabel CapturedState m) =>
+                   SymbStateLenses s, MonadState s m, MonadIO m, MonadPlus m, MonadLabel CapturedState m, OnFailure f m, AbductionFailure f, MonadOrElse m) =>
                    Maybe String -> AExpr -> m ()
 symExAllocate target lenExpr = do
                 lenval <- aexprToExpr lenExpr
@@ -379,7 +381,7 @@ symExAllocate target lenExpr = do
                 forM_ target $ \tvar -> progVars %= Map.insert tvar (var loc)
 
 symExWrite :: (SymbStateLenses s, MonadLogger m, MonadRaise m, Provers p, PredicateLenses p, DebugState (WithAssertions s) p,
-                     MonadReader p m, MonadIO m, MonadState s m, MonadPlus m, MonadLabel CapturedState m) =>
+                     MonadReader p m, MonadIO m, MonadState s m, MonadPlus m, MonadLabel CapturedState m, OnFailure f m, AbductionFailure f, MonadOrElse m) =>
                     AExpr -> AExpr -> m ()
 symExWrite target expr = do
                 loc <- aexprToExpr target
@@ -390,7 +392,7 @@ symExWrite target expr = do
                 addPredicate (PCell, [loc, newval])
 
 symExRead :: (SymbStateLenses s, MonadRaise m, MonadLogger m, Provers p, PredicateLenses p, DebugState (WithAssertions s) p,
-                MonadReader p m, MonadIO m, MonadState s m, MonadPlus m, MonadLabel CapturedState m) =>
+                MonadReader p m, MonadIO m, MonadState s m, MonadPlus m, MonadLabel CapturedState m, OnFailure f m, AbductionFailure f, MonadOrElse m) =>
                String -> AExpr -> m ()
 symExRead target eloc = do
                 loc <- aexprToExpr eloc
@@ -403,7 +405,7 @@ symExRead target eloc = do
 
 symExCAS :: (SymbStateLenses s, MonadRaise m, MonadLogger m, Provers p, PredicateLenses p,
                 MonadReader p m, MonadIO m, MonadState s m, MonadPlus m, DebugState s p, DebugState (WithAssertions s) p,
-                MonadDemonic m, MonadLabel CapturedState m) =>
+                MonadDemonic m, MonadLabel CapturedState m, OnFailure f m, AbductionFailure f, MonadOrElse m) =>
                 Maybe String -> AExpr -> AExpr -> AExpr -> m ()
 symExCAS rtn target old new = do
                 loc <- aexprToVExpr target

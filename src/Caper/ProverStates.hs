@@ -12,12 +12,19 @@ import Control.Monad.State
 -- import Control.Monad
 
 import Caper.Utils.NondetClasses
+import Caper.Utils.Failure
 
 import qualified Caper.TypingContext as TC
 import Caper.Logger
 import Caper.ProverDatatypes
 import Caper.Prover
 -- import Caper.RegionTypes
+
+class AbductionFailure f where
+        abduceConditions :: [VariableID] -> [Condition VariableID] -> f
+        handleAbduceConditions :: ([VariableID] -> [Condition VariableID] -> Maybe x) -> f -> Maybe x
+
+
 
 showAssumptions :: (AssumptionLenses a) => a -> String
 showAssumptions ass = "[" ++ show avars ++ "]\n" ++
@@ -87,10 +94,36 @@ admitChecks o = do
                 put $ admitAssertions s'
                 return r
 
-check :: (AssumptionLenses s, MonadLogger m, Provers p, MonadReader p m,
+check :: (AssumptionLenses s, MonadLogger m, Provers p, MonadReader p m, OnFailure f m, AbductionFailure f, MonadOrElse m,
             MonadIO m, MonadState s m, MonadPlus m, DebugState (WithAssertions s) p, MonadLabel CapturedState m) =>
            StateT (WithAssertions s) m a -> m a
 check c = admitChecks $ do
+                r <- c
+                labelS "Check assertions"
+                justCheck'
+                retry (return ()) $ (handleAbduceConditions handler)
+                return r
+        where
+                handler vs cs = Just $ do
+                        mapM_ declareEvar vs
+                        mapM_ assert cs
+                        labelS "Handling abduction"
+                        justCheck'
+                justCheck' = orElse (labelS "Checking assertions" >> justCheck) $ do
+                        -- Check if the assertions are even possibly consistent with the assumptions
+                        wasts <- get
+                        consistent <- flip evalStateT (admitAssertions wasts) $ isConsistent
+                        if consistent == Just True then
+                                -- If they are, abduce
+                                (failure =<< abduceConditions . Set.toList <$> use existentials <*> use assertions)
+                            else
+                                -- Otherwise there is no point
+                                mzero
+
+checkNoAbduce :: (AssumptionLenses s, MonadLogger m, Provers p, MonadReader p m,
+            MonadIO m, MonadState s m, MonadPlus m, DebugState (WithAssertions s) p, MonadLabel CapturedState m) =>
+           StateT (WithAssertions s) m a -> m a
+checkNoAbduce c = admitChecks $ do
                 r <- c
                 labelS "Check assertions"
                 justCheck

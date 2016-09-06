@@ -9,12 +9,12 @@ import Control.Monad.State hiding (msum)
 import Caper.Utils.MonadHoist
 
 class MonadPlus m => MonadOrElse m where
-        -- orElse: never execute the second argument
+        -- |Never execute the second argument
         -- if the first could succeed
         orElse :: m a -> m a -> m a
 
 attempt :: MonadOrElse m => m () -> m ()
--- Do the action if possible
+-- ^Do the action if possible
 attempt a = orElse a (return ())
 
 instance (MonadPlus m, MonadOrElse m) => MonadOrElse (StateT s m) where

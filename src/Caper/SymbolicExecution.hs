@@ -82,6 +82,7 @@ closeRegions = do
                 labelS $ "CLOSING REGIONS: " ++ show (map oregID ors)
                 regs <- mapM updateState ors
                 mapM_ closeRegion regs
+                retry (return ()) $ (handleAbduceConditions abductionHandler)
             labelS $ "CLOSED REGIONS"
             logicalVars .= savedLVars
             openRegions .= []
@@ -130,6 +131,12 @@ closeRegions = do
                     regGuards = rtFullGuard rt}
                 labelS $ "Created region " ++ show rid ++ " of type " ++ show rt
             handler _ = Nothing
+            abductionHandler vs cs = Just $ do
+                        mapM_ declareEvar vs
+                        mapM_ assert cs
+                        labelS "Handling abduction"
+                        justCheck
+                
                 
 
 openRegion :: SymExMonad r s m =>
