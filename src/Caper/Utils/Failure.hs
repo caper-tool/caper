@@ -4,6 +4,7 @@ module Caper.Utils.Failure where
 import Control.Monad.Trans.Class
 import Control.Monad.State
 import Control.Monad.Reader
+import Control.Monad.Cont
 
 -- import Caper.Utils.MonadHoist
 
@@ -68,3 +69,6 @@ instance (Failure e m, Monad m) => Failure e (ReaderT r m) where
 instance (OnFailure e m, Monad m) => OnFailure e (StateT s m) where
     retry a b = StateT $ \s -> retry (runStateT a s) (return . flip runStateT s <=< b)
     localRetry a b = StateT $ \s -> localRetry (runStateT a s) (return . flip runStateT s <=< b)
+
+instance (Failure e m, Monad m) => Failure e (ContT r m) where
+    failure = lift . failure
