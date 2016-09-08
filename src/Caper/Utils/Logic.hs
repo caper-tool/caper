@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, FlexibleInstances, MultiParamTypeClasses #-}
+{-# LANGUAGE RankNTypes, FlexibleInstances, MultiParamTypeClasses, FunctionalDependencies #-}
 -- | An implementation of a non-determism monad inspired by
 -- <http://dl.acm.org/citation.cfm?id=1086390 Oleg et al. 2005>.
 module Caper.Utils.Logic where
@@ -50,6 +50,49 @@ instance MonadHoist (SFContT flr) where
 instance Failure f (SFContT f m) where
         failure f = SFKT $ \sk fk -> fk f
 
+reflect :: (MonadPlus m, Failure f m) => Either f (a, m a) -> m a
+reflect (Left f) = failure f
+reflect (Right (a, rest)) = return a `mplus` rest
+
+class (MonadPlus m, Failure f m, Monoid f) => LogicM f m | m -> f where
+        msplit :: m a -> m (Either f (a, m a))
+        -- |Fair disjunction
+        interleave :: m a -> m a -> m a
+        interleave a b = do
+                        r <- msplit a
+                        case r of
+                                Left f -> failure f `mplus` b
+                                Right (hd, rst) -> return hd `mplus` interleave b rst
+        -- |Fair conjunction
+        (>>-) :: m a -> (a -> m b) -> m b
+        a >>- k = do
+                r <- msplit a
+                case r of
+                        Left f -> failure f
+                        Right (hd, rst) -> interleave (k hd) (rst >>- k)
+        -- |If-then-else (soft-cut)
+        ifte :: m a -> (a -> m b) -> (f -> m b) -> m b
+        ifte a thn els = do
+                r <- msplit a
+                case r of
+                        Left f -> els f
+                        Right (hd, rst) -> thn hd `mplus` (rst >>= thn)
+        -- |Pruning (don't-care nondeterminism)
+        once :: m a -> m a
+        once a = do
+                r <- msplit a
+                case r of
+                        Left f -> failure f
+                        Right (hd, _) -> return hd
+
+
+instance (Monad m, Monoid f) => LogicM f (SFContT f m) where
+        msplit tma = lift (unSFKT tma ssk (return . Left))
+                where
+                        ssk a fk = return (Right (a, (lift (fk mempty) >>= reflect)))
+
+
+{-
 class LogicT t where
         -- |Deconstruct the head of the result stream
         msplit :: (Monad m, Monoid f) => t f m a -> t f m (Either f (a, t f m a))
@@ -82,10 +125,6 @@ class LogicT t where
                         Left f -> failure f
                         Right (hd, _) -> return hd
 
-reflect :: (MonadPlus m, Failure f m) => Either f (a, m a) -> m a
-reflect (Left f) = failure f
-reflect (Right (a, rest)) = return a `mplus` rest
-
 instance LogicT SFContT where
         msplit tma = lift (unSFKT tma ssk (return . Left))
                 where
@@ -95,6 +134,12 @@ instance (Monad m, Monoid f) => MonadOrElse (SFContT f m) where
         a `orElse` b = ifte a return (const b)
 
 
+instance LogicT (ContT r (SFContT f m)) where
+        msplit 
+-}
+
 {-
 instance (Monad m, Monoid f) => OnFailure f (ContT r (SFContT f m)) where
-        retry = -}
+        retry a h = callCC $ \cont -> ifte (a >>= cont) return (h >=> cont)
+        localRetry = undefined
+-}
