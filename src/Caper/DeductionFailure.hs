@@ -7,9 +7,7 @@ module Caper.DeductionFailure(
 
 import Caper.Utils.Failure
 
-import Caper.ProverDatatypes
 import Caper.RegionTypes
-import Caper.Prover
 import Caper.ProverStates
 
 data DeductionFailure =

@@ -13,7 +13,8 @@ module Caper.Constants(
     defaultPostconditionBool,
     programVariableSupersedesLogicalVariable,
     defaultRegionConstructionLimit,
-    defaultRegionOpenLimit
+    defaultRegionOpenLimit,
+    closureDepth
 )
  where
 
@@ -90,3 +91,12 @@ defaultRegionConstructionLimit = 2
 -- cause some proof searches that should succeed to fail.
 defaultRegionOpenLimit :: Int
 defaultRegionOpenLimit = 2
+
+-- |This determines the number of times to iterate the transitive
+-- closure process for non-finite-state regions.  A setting of 0
+-- will not check transitivity (if there are any actions).  A
+-- setting of one will check transitivity, but not add any actions.
+-- A higher setting will add transitions (of length up to 2^(n-1))
+-- if doing so reaches a transitively closed set of actions.
+closureDepth :: Int
+closureDepth = 5

@@ -177,14 +177,14 @@ runAlternatingT' (Label _ s a) bt = runAlternatingT' a bt
 runAlternatingT :: Monad m => AlternatingT s e m a -> m (Maybe [a])
 runAlternatingT a = liftM (either (const Nothing) Just) $ runAlternatingT' a (return . Left)
 
-runAlternatingT2 :: (Monad m, MonadIO m, Show e) => AlternatingT s e m () -> m Bool
+runAlternatingT2 :: (Monad m) => AlternatingT s e m () -> m Bool
 runAlternatingT2 = liftM isJust . runAlternatingT 
 
 
 mps :: MonadIO m => String -> m ()
 mps = liftIO . putStrLn
 
-runAlternatingTD' :: (Monad m, MonadIO m, Show e) => AlternatingT s e m a -> ([e] -> m (Either [e] [(String, a)])) -> String -> m (Either [e] [(String, a)])
+runAlternatingTD' :: (MonadIO m, Show e) => AlternatingT s e m a -> ([e] -> m (Either [e] [(String, a)])) -> String -> m (Either [e] [(String, a)])
 runAlternatingTD' NoChoice bt s = mps (s ++ "#") >> bt []
 runAlternatingTD' (Result a) _ s = mps (s ++ "$") >> (return $ Right [(s ++ "$", a)])
 runAlternatingTD' (Lazy k) bt s = do
@@ -236,10 +236,10 @@ runAlternatingTD' (LocalRetry c x h) bt s = do
                 runAlternatingTD' (msum [maybe (Failure e) id (h e) | e <- es]) (return . Left) (s ++ "r1.")
 runAlternatingTD' (Label _ l x) bt s = mps ("! " ++ l) >> runAlternatingTD' x bt s
 
-runAlternatingTD :: (Monad m, MonadIO m, Show e) => AlternatingT s e m a -> m (Maybe [a])
+runAlternatingTD :: (MonadIO m, Show e) => AlternatingT s e m a -> m (Maybe [a])
 runAlternatingTD a = liftM (either (const Nothing) (Just . map snd)) $ runAlternatingTD' a (return . Left) ""
 
-runAlternatingTD2 :: (Monad m, MonadIO m, Show e) => AlternatingT s e m () -> m Bool
+runAlternatingTD2 :: (MonadIO m, Show e) => AlternatingT s e m () -> m Bool
 runAlternatingTD2 = liftM isJust . runAlternatingTD 
 
 
@@ -264,7 +264,7 @@ toAlternatingT (ATWork a) = a
 toAlternatingT (ATHandler h a es) = (Retry (toAlternatingT a) h) `mplus` msum [toAlternatingT t | (_, t) <- es]
 
 
-printContext :: (Monad m, MonadIO m, Show e) => AltCtx s e m' -> m ()
+printContext :: (MonadIO m, Show e) => AltCtx s e m' -> m ()
 printContext ACTop = return ()
 printContext (ACAng up _ _ l _) = printContext up >> mps ("A: " ++ l)
 printContext (ACDem up _ _ l _) = printContext up >> mps ("D: " ++ l)
@@ -272,7 +272,7 @@ printContext (ACLab up _ l) = printContext up >> mps ("   " ++ l)
 printContext (ACTry up _ es) = printContext up >> mps ("H: TRY (" ++ show (length es) ++ " exception(s))")
 printContext (ACCatch up _ t es1 e es2) = printContext up >> mps ("H: CATCH " ++ show e ++ " (default & " ++ (show $ length es1 + length es2) ++ " exception(s))")
 
-printState :: (Monad m, MonadIO m, Show s) => AltCtx s e m' -> m ()
+printState :: (MonadIO m, Show s) => AltCtx s e m' -> m ()
 printState (ACAng _ _ (Just s) _ _) = mps $ "*** STATE ***\n" ++ show s ++ "\n*************"
 printState (ACDem _ _ (Just s) _ _) = mps $ "*** STATE ***\n" ++ show s ++ "\n*************"
 printState (ACLab _ (Just s) _) = mps $ "*** STATE ***\n" ++ show s ++ "\n*************"
@@ -321,7 +321,7 @@ moveUp (ACTry up h []) t = moveUp up (ATHandler h t [])
 moveUp (ACTry up h es) t = (up, ATHandler h t es)
 moveUp (ACCatch up h d x e y) t = (up, ATHandler h d (x ++ (e, t) : y))
 
-myFail :: (Monad m, MonadIO m, Show s, Show e) => AltCtx s e m -> Maybe e -> m ()
+myFail :: (MonadIO m, Show s, Show e) => AltCtx s e m -> Maybe e -> m ()
 myFail ctx f = do
         printState ctx
         printContext ctx 
@@ -331,7 +331,7 @@ myFail ctx f = do
         _ <- liftIO getLine
         return ()
 
-mySuccess :: (Monad m, MonadIO m, Show s, Show e) => AltCtx s e m -> m ()
+mySuccess :: (MonadIO m, Show s, Show e) => AltCtx s e m -> m ()
 mySuccess ctx = do
         printState ctx
         printContext ctx
@@ -339,16 +339,16 @@ mySuccess ctx = do
         _ <- liftIO getLine
         return ()
 
-goAT :: (Monad m, MonadIO m, Show s, Show e) => Bool -> AltCtx s e m -> AltTree s e m -> m Bool
-goAT stp ctx at = do
-                r <- runAlternatingT' (toAlternatingT at) (return . Left)
+goAT :: (MonadIO m, Show s, Show e) => Bool -> AltCtx s e m -> AltTree s e m -> m Bool
+goAT stp ctx atr = do
+                r <- runAlternatingT' (toAlternatingT atr) (return . Left)
                 case r of
                         Left es -> let ctx' = foldr propagateFailureHandler' ctx es in
                                 intera stp ctx' (ATWork NoChoice)
                         Right _ -> intera stp ctx (ATWork Success)
 
 
-intera :: (Monad m, MonadIO m, Show s, Show e) => Bool -> AltCtx s e m -> AltTree s e m -> m Bool
+intera :: (MonadIO m, Show s, Show e) => Bool -> AltCtx s e m -> AltTree s e m -> m Bool
 intera stp ctx@ACTop (ATWork NoChoice) = myFail ctx Nothing >> return False -- Failed
 intera stp ctx (ATWork NoChoice) = myFail ctx Nothing >> (uncurry (intera stp) $ propagateFailure Nothing ctx)
 intera stp ctx@ACTop (ATWork (Result ())) = mySuccess ctx >> return True
@@ -418,14 +418,14 @@ intera stp ctx tt@(ATHandler h t es) = do
                             return (show (i+1), intera stp (ACCatch ctx h t lft e rgt) ta)
                     makeChoice $ basicOptions stp ctx t ++ ("0", intera stp (ACTry ctx h es) t) : opts
 
-basicOptions :: (Monad m, MonadIO m, Show s, Show e) => Bool -> AltCtx s e m -> AltTree s e m -> [(String, m Bool)]
+basicOptions :: (MonadIO m, Show s, Show e) => Bool -> AltCtx s e m -> AltTree s e m -> [(String, m Bool)]
 basicOptions stp ctx t = [
                 ("quit", return False),
                 ("up", uncurry (intera stp) $ moveUp ctx t),
                 ("go", goAT stp ctx t),
                 if stp then ("walk", intera False ctx t) else ("step", intera True ctx t)]
 
-makeChoice :: (Monad m, MonadIO m) => [(String, m a)] -> m a
+makeChoice :: (MonadIO m) => [(String, m a)] -> m a
 makeChoice opts = do
             x <- liftIO $ do
                 putStr "> "
@@ -454,7 +454,7 @@ showAltT (LocalRetry y x _) = showAltT (x >>= y)
 showAltT (Label _ l _) = l
 
 
-interactAlternatingT :: (Monad m, MonadIO m, Show s, Show e) => AlternatingT s e m () -> m Bool
+interactAlternatingT :: (MonadIO m, Show s, Show e) => AlternatingT s e m () -> m Bool
 interactAlternatingT = intera False ACTop . ATWork
 
 runLazyAngelic :: (Monad m, Show e) => AlternatingT s e m () -> m [(Maybe s, String, AltTree s e m)]

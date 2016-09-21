@@ -6,7 +6,11 @@
  -}
 module Caper.Utils.MonadHoist where
 import Control.Monad.Reader
+#if MIN_VERSION_mtl(2,2,1)
+import Control.Monad.Except
+#else
 import Control.Monad.Error
+#endif
 import Control.Monad.State
 import Control.Monad.Writer
 import Control.Monad.RWS
@@ -28,8 +32,13 @@ class MonadHoist t where
 instance MonadHoist (ReaderT r) where
         hoist f a = ReaderT $ f . runReaderT a
 
+#if MIN_VERSION_mtl(2,2,1)
+instance MonadHoist (ExceptT e) where
+        hoist f = ExceptT . f . runExceptT
+#else
 instance MonadHoist (ErrorT e) where
         hoist f = ErrorT . f . runErrorT
+#endif
 
 instance MonadHoist (StateT s) where
         hoist f = mapStateT f -- StateT $ f . runStateT a

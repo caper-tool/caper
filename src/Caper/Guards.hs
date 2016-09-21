@@ -43,8 +43,6 @@ import Control.Lens hiding (op)
 
 import Caper.Parser.AST.Annotation (GuardDeclr(..), TopLevelGuardDeclr(..))
 import Caper.Logger
-import Caper.ProverDatatypes
-import Caper.Prover
 import Caper.ProverStates
 import Caper.Utils.NondetClasses
 import Caper.Utils.Mix
@@ -301,38 +299,15 @@ matchesGuardDeclr (CountingGD _ n) (GD g) = Map.member n g
 
 -- We want to determine g_1 |?- g_2. We do so by finding g_1' ~ g_2' and checking whether
 -- g1 |- g1' * f and g2' * f |- g2 where the latter is non-key-changing entailments.
-guardEquivalence :: StringVariable v => GuardDeclr -> Guard v -> Guard v -> (Guard v, Guard v)
--- ^Given a 'GuardDeclr' and a pair of guards, find a pair of guards that
--- could be used to rewrite the first to entail the second.
--- This assumes the guards conform to the guard type.
-guardEquivalence (ProductGD _ gta1 gta2) gd1 gd2 = (guardJoin gd3a gd3b, guardJoin gd4a gd4b)
-        where
-                (gd3a, gd4a) = guardEquivalence gta1 gd1 gd2
-                (gd3b, gd4b) = guardEquivalence gta2 gd1 gd2
-guardEquivalence (SumGD _ gta1 gta2) gd1 gd2 =
-                case (ma gta1 gd1, ma gta2 gd1, ma gta1 gd2, ma gta2 gd2) of
-                                        (True, _, True, _) -> guardEquivalence gta1 gd1 gd2
-                                        (True, _, _, True) -> (fgf gta1 gd1, fgf gta2 gd2)
-                                        (_, True, _, True) -> guardEquivalence gta2 gd1 gd2
-                                        (_, True, True, _) -> (fgf gta2 gd1, fgf gta1 gd2)
-                                        _ -> (GD Map.empty, GD Map.empty)
-                where
-                        ma = matchesGuardDeclr
-                        -- fgf :: GuardDeclr -> Guard v -> Guard w
-                        -- fullGuardFor, needs a counting clause
-                        fgf (NamedGD _ n) _ = GD $ Map.singleton n NoGP
-                        fgf (PermissionGD _ n) _ = GD $ Map.singleton n (PermissionGP PEFull)
-                        fgf (ParametrisedGD _ n) _ = GD $ Map.singleton n (ParameterGP fullSet)
-                        fgf (ProductGD _ gt1 gt2) g = guardJoin (fgf gt1 g) (fgf gt2 g)
-                        fgf (SumGD _ gt1 gt2) g = if ma gt2 g then fgf gt2 g else fgf gt1 g
-                        fgf (CountingGD _ n) _ = GD $ Map.singleton n $ CountingGP $ VEConst (-1)
-guardEquivalence _ _ _ = (GD Map.empty, GD Map.empty)
 
 -- XXX: I'm not entirely sure this is going to be OK...
 guardEquivalences :: (MonadPlus m, StringVariable v) => GuardDeclr -> Guard v -> Guard v -> m (Guard v, Guard v)
 -- ^Given a 'GuardDeclr' and a pair of guards, find a pairs of guards that
 -- could be used to rewrite the first to entail the second.
 -- This assumes the guards conform to the guard type.
+-- (This operation is non-deterministic to allow for a guard matching the
+-- guard type in more than one way, for instance, if there are components
+-- that are empty, but not represented by the empty map (e.g. G[0p]).)
 guardEquivalences (ProductGD _ gta1 gta2) gd1 gd2 = do
                 (gd3a, gd4a) <- guardEquivalences gta1 gd1 gd2
                 (gd3b, gd4b) <- guardEquivalences gta2 gd1 gd2
@@ -370,7 +345,7 @@ subtractPE l PEFull = do
                         assertTrue $ PAEq l PEFull
                         return Nothing
 subtractPE l PEZero = return (Just l)
-subtractPE l s = (do -- TODO: frame some permission
+subtractPE l s = (do
                 assertTrue $ PAEq l s
                 justCheck -- is this a good idea to have? Maybe some profiling could reveal whether failing earlier is a win.
                 labelS $ "Take whole permissions guard: " ++ show s ++ "=" ++ show l

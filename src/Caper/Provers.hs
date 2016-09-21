@@ -5,7 +5,11 @@
 -- #define z3ffi
 module Caper.Provers where
 import Data.ConfigFile
+#if MIN_VERSION_mtl(2,2,1)
+import Control.Monad.Except
+#else
 import Control.Monad.Error
+#endif
 import Control.Monad.Reader
 
 import Caper.ProverDatatypes
@@ -70,7 +74,11 @@ proversFromConfig = do
 -- file are raised as errors.
 initProvers :: IO ProverRecord
 initProvers = do
+#if MIN_VERSION_mtl(2,2,1)
+                res <- runExceptT proversFromConfig
+#else
                 res <- runErrorT proversFromConfig
+#endif
                 case res of
                         (Left e) -> error $ "Failed parsing configuration file: " ++ show e
                         (Right r) -> return r

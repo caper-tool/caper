@@ -29,15 +29,15 @@ defaultPostcondition sp = AssrtPure sp $ ConstBAssrt sp defaultPostconditionBool
 
 -- TODO: Somewhere we should check that procedures don't have multiple arguments of the same name 
 
-declrsToProcedureSpecs :: (Monad m, MonadRaise m, MonadLogger m) =>
+declrsToProcedureSpecs :: (MonadRaise m, MonadLogger m) =>
                 [FunctionDeclr] -> m (Map.Map String Specification)
 declrsToProcedureSpecs = foldlM declrSpec Map.empty
         where
-            declrSpec mp fdec@(FunctionDeclr sp fname pre post params _) = contextualise fdec $
+            declrSpec mp fdec@(FunctionDeclr sp fname prec post params _) = contextualise fdec $
                                         case Map.lookup fname mp of
                                             (Just _) -> raise $ OverloadedProcedure fname
                                             Nothing -> do
-                                                pre' <- case pre of
+                                                pre' <- case prec of
                                                     Just x -> return x
                                                     Nothing -> do
                                                         let def = defaultPrecondition sp

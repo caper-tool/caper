@@ -16,7 +16,6 @@ import qualified Caper.Utils.AliasingMap as AM
 
 import Caper.Constants
 import Caper.Contexts
-import Caper.ProverDatatypes
 import Caper.Exceptions
 import Caper.Logger
 import Caper.Guards (emptyGuard)
@@ -26,7 +25,6 @@ import Caper.Predicates
 import Caper.RegionTypes
 import Caper.Regions
 import Caper.SymbolicState
-import Caper.Prover
 import Caper.ProverStates
 import Caper.Assertions.Produce
 import Caper.Assertions.Consume
@@ -187,7 +185,7 @@ availableRegions = do
             regs <- use regions
             let r0 = AM.distinctKeys regs
             let r1 = [r | r <- r0, isJust $ AM.lookup r regs >>= regTypeInstance]
-            filterM (liftM and . forM (map oregID oregs) . cannotAliasStrong) r1
+            filterM (liftM and . forM (map oregID oregs) . cannotAlias) r1
 
 
 -- |Symbolically execute an atomic operation, trying opening
@@ -290,7 +288,7 @@ missingRegionHandler = --retry (liftIO $ putStrLn "registered missing region han
 
 data ExitMode = EMReturn (Maybe (ValueExpression VariableID)) | EMContinuation
 
-updateContinuation :: (Monad m) => (ExitMode -> m a) -> m a -> (ExitMode -> m a)
+updateContinuation :: (ExitMode -> m a) -> m a -> (ExitMode -> m a)
 updateContinuation cont newc EMContinuation = newc
 updateContinuation cont newc r = cont r
 

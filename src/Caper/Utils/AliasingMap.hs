@@ -8,14 +8,11 @@
  -}
 
 module Caper.Utils.AliasingMap where
-import Prelude hiding (foldr, lookup)
+import Prelude hiding (lookup)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.List (intercalate)
 import Data.Maybe
-import Data.Foldable
-import Data.Traversable
-import Control.Applicative
 import Control.Monad
 import Control.Monad.Trans.Maybe
 import Control.Lens
@@ -133,7 +130,7 @@ mergeAliasesM mop k1 k2 am = runMaybeT $ mergeAliases (\x y -> MaybeT $ mop x y)
 
 -- |Returns a list of key-value pairs, where the key is a single
 -- representative of each aliasing class
-toRootList :: (Ord a) => AliasMap a b -> [(a,b)]
+toRootList :: AliasMap a b -> [(a,b)]
 toRootList (AliasMap m) = Map.foldWithKey scq [] m
         where
                 scq _ (Left _) = id
@@ -141,7 +138,7 @@ toRootList (AliasMap m) = Map.foldWithKey scq [] m
 
 -- |Returns a list of distinct keys. Any key in the map will be an alias
 -- for one of them.
-distinctKeys :: (Ord a) => AliasMap a b -> [a]
+distinctKeys :: AliasMap a b -> [a]
 distinctKeys = map fst . toRootList
 
 areAliases :: (Ord a) => a -> a -> AliasMap a b -> Bool

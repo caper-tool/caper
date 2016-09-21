@@ -15,15 +15,11 @@ module Caper.Provers.Values.Z3plus(
     createEntailsChecker
     ) where
 
-import Prelude hiding (sequence_,foldr)
-import Control.Monad hiding (sequence_)
-import Control.Monad.IO.Class
-import Control.Applicative
+import Control.Monad
 import Z3.Monad
 import Control.Concurrent.MVar
 import Data.List hiding (foldr)
 import Control.Exception hiding (assert)
-import Data.Foldable
 
 import Caper.ProverDatatypes
 

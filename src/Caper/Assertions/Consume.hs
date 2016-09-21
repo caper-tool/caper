@@ -11,8 +11,6 @@ import Caper.Utils.NondetClasses
 import Caper.Utils.AliasingMap ()
 import Caper.Logger
 import Caper.Exceptions
-import Caper.ProverDatatypes
-import Caper.Prover
 import Caper.ProverStates
 import Caper.Parser.AST
 import Caper.SymbolicState (SymbStateLenses)
@@ -25,7 +23,6 @@ import Caper.DeductionFailure
 import qualified Caper.Guards as G
 import Caper.Assertions.Generate
 import Caper.Assertions.Check
--- import Caper.Assertions.Produce
 
 
 class (MonadState s m, AssertionLenses s, RegionLenses s, SymbStateLenses s,
@@ -107,31 +104,9 @@ consumeAnyExpr :: (MonadState s m, AssertionLenses s, SymbStateLenses s,
 consumeAnyExpr = generateAnyExpr consumeVariable
 
 consumePure :: (MonadState s m, AssertionLenses s, SymbStateLenses s,
-        MonadRaise m, MonadPlus m, MonadLogger m) =>
+        MonadRaise m, MonadLogger m) =>
                 PureAssrt -> m ()
 consumePure assn = generatePure consumeVariable assn >>= assertE
-{-
-consumePure = consumePure' False
-        where
-                asrt sp b = addSPContext sp . if b then assertFalseE else assertTrueE
-                consumePure' b (NotBAssrt _ pa) = consumePure' (not $! b) pa
-                consumePure' b (ConstBAssrt _ b') = when (b == b') assertContradiction
-                consumePure' b (BinaryVarAssrt sp ebo vl vr) = do  -- TODO: specialise handling
-                        vvl <- consumeVariable vl
-                        vvr <- consumeVariable vr
-                        asrt sp (b == (ebo == EqualRel)) $
-                                EqualityCondition vvl vvr
-                consumePure' b (BinaryValAssrt sp bo vel ver) = do
-                        let rel = valueRel bo
-                        vvel <- consumeValueExpr vel
-                        vver <- consumeValueExpr ver
-                        asrt sp b $ rel vvel vver
-                consumePure' b (BinaryPermAssrt sp brel pel per) = do
-                        let rel = permissionRel brel
-                        ppel <- consumePermissionExpr pel
-                        pper <- consumePermissionExpr per
-                        asrt sp b $ rel ppel pper
--}
 
 consumeCell :: (MonadPlus m, MonadState s m, AssertionLenses s,
         SymbStateLenses s, MonadRaise m, MonadLogger m, MonadLabel CapturedState m,
