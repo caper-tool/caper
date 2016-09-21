@@ -69,6 +69,7 @@ function unlockReader1(x)
   ensures RWLock(r, x, _);
 {
     v := [x];
+    assert v = 1 \/ v > 1;
     b := CAS(x, v, v - 1);
     if (b = 0) {
         unlockReader1(x);
