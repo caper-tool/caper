@@ -1,5 +1,5 @@
 module Main where
-import Paths_Caper (version)
+import Paths_caper (version)
 import Data.Version (showVersion)
 import System.Environment
 

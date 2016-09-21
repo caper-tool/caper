@@ -1,4 +1,4 @@
-name:           Caper
+name:           caper
 version:        0.1.0.0
 synopsis:       A tool for automatic program verification.
 license-file:   LICENSE
@@ -11,8 +11,7 @@ flag z3ffi
   description:  Enable z3 invocation via FFI (requires z3 package)
   default:      True
 
-executable Caper
-  main-is:         Caper.hs
+library
   build-depends:   
                    base >=4.6,
                    containers ==0.5.*,
@@ -34,12 +33,11 @@ executable Caper
                    vector >=0.10,
                    template-haskell >=2.8,
                    transformers >=0.2,
-                   argparser >=0.3.4,
                    int-cast
   hs-source-dirs:  src
   extensions:      CPP
   ghc-options:     -Wall -fno-warn-unused-matches -rtsopts -threaded
-  other-modules:   
+  exposed-modules: 
                    Caper.Assertions.Check,
                    Caper.Assertions.Consume,
                    Caper.Assertions.Generate,
@@ -99,34 +97,37 @@ executable Caper
      cpp-options:   -Doverlap_pragmas
   if impl(ghc < 8.0)
     build-depends:  template-haskell <2.11
-     
+
+executable Caper
+  hs-source-dirs:      executable
+  main-is:             Caper.hs
+  extensions:      CPP
+  ghc-options:     -Wall -fno-warn-unused-matches -rtsopts -threaded
+  build-depends:       base >= 4.6
+                     , caper
+                     , argparser >= 0.3.4
+                     , mtl >= 2.2.1
+                     
+
 executable Interpreter
   build-depends:   
                    base >= 4,
+                   caper,
                    parsec >=3.1 && <3.2,
                    mtl >=2.1.2,
                    template-haskell >=2.8,
                    lens >=3.9,
                    containers >=0.5 && <0.6
-  hs-source-dirs:  src
+  hs-source-dirs:  interpreter
   ghc-options:     -W -rtsopts
   main-is:         Interpreter.hs
-  other-modules:   
-                   Caper.ExceptionContext,
-                   Caper.FreeVariables,
-                   Caper.Interpreter.Environment,
-                   Caper.Interpreter.Interpreter,
-                   Caper.Parser.AST,
-                   Caper.Parser.AST.Annotation,
-                   Caper.Parser.AST.Code,
-                   Caper.Parser.AST.SourcePos,
-                   Caper.Parser.Parser
   if impl(ghc < 8.0)
     build-depends:  template-haskell <2.11
 
 executable RunTests
   build-depends:   
                    base >= 4,
+                   caper,
                    template-haskell >=2.8,
                    directory >= 1.2,
                    text >= 1.1,
@@ -138,4 +139,3 @@ executable RunTests
   main-is:         RunTests.hs
   if impl(ghc < 8.0)
     build-depends:  template-haskell <2.11
-
