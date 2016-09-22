@@ -123,6 +123,8 @@ executable Interpreter
   main-is:         Interpreter.hs
   if impl(ghc < 8.0)
     build-depends:  template-haskell <2.11
+  other-modules:       Caper.Interpreter.Environment
+                     , Caper.Interpreter.Interpreter
 
 executable RunTests
   build-depends:   
@@ -146,7 +148,12 @@ test-suite tasty-suite
   hs-source-dirs:      tasty-suite
   main-is:             Main.hs
   build-depends:       base >= 4.6
-                     , tasty
+                     , tasty                     
                      , tasty-quickcheck
-                     , caper 
+                     , tasty-hunit
+                     , HUnit
+                     , QuickCheck
+                     , caper
+                     , containers
+                     , time
                       
