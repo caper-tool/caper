@@ -13,7 +13,7 @@ import qualified Data.Set as Set
 import Caper.ProverDatatypes
 --import PermissionsInterface
 import Caper.Provers.Permissions.Internal
-import Caper.Provers.Permissions.E
+--import Caper.Provers.Permissions.E
 --import Caper.Provers.Permissions.SMT
 import Caper.FirstOrder 
 
@@ -35,6 +35,7 @@ instance Sized (PermissionExpression v) where
 instance Sized (PermissionAtomic v) where
   size (PAEq e1 e2) = 1 + size e1 + size e2
   size (PADis e1 e2) = 1 + size e1 + size e2
+  size (PALte e1 e2) = 1 + size e1 + size e2
 
 instance Sized (a v) => Sized (FOF a v) where
   size (FOFForAll _ f) = 1 + size f
@@ -129,3 +130,60 @@ prop_SimplEquiv x = quantifierDepth (close x) == 4 ==> monadicIO $ do
 --                                 run $ putStrLn "BigInt "
 --                                 r1 <- run $ time $ (timeoutSolver (10^7) permCheckBigInt) (fmap show x')
 --                                 assert $ r1 == r2
+
+-- fpf6 = FOFForAll "a" $ FOFForAll "b" $ FOFForAll "c" $ FOFForAll "d" $
+--         FOFImpl (FOFAtom $ PAEq (PESum (PEVar "a") (PEVar "b")) (PESum (PEVar "c") (PEVar "d"))) $
+--             FOFExists "ac" $ FOFExists "ad" $ FOFExists "bc" $ FOFExists "bd" $
+--             FOFAnd
+--                 (FOFAnd (FOFAtom $ PAEq (PEVar "a") (PESum (PEVar "ac") (PEVar "ad")))
+--                         (FOFAtom $ PAEq (PEVar "b") (PESum (PEVar "bc") (PEVar "bd"))))
+--                 (FOFAnd (FOFAtom $ PAEq (PEVar "c") (PESum (PEVar "ac") (PEVar "bc")))
+--                         (FOFAtom $ PAEq (PEVar "d") (PESum (PEVar "ad") (PEVar "bd"))))
+
+-- samples :: IO [FOF PermissionAtomic StringVar]
+-- samples = generate (sequence (concat [replicate 10 (liftM (simplify . close) $ resize n arbitrary) | n <- [1..100]]))
+
+-- samples' :: [FOF PermissionAtomic StringVar]
+-- samples' = unGen (sequence (concat [replicate 20 (liftM (simplify . close) $ resize n arbitrary) | n <- [1..200]]))
+--         (mkQCGen 1283749136) 118923573
+
+
+-- callProver :: String -> PermissionsProver -> PermissionsProver
+-- callProver name f x = putStrLn name >> f x
+
+-- mySimpl = simplify . rewriteFOF simplR
+
+-- myProvers :: IO [PermissionsProver]
+-- myProvers = do
+--         let timeout = 2000
+--         epp <- makeEPProver "C:\\cygwin64\\home\\Tom\\E\\PROVER\\eprover.exe" timeout
+--         return [
+--                 callProver "*** E" epp ,
+--                 callProver "*** Z3" $ permCheckZ3 (Just timeout) ,
+--                 callProver "*** BigInt" $ (timeoutSolver (timeout * 1000) (permCheckBigInt . mySimpl)) -- ,
+--                 --callProver "*** Tree" $ (timeoutSolver (timeout * 1000) (permCheckTree . mySimpl))
+--                 ]
+
+
+-- testSample :: [PermissionsProver] -> FOF PermissionAtomic StringVar -> IO String
+-- testSample provers f = do
+--                 let f' = fmap show f
+--                 rs <- sequence [doTime (p f') | p <- provers]
+--                 return $ intercalate "," $ show f' : show (size f') : show (quantifierDepth f') :
+--                                 [show t ++ "," ++ showres r | (r, t) <- rs]
+--         where
+--                 showres Nothing = "Timeout"
+--                 showres (Just x) = show x
+
+
+-- main = do
+--         --ss <- samples
+--         ps <- myProvers
+--         forM_ samples' $ \s -> do
+--                 r <- testSample ps s
+--                 appendFile "permTests2EZ3BI.csv" $ r ++ "\n"
+-- 	performMajorGC
+--         forM_ samples' $ \s -> do
+--                 r <- testSample [timeoutSolver 2000000 (permCheckTree . mySimpl)] s
+--                 appendFile "permTests2Tree.csv" $ r ++ "\n"
+
