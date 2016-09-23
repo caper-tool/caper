@@ -71,6 +71,7 @@ class Monad m => MonadLogger m where
         logEventContext = logAll . (:[]) 
         logEvent :: LogEvent -> m ()
         logEvent e = logEventContext ([],e)
+        {-# MINIMAL logEventContext | logAll #-}
 
 joinLoggerT :: MonadLogger m => LoggerT m a -> m a
 joinLoggerT x = do
