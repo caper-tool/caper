@@ -1,25 +1,108 @@
+region Mediator(r,updown,barrier) {
+  guards 0;
+  interpretation {
+    0 : n >= 0 &*& UpDown(updown,_,_) &*& Barrier(barrier,_,_,_) &*& (updown@INC|-1-n| &*& barrier@UP|n| \/ updown@DEC|-1-n| &*& barrier@DOWN|n|);
+  }
+  actions {}
+}
+
 /*
+function foo(x,b,waiters)
+  requires UpDown(updown,x,_) &*& Barrier(barrier,b,waiters,_) &*& Mediator(mediator,updown,barrier,0) &*& updown@INC|1|;
+  ensures true;
+{
+  inc(x);
+  checkInc(x);
+  skip;
+  //z := [x];
+  syncUp(b,waiters);
+  skip;
+  //z := [x];
+  dec(x);
+  checkDec(x);
+}
+*/
+
+
 region UpDown(r,x) {
-  guards |INC| + |DEC| + OWN;
+  guards |INC| + |DEC|;
   interpretation {
     n : x |-> n;
   }
   actions {
     n < m | INC|1| : n ~> m;
     n > m | DEC|1| : n ~> m;
-    OWN : n ~> m; // Required for transitivity check
+    // OWN : n ~> m; // [No longer] Required for transitivity check
   }
-}*/
+}
+
+function inc(x)
+  requires UpDown(r,x,n) &*& r@INC|1|;
+  ensures UpDown(r,x,m) &*& m > n &*& r@INC|1|;
+{
+  old := [x];
+  r := CAS(x,old,old+1);
+  if (r = 0) {
+    inc(x);
+  }
+}
+
+function dec(x)
+  requires UpDown(r,x,n) &*& r@DEC|1|;
+  ensures UpDown(r,x,m) &*& m < n &*& r@DEC|1|;
+{
+  old := [x];
+  r := CAS(x,old,old-1);
+  if (r = 0) {
+    dec(x);
+  }
+}
+
+function checkInc(x)
+  requires UpDown(r,x,_) &*& r@INC|1|;
+  ensures r@INC|1|;
+{
+  a := [x];
+  b := [x];
+  if (b < a) {
+    fault();
+  }
+}
+
+function checkDec(x)
+  requires UpDown(r,x,_) &*& r@DEC|1|;
+  ensures r@DEC|1|;
+{
+  a := [x];
+  b := [x];
+  if (b > a) {
+    fault();
+  }
+}
+
+function createUpDown()
+  requires true;
+  ensures UpDown(r,ret,0) &*& r@INC|-1|;
+{
+  x := alloc(1);
+  [x] := 0;
+  return x;
+}
+
+
+
+
 
 region Barrier(a,b,waiters) {
   guards #WAIT * (|UP| + |DOWN|);
   interpretation {
-    0 <= k, k <= waiters | k : b |-> k &*&
+    -waiters <= k, k <= waiters | k : b |-> k &*&
+                  (0 <= k &*& 
                       (a@(UP|-1-waiters+k| * WAIT{x|k<=x,x<waiters})
-                        \/ (k < waiters &*& a@(DOWN|-1-waiters+k| * WAIT(0) * WAIT{x|k<x,x<waiters})));
-    0 < k, k <= waiters | -k : b |-> -k &*&
-                      (a@(DOWN|-1-waiters+k| * WAIT{x|k<=x,x<waiters})
-                        \/ (k < waiters &*& a@(UP|-1-waiters+k| * WAIT(0) * WAIT{x|k<x,x<waiters})));
+                        \/ (k < waiters &*& a@(DOWN|-1-waiters+k| * WAIT(0) * WAIT{x|k<x,x<waiters})))
+                    \/ 0 >= k &*& (a@(DOWN|-1-waiters-k| * WAIT{x| -k<=x,x<waiters})
+                        \/ (-k < waiters &*& a@(UP|-1-waiters-k| * WAIT(0) * WAIT{x| -k<x,x<waiters}))));
+
   }
   actions {
     0<=k,k<n,n<=waiters  | UP|-waiters+n-1| * WAIT{x|k<=x,x<waiters} : k ~> n;
@@ -95,7 +178,7 @@ function syncDownExit(b,waiters,w)
 {
   z := [b];
   if ((w = 0 and z = -waiters) or (w != 0 and z = -w)) {
-    assert (z = -1 ? true : true);
+    //assert (z = -1 ? true : true);
     [b] := z + 1;
   } else {
     syncDownExit(b,waiters,w);
