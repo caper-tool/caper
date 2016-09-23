@@ -6,6 +6,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE BangPatterns #-}
 module Caper.Prover(
+        module Caper.ProverDatatypes,
         -- * Assumptions
         BindingContext,
         AssumptionLenses(..),
@@ -320,7 +321,7 @@ valueVariables :: (AssumptionLenses a) => a -> [VariableID]
 -- ^Return a list of value variables; variables with no other type are treated as value variables.
 valueVariables = Map.keys . Map.filter treatAsValueJ . TC.toMap . (^. bindings)
 
-checkConsistency :: (Functor a, Foldable a, Show (a String)) => (FOF a String -> IO (Maybe Bool)) -> [VariableID] -> [FOF a VariableID] -> IO (Maybe Bool)
+checkConsistency :: (Functor a) => (FOF a String -> IO (Maybe Bool)) -> [VariableID] -> [FOF a VariableID] -> IO (Maybe Bool)
 -- ^Given a first-order prover, check whether a list of assertions (with free variables from a given list) is consistent.
 -- Consistent if the formula ¬(E) x1, ..., xn . P1 /\ ... /\ Pm /\ True is invalid. 
 checkConsistency p vars asss = do
@@ -357,7 +358,7 @@ succeedIfInconsistent = do
             c <- isConsistent
             when (c == Just False) succeed
 
-assumptionContext :: (Functor a, Foldable a) =>
+assumptionContext ::
         [v] -> [FOF a v] -> FOF a v -> FOF a v
 -- ^Wrap universal quantifiers and assumptions around an assertion.
 assumptionContext vids asms ast = foldr FOFForAll (foldr FOFImpl ast asms) vids
@@ -411,12 +412,6 @@ showAssertions asts = "Assumptions: !["
 
 printAssertions :: (MonadIO m, MonadState s m, AssertionLenses s) => m ()
 printAssertions = get >>= liftIO . putStrLn . showAssertions
-
-bindAtExprType :: VariableID -> Expr VariableID -> BindingContext -> BindingContext
-bindAtExprType v (PermissionExpr _) c = runEM $ TC.bind v VTPermission c `catch` (\(e :: TUException) -> error (show e))
-bindAtExprType v (ValueExpr _) c = runEM $ TC.bind v VTValue c `catch` (\(e :: TUException) -> error (show e))
-bindAtExprType v (VariableExpr v') c = runEM $ TC.unify v v' c `catch` (\(e :: TUException) -> error (show e))
-
 
 suffices :: [String]
 suffices = "" : map show [0::Int ..]
@@ -670,8 +665,8 @@ valueCheck f = do
                 logEvent $ ProverInvocation ValueProverType (show sf)
                 p <- ask
                 let vp = case valueProver p of
-                        VPBasic vp -> vp
-                        VPEnhanced vp _ -> vp
+                        VPBasic vp0 -> vp0
+                        VPEnhanced vp0 _ -> vp0
                 r <- liftIO $ vp sf
                 logEvent $ ProverResult r
                 when (isNothing r) $ logEvent $ WarnProverNoAnswer "value"

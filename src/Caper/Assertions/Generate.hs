@@ -116,7 +116,7 @@ generatePred genvar (Predicate _ pname args) = do
 -- guards.  For practical purposes, this works like producing the guard.
 --
 -- TODO: it might be nice if produceGuards and consumeGuards went via this.
-generateGuard :: forall m v. (MonadRaise m, Monad m, Refreshable v, StringVariable v, Eq v, Ord v) =>
+generateGuard :: forall m v. (MonadRaise m, Monad m, Refreshable v, StringVariable v, Ord v) =>
             (VarExpr -> m v) 
             -- ^ Variable handler
             -> (Condition v -> m ())

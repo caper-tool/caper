@@ -96,7 +96,7 @@ boundIn v (FOFNot f) = boundIn v f
 boundIn v (FOFAtom a) = elem v a
 boundIn v _ = False
 
-sentence :: (Eq v, Ord v, Foldable a) => FOF a v -> Bool
+sentence :: (Ord v, Foldable a) => FOF a v -> Bool
 sentence = sentence' Set.empty
         where
                 sentence' s (FOFForAll v a) = sentence' (Set.insert v s) a

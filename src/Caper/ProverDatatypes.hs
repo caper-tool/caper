@@ -42,7 +42,7 @@ instance Refreshable v => Refreshable (Either v v) where
         freshen (Left vr) = map Left (freshen vr)
         freshen (Right vr) = map Right (freshen vr)
 
-freshSub :: (Refreshable v, Eq v, Ord v, Foldable f, Foldable g) => f v -> g v -> v -> v
+freshSub :: (Refreshable v, Ord v, Foldable f, Foldable g) => f v -> g v -> v -> v
 -- ^Given a collection of variables to refresh, and a collection that they
 -- should be fresh with respect to, produces a function that substitutes
 -- the old variables for the fresh ones (leaving others alone).  This
@@ -328,7 +328,7 @@ instance ExpressionCASub c e => ExpressionCASub (Literal c) e where
 -- |Helper function for capture-avoiding substitution in 'FOF'.
 -- A bound variable @v@ is mapped to @Left v@.
 -- Unbound variables @w@ are substituted to @Right <$> subFun w@.
-helpFOFSub :: forall a e v w. (ExpressionSub a e, Functor a, Foldable a, Functor e, Applicative e, Eq v, Eq w) =>
+helpFOFSub :: forall a e v w. (ExpressionSub a e, Applicative e, Eq v) =>
         (v -> e w)      -- ^Substitution
         -> (v -> Bool)  -- ^Determine if variable is bound
         -> FOF a v      -- ^Formula to substitute in
@@ -350,7 +350,7 @@ refreshLefts :: (Functor a, Foldable a, Ord v, Ord w) => (v -> [w]) -> a (Either
 refreshLefts frsh s = fmap sb s
         where
                 (lfts, rgts) = Set.fromList *** Set.fromList $ partitionEithers $ toList s
-                fStep (mp, rgs) v = let w = head [w | w <- frsh v, w `notElem` rgs] in
+                fStep (mp, rgs) v = let w = head [x | x <- frsh v, x `notElem` rgs] in
                                         (Map.insert v w mp, Set.insert w rgs)
                 (fmp, _) = foldl fStep (Map.empty, rgts) lfts
                 sb (Left v) = Map.findWithDefault (error "no substitution for variable") v fmp
@@ -367,7 +367,7 @@ debugSomething sthg = trace (show sthg') sthg
                 sthg' = fmap (\v -> Map.findWithDefault (error "") v mp) sthg
 -}
 
-instance (ExpressionSub a e, Functor a, Foldable a, Functor e, Monad e) => ExpressionCASub (FOF a) e where
+instance (ExpressionSub a e, Functor a, Foldable a, Applicative e) => ExpressionCASub (FOF a) e where
         exprCASub s0 = refreshLefts nearFreshen . helpFOFSub s0 (const False)
         exprCASub' s0 = refreshLefts (nearFreshen . varFromString . varToString) . helpFOFSub s0 (const False)
 
@@ -396,7 +396,7 @@ instance FreeVariables (SetExpression v) v where
     foldrFree f x (SetBuilder v' cond) = foldrFree (\v -> if v == v' then id else f v) x cond
     foldrFree f x (SetSingleton e) = foldr f x e
 
-instance (ExpressionSub ValueExpression e, Functor e, Monad e) => ExpressionCASub SetExpression e where
+instance (ExpressionSub ValueExpression e, Applicative e) => ExpressionCASub SetExpression e where
     exprCASub s (SetBuilder v e) = refreshLefts nearFreshen $ SetBuilder (Left v) $ helpFOFSub s (==v) e
     exprCASub s (SetSingleton e) = SetSingleton $ exprSub s e
     exprCASub' s (SetBuilder v e) = refreshLefts (nearFreshen . varFromString . varToString) $

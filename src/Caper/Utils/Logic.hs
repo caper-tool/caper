@@ -4,9 +4,12 @@
 module Caper.Utils.Logic where
 
 import Control.Applicative
+import Control.Arrow
 import Control.Monad
-import Control.Monad.Cont
+-- import Control.Monad.CC
+--import Control.Monad.Cont
 import Control.Monad.Trans
+--import Control.Monad.Trans.Cont
 import Data.Monoid
 
 import Caper.Utils.Failure
@@ -90,6 +93,31 @@ instance (Monad m, Monoid f) => LogicM f (SFContT f m) where
         msplit tma = lift (unSFKT tma ssk (return . Left))
                 where
                         ssk a fk = return (Right (a, (lift (fk mempty) >>= reflect)))
+
+
+instance (Monad m, Monoid f) => MonadOrElse (SFContT f m) where
+        a `orElse` b = ifte a return (const b)
+
+
+{-
+instance MonadPlus m => MonadPlus (ContT r m) where
+        mzero = ContT $ \cont -> mzero
+        a `mplus` b = ContT $ \cont -> (runContT a cont) `mplus` (runContT b cont)
+
+instance MonadPlus m => Alternative (ContT r m) where
+        empty = mzero
+        (<|>) = mplus
+-}
+
+{-
+instance (LogicM f m) => LogicM f (ContT r m) where
+        msplit m = lift $ evalContT m (fmap (id *** lift) . msplit)
+-}
+{-
+instance MonadPlus m => MonadPlus (CCT ans m) where
+        mzero = lift mzero
+        a `mplus` b = 
+-}
 
 
 {-

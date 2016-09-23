@@ -22,11 +22,10 @@ import Caper.Utils.SimilarStrings
 import Caper.Utils.NondetClasses
 import Caper.Utils.Alternating
 
+import Caper.Constants (closureDepth)
 import Caper.FreeVariables
 import Caper.Guards
-import Caper.ProverDatatypes
 import Caper.ProverStates
-import Caper.Prover
 import Caper.Exceptions
 import Caper.Logger
 import qualified Caper.Parser.AST as AST
@@ -35,13 +34,12 @@ import Caper.Parser.AST.Annotation ()
 import Caper.Assertions.Generate
 -- import Caper.ExceptionContext
 
--- The internal representation of a region type identifier
+-- |The internal representation of a region type identifier
 type RTId = Integer
 
--- Variables for use with region type declarations
+-- |Variables for use with region type declarations
 -- There will be a few different binding locations, including
 -- top level
-
 newtype RTDVar = RTDVar { rtdvStr :: String } deriving (Eq,Ord)
 instance Show RTDVar where
         show (RTDVar s) = s
@@ -51,16 +49,26 @@ instance StringVariable RTDVar where
 instance Refreshable RTDVar where
         freshen (RTDVar s) = map RTDVar (freshen s) 
 
+-- |Internal representation of a region type.
 data RegionType = RegionType
         {
+                -- |Source of the definition.
                 rtSourcePos :: SourcePos,
+                -- |Name of the region type
                 rtRegionTypeName :: String,
-                rtParameters :: [(RTDVar, VariableType)],  -- INCLUDING region identifier
+                -- |The typed parameters of the region, INCLUDING the region identifier
+                rtParameters :: [(RTDVar, VariableType)],
+                -- |The guard delcaration
                 rtGuardType :: AST.TopLevelGuardDeclr,
+                -- |Bounds on the state space
                 rtStateSpace :: StateSpace,
+                -- |The transition system as a list of transition rules
                 rtTransitionSystem :: [TransitionRule],
+                -- |Flag indicating whether the transition system is transitively closed
                 rtIsTransitive :: Bool,
+                -- |State interpretation
                 rtInterpretation :: [AST.StateInterpretation],
+                -- |An optional function that generates side conditions for two regions being distinct
                 rtDistinctionCondition :: (Maybe ([Expr VariableID] -> [Expr VariableID] -> [Condition VariableID]))
         }
 
@@ -77,9 +85,11 @@ instance Show RegionType where
                 "}"
 
 rtWeakGT :: RegionType -> WeakGuardType
+-- ^The weak guard type for the region type.
 rtWeakGT = topLevelToWeakGuardType . rtGuardType
 
 rtParamVars :: RegionType -> Set RTDVar
+-- ^The parameters for the region type (including region identifier).
 rtParamVars = Set.fromList . map fst . rtParameters
 
 rtParamNames :: RegionType -> [String]
@@ -87,40 +97,40 @@ rtParamNames :: RegionType -> [String]
 rtParamNames = map (rtdvStr . fst) . rtParameters
 
 rtFullGuard :: RegionType -> Guard VariableID
+-- ^The (or a) full guard for the region type.
 rtFullGuard = fullGuard . rtWeakGT
 
--- StateSpace
-
+-- |Representation of the state space of a region type.
 -- ssLowerBound and ssUpperBound are the (inclusive) lower
 -- and upper bounds of the state space.
--- invariant: ssLowerBound <= ssUpperBound (if both are not Nothing)
+-- invariant: @ssLowerBound <= ssUpperBound@ (if both are not Nothing)
 data StateSpace = StateSpace {
+                -- |Optional lower bound
                 ssLowerBound :: Maybe Int,
+                -- |Optional upper bound
                 ssUpperBound :: Maybe Int
                 } deriving (Eq,Ord)
 
 instance Show StateSpace where
         show (StateSpace a b) = "[" ++ maybe "?" show a ++ "-" ++ maybe "?" show b ++ "]"
 
+-- |Determine if a state space is finitely bounded.
 isFinite :: StateSpace -> Bool
 isFinite (StateSpace (Just _) (Just _)) = True
 isFinite _ = False
 
-ssSize :: (MonadPlus m) => StateSpace -> m Int
-ssSize (StateSpace (Just x) (Just y)) = return $ y - x + 1
-ssSize _ = mzero
-
-
-
+-- |Internal representation of a transition rule (action).
+-- The definition is parametrised by the type of variables as a convenience
+-- for deriving folds.
 data GeneralTransitionRule v = TransitionRule
         {
-                -- The guard that is required to perform the transition
+                -- |The guard that is required to perform the transition
                 trGuard :: Guard v,
-                -- Some (pure) predicate that conditions the transition
+                -- |Some (pure) predicate that conditions the transition
                 trPredicate :: [Condition v],
-                -- An expression describing the state to transition from
+                -- |An expression describing the state to transition from
                 trPreState :: ValueExpression v,
-                -- An expression describing the state to transition to
+                -- |An expression describing the state to transition to
                 trPostState :: ValueExpression v
         } deriving (Functor, Foldable)
 
@@ -133,14 +143,16 @@ instance (Show a) => Show (GeneralTransitionRule a) where
 instance FreeVariables (GeneralTransitionRule a) a where
     foldrFree f b tr = foldr f (foldr f (foldrFree f (foldrFree f b (trGuard tr)) (trPredicate tr)) (trPreState tr)) (trPostState tr) 
 
+
 varExprToRTDVar :: (Monad m) => AST.VarExpr -> StateT [RTDVar] m RTDVar
 varExprToRTDVar (AST.Variable _ s) = return (RTDVar s)
 varExprToRTDVar (AST.WildCard _) = state (head &&& tail)
 
+-- |Convert the AST representation of an action to the internal representation
+-- as a transition rule.
 actionToTransitionRule :: (MonadRaise m, Monad m) => [RTDVar] -> AST.Action -> m TransitionRule
 actionToTransitionRule params act@(AST.Action _ conds gds prest postst) =
         contextualise act $ do
-            -- unless (null conds) $ raise $ SyntaxNotImplemented "predicated transitions"
             (cds, gg, prec, post) <- flip evalStateT freshVars $ do
                 cds0 <- mapM (generatePure varExprToRTDVar) conds
                 (gg, cds) <- runStateT (generateGuard (lift . varExprToRTDVar) (modify . (:)) gds) cds0
@@ -151,10 +163,6 @@ actionToTransitionRule params act@(AST.Action _ conds gds prest postst) =
     where
         theVars = params ++ (map RTDVar . mapMaybe AST.unVarExpr . Set.toList . freeVariables) act
         freshVars = filter (`notElem` theVars) [RTDVar ("WILDCARD" ++ show x) | x <- [(0::Int)..]]
-        -- nextFresh = state (head &&& tail)
-        -- For each permission guard, generate a condition that the permission is non-zero
-        pehandler pe = modify (negativeCondition (PAEq pe PEZero) :)
-        pedisj pe1 pe2 = modify (toCondition (PADis pe1 pe2) :)
 
 data RegionTypeContext = RegionTypeContext
         {
@@ -248,9 +256,9 @@ declrsToRegionTypeContext :: (MonadIO m, MonadRaise m, MonadLogger m, MonadReade
         -> (Map String [(String, VariableType)])
         -- ^ Typing for region parameters
         -> m RegionTypeContext
-declrsToRegionTypeContext declrs typings = do
+declrsToRegionTypeContext declrs typings0 = do
             -- Build the region type context
-            accumulate typings 0 emptyRegionTypeContext (AST.regionDeclrs declrs)
+            accumulate typings0 0 emptyRegionTypeContext (AST.regionDeclrs declrs)
     where
         accumulate typings nextRTId ac [] = return ac
         accumulate typings nextRTId ac
@@ -363,7 +371,7 @@ notSubsumedBy params gt tr1 tr2 = liftM isNothing $ runAlternatingT $ flip evalS
 
 transParams :: (StringVariable k, FreeVariables t k, Ord k, Monad m) =>
         (String -> m a) -> Map k a -> t -> m (Map k a)
-transParams newVar = foldrFreeM (transParam newVar)
+transParams = foldrFreeM . transParam
         where
                 transParam newVar param pmap = if param `Map.member` pmap then return pmap else do
                         v <- newVar (varToString param)
@@ -428,7 +436,7 @@ generateComposedTransitions params gt oldtrs0 newtrs0 = foldM genOne (oldtrs0 ++
 
 attemptClosure :: (MonadIO m, MonadLogger m, MonadReader r m, Provers r) =>
         RegionType -> m RegionType
-attemptClosure rt@(RegionType{rtParameters = params, rtGuardType = gt, rtTransitionSystem = trs0}) = ac 5 [] trs0
+attemptClosure rt@(RegionType{rtParameters = params, rtGuardType = gt, rtTransitionSystem = trs0}) = ac closureDepth [] trs0
         where
                 ac n oldtrs [] = return rt{rtTransitionSystem = oldtrs, rtIsTransitive = True}
                 ac n oldtrs newtrs

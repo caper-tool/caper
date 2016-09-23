@@ -5,7 +5,6 @@ import Control.Monad.State hiding (state)
 import Control.Monad.Reader
 
 import Caper.Exceptions
-import Caper.ProverDatatypes
 import Caper.Prover
 import Caper.RegionTypes
 import Caper.Parser.AST
