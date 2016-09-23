@@ -5,13 +5,14 @@ license-file:   LICENSE
 author:         Thomas Dinsdale-Young, Pedro da Rocha Pinto
 maintainer:     td202@d-y.me.uk
 build-type:     Simple
-cabal-version:  >= 1.8
+cabal-version:  >= 1.10
 
 flag z3ffi
   description:  Enable z3 invocation via FFI (requires z3 package)
   default:      True
 
 library
+  default-language:    Haskell2010
   build-depends:   
                    base >=4.8,
                    containers ==0.5.*,
@@ -35,8 +36,9 @@ library
                    transformers >=0.2,
                    int-cast
   hs-source-dirs:  src
-  extensions:      CPP
-  ghc-options:     -Wall -fno-warn-unused-matches -rtsopts -threaded
+  default-extensions:
+                   CPP
+  ghc-options:     -Wall -Wno-redundant-constraints -Wno-unused-matches
   exposed-modules: 
                    Caper.Assertions.Check,
                    Caper.Assertions.Consume,
@@ -99,10 +101,11 @@ library
     build-depends:  template-haskell <2.11
 
 executable Caper
+  default-language:    Haskell2010
   hs-source-dirs:      executable
   main-is:             Caper.hs
-  extensions:      CPP
-  ghc-options:     -Wall -fno-warn-unused-matches -rtsopts -threaded
+  default-extensions:  CPP
+  ghc-options:     -Wall -rtsopts -threaded
   build-depends:       base >= 4.6
                      , caper
                      , argparser >= 0.3.4
@@ -110,6 +113,7 @@ executable Caper
                      
 
 executable Interpreter
+  default-language:    Haskell2010
   build-depends:   
                    base >= 4,
                    caper,
@@ -127,6 +131,7 @@ executable Interpreter
                      , Caper.Interpreter.Interpreter
 
 executable RunTests
+  default-language:    Haskell2010
   build-depends:   
                    base >= 4,
                    caper,
