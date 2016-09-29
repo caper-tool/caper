@@ -1,9 +1,6 @@
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE RankNTypes, ScopedTypeVariables #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE BangPatterns #-}
 module Caper.Prover(
         module Caper.ProverDatatypes,
@@ -340,7 +337,7 @@ isConsistent = do
                             else do
                                 rv <- case valueProver ps of
                                         VPBasic vp -> checkConsistency vp (valueVariables ass) (valueAssumptions ass)
-                                        VPEnhanced _ vp -> liftM (not <$>) $ vp (valueAssumptions ass) FOFFalse
+                                        VPEnhanced _ vp -> (not <$>) <$> vp (valueAssumptions ass) FOFFalse
                                 return $ case (rp, rv) of
                                         (_, Just False) -> Just False
                                         (Just True, Just True) -> Just True
@@ -638,6 +635,12 @@ permissionAvars = filterAvars (== Just VTPermission)
 valueAvars :: (AssertionLenses a) => Getter a [VariableID]
 valueAvars = filterAvars treatAsValueJ --(\x -> (x == Just VTValue) || isNothing x)
 
+logProverResult :: (MonadLogger m) => String -> Maybe Bool -> m (Maybe Bool)
+logProverResult ptype r = do
+        logEvent $ ProverResult r
+        when (isNothing r) $ logEvent $ WarnProverNoAnswer ptype
+        return r
+
 -- |Check a first-order value formula (generating the appropriate logging events)
 enhancedValueCheck :: (MonadIO m, MonadReader r m, Provers r, MonadLogger m) =>
         [VariableID] -> [FOF ValueAtomic VariableID] -> FOF ValueAtomic VariableID -> m (Maybe Bool)
@@ -646,16 +649,11 @@ enhancedValueCheck vavs lvalueAssumptions vasst = ask >>= \p -> case valueProver
                 let sf = varToString <$> assumptionContext vavs lvalueAssumptions vasst
                 logEvent $ ProverInvocation ValueProverType (show sf)
                 r <- liftIO $ vp sf
-                logEvent $ ProverResult r
-                when (isNothing r) $ logEvent $ WarnProverNoAnswer "value"
-                return r
+                logProverResult "value" r
         VPEnhanced vpb vp -> do
                 logEvent $ ProverInvocation ValueProverType (show (lvalueAssumptions, vasst))
                 r <- liftIO $ vp lvalueAssumptions vasst
-                logEvent $ ProverResult r
-                when (isNothing r) $ logEvent $ WarnProverNoAnswer "value"
-                --f (isNothing r) then (valueCheck $ assumptionContext vavs lvalueAssumptions vasst) else return r
-                return r
+                logProverResult "value" r
 
 -- |Check a first-order value formula (generating the appropriate logging events)
 valueCheck :: (MonadIO m, MonadReader r m, Provers r, StringVariable v, MonadLogger m) =>
@@ -668,10 +666,7 @@ valueCheck f = do
                         VPBasic vp0 -> vp0
                         VPEnhanced vp0 _ -> vp0
                 r <- liftIO $ vp sf
-                logEvent $ ProverResult r
-                when (isNothing r) $ logEvent $ WarnProverNoAnswer "value"
-                return r
-
+                logProverResult "value" r
 
 -- |Check a first-order permissions formula (generating the appropriate logging events)
 permissionCheck :: (MonadIO m, MonadReader r m, Provers r, StringVariable v, MonadLogger m) =>
@@ -681,10 +676,7 @@ permissionCheck f = do
                 logEvent $ ProverInvocation PermissionProverType (show sf)
                 p <- ask
                 r <- liftIO $ permissionsProver p sf
-                logEvent $ ProverResult r
-                when (isNothing r) $ logEvent $ WarnProverNoAnswer "permissions"
-                return r
-
+                logProverResult "permissions" r
 
 -- |Check that the assertions follow from the assumptions.
 checkAssertions :: (MonadIO m, MonadState s m, AssertionLenses s,
