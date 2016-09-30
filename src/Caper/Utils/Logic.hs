@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, FlexibleInstances, MultiParamTypeClasses, FunctionalDependencies #-}
+{-# LANGUAGE RankNTypes, FlexibleInstances, MultiParamTypeClasses, FunctionalDependencies, UndecidableInstances #-}
 -- | An implementation of a non-determism monad inspired by
 -- <http://dl.acm.org/citation.cfm?id=1086390 Oleg et al. 2005>.
 module Caper.Utils.Logic where
@@ -10,6 +10,7 @@ import Control.Monad
 --import Control.Monad.Cont
 import Control.Monad.Trans
 --import Control.Monad.Trans.Cont
+import Control.Monad.Reader
 import Data.Monoid
 
 import Caper.Utils.Failure
@@ -97,6 +98,21 @@ instance (Monad m, Monoid f) => LogicM f (SFContT f m) where
 
 instance (Monad m, Monoid f) => MonadOrElse (SFContT f m) where
         a `orElse` b = ifte a return (const b)
+
+
+instance (LogicM f m) => LogicM f (ReaderT r m) where
+        msplit m = ReaderT $ \r -> do
+                z <- msplit (runReaderT m r)
+                return $ case z of
+                        Left f -> Left f
+                        Right (a, rst) -> Right (a, lift rst)
+
+choice1 = do
+                r <- ask
+                (liftIO $ putStrLn r) `mplus` (liftIO $ putStrLn r)
+
+choice2 = (ask >>= liftIO . putStrLn) `mplus` (ask >>= liftIO . putStrLn)
+        
 
 
 {-
