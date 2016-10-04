@@ -1,11 +1,9 @@
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances #-}
 {-# LANGUAGE RankNTypes, ScopedTypeVariables #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE BangPatterns #-}
 module Caper.Prover(
+        module Caper.ProverDatatypes,
         -- * Assumptions
         BindingContext,
         AssumptionLenses(..),
@@ -80,10 +78,11 @@ import qualified Data.Set as Set
 import Control.Monad.State hiding (mapM_,mapM)
 import Control.Monad.Reader
 import Control.Monad.Exception
-import Control.Applicative
+-- -- import Control.Applicative
 import Data.Foldable
 import Control.Lens
 import Data.List (intercalate)
+import Data.Maybe
 
 import Caper.Utils.NondetClasses
 
@@ -319,7 +318,7 @@ valueVariables :: (AssumptionLenses a) => a -> [VariableID]
 -- ^Return a list of value variables; variables with no other type are treated as value variables.
 valueVariables = Map.keys . Map.filter treatAsValueJ . TC.toMap . (^. bindings)
 
-checkConsistency :: (Functor a, Foldable a, Show (a String)) => (FOF a String -> IO (Maybe Bool)) -> [VariableID] -> [FOF a VariableID] -> IO (Maybe Bool)
+checkConsistency :: (Functor a) => (FOF a String -> IO (Maybe Bool)) -> [VariableID] -> [FOF a VariableID] -> IO (Maybe Bool)
 -- ^Given a first-order prover, check whether a list of assertions (with free variables from a given list) is consistent.
 -- Consistent if the formula ¬(E) x1, ..., xn . P1 /\ ... /\ Pm /\ True is invalid. 
 checkConsistency p vars asss = do
@@ -336,7 +335,9 @@ isConsistent = do
                         rp <- checkConsistency (permissionsProver ps) (permissionVariables ass) (permissionAssumptions ass)
                         if rp == Just False then return $ Just False
                             else do
-                                rv <- checkConsistency (valueProver ps) (valueVariables ass) (valueAssumptions ass)
+                                rv <- case valueProver ps of
+                                        VPBasic vp -> checkConsistency vp (valueVariables ass) (valueAssumptions ass)
+                                        VPEnhanced _ vp -> (not <$>) <$> vp (valueAssumptions ass) FOFFalse
                                 return $ case (rp, rv) of
                                         (_, Just False) -> Just False
                                         (Just True, Just True) -> Just True
@@ -354,7 +355,7 @@ succeedIfInconsistent = do
             c <- isConsistent
             when (c == Just False) succeed
 
-assumptionContext :: (Functor a, Foldable a) =>
+assumptionContext ::
         [v] -> [FOF a v] -> FOF a v -> FOF a v
 -- ^Wrap universal quantifiers and assumptions around an assertion.
 assumptionContext vids asms ast = foldr FOFForAll (foldr FOFImpl ast asms) vids
@@ -408,12 +409,6 @@ showAssertions asts = "Assumptions: !["
 
 printAssertions :: (MonadIO m, MonadState s m, AssertionLenses s) => m ()
 printAssertions = get >>= liftIO . putStrLn . showAssertions
-
-bindAtExprType :: VariableID -> Expr VariableID -> BindingContext -> BindingContext
-bindAtExprType v (PermissionExpr _) c = runEM $ TC.bind v VTPermission c `catch` (\(e :: TUException) -> error (show e))
-bindAtExprType v (ValueExpr _) c = runEM $ TC.bind v VTValue c `catch` (\(e :: TUException) -> error (show e))
-bindAtExprType v (VariableExpr v') c = runEM $ TC.unify v v' c `catch` (\(e :: TUException) -> error (show e))
-
 
 suffices :: [String]
 suffices = "" : map show [0::Int ..]
@@ -640,6 +635,26 @@ permissionAvars = filterAvars (== Just VTPermission)
 valueAvars :: (AssertionLenses a) => Getter a [VariableID]
 valueAvars = filterAvars treatAsValueJ --(\x -> (x == Just VTValue) || isNothing x)
 
+logProverResult :: (MonadLogger m) => String -> Maybe Bool -> m (Maybe Bool)
+logProverResult ptype r = do
+        logEvent $ ProverResult r
+        when (isNothing r) $ logEvent $ WarnProverNoAnswer ptype
+        return r
+
+-- |Check a first-order value formula (generating the appropriate logging events)
+enhancedValueCheck :: (MonadIO m, MonadReader r m, Provers r, MonadLogger m) =>
+        [VariableID] -> [FOF ValueAtomic VariableID] -> FOF ValueAtomic VariableID -> m (Maybe Bool)
+enhancedValueCheck vavs lvalueAssumptions vasst = ask >>= \p -> case valueProver p of
+        VPBasic vp -> do
+                let sf = varToString <$> assumptionContext vavs lvalueAssumptions vasst
+                logEvent $ ProverInvocation ValueProverType (show sf)
+                r <- liftIO $ vp sf
+                logProverResult "value" r
+        VPEnhanced vpb vp -> do
+                logEvent $ ProverInvocation ValueProverType (show (lvalueAssumptions, vasst))
+                r <- liftIO $ vp lvalueAssumptions vasst
+                logProverResult "value" r
+
 -- |Check a first-order value formula (generating the appropriate logging events)
 valueCheck :: (MonadIO m, MonadReader r m, Provers r, StringVariable v, MonadLogger m) =>
         FOF ValueAtomic v -> m (Maybe Bool)
@@ -647,9 +662,11 @@ valueCheck f = do
                 let sf = varToString <$> f
                 logEvent $ ProverInvocation ValueProverType (show sf)
                 p <- ask
-                r <- liftIO $ valueProver p sf
-                logEvent $ ProverResult r
-                return r
+                let vp = case valueProver p of
+                        VPBasic vp0 -> vp0
+                        VPEnhanced vp0 _ -> vp0
+                r <- liftIO $ vp sf
+                logProverResult "value" r
 
 -- |Check a first-order permissions formula (generating the appropriate logging events)
 permissionCheck :: (MonadIO m, MonadReader r m, Provers r, StringVariable v, MonadLogger m) =>
@@ -659,9 +676,7 @@ permissionCheck f = do
                 logEvent $ ProverInvocation PermissionProverType (show sf)
                 p <- ask
                 r <- liftIO $ permissionsProver p sf
-                logEvent $ ProverResult r
-                return r
-
+                logProverResult "permissions" r
 
 -- |Check that the assertions follow from the assumptions.
 checkAssertions :: (MonadIO m, MonadState s m, AssertionLenses s,
@@ -683,11 +698,12 @@ checkAssertions = do
             else do
                 -- Check the value assertions
                 let lvalueAssumptions = valueConditions (varIsVal bdgs) asms
-                let valueAssertions = valueConditions (varIsVal bdgs) asts
+                let valueAssertions = foldBy FOFAnd FOFTrue $ valueConditions (varIsVal bdgs) asts
                 vevs <- use valueEvars
                 vavs <- use valueAvars
-                let vasst = foldr FOFExists (foldBy FOFAnd FOFTrue valueAssertions) vevs
-                rv <- valueCheck $ assumptionContext vavs lvalueAssumptions vasst
+                let vevs' = filter (`freeIn` valueAssertions) vevs
+                let vasst = foldr FOFExists valueAssertions vevs'
+                rv <- enhancedValueCheck vavs lvalueAssumptions vasst 
                 return (rv == Just True)
 
 justCheck :: (MonadIO m, MonadPlus m, MonadState s m, AssertionLenses s,

@@ -1,48 +1,45 @@
-name:           Caper
+name:           caper
 version:        0.1.0.0
 synopsis:       A tool for automatic program verification.
 license-file:   LICENSE
 author:         Thomas Dinsdale-Young, Pedro da Rocha Pinto
 maintainer:     td202@d-y.me.uk
 build-type:     Simple
-cabal-version:  >= 1.8
+cabal-version:  >= 1.10
 
 flag z3ffi
   description:  Enable z3 invocation via FFI (requires z3 package)
   default:      True
 
-executable Caper
-  main-is:         Caper.hs
+library
+  default-language:    Haskell2010
   build-depends:   
-                   base >=4.6,
+                   base >=4.8,
                    containers ==0.5.*,
                    control-monad-exception ==0.11.*,
                    mtl >=2.1,
                    transformers >=0.3,
                    parsec ==3.1.*,
                    lens >=3.9,
-                   HUnit ==1.2.*,
-                   QuickCheck >=2.8,
                    time >=1.4,
-                   syb ==0.4.*,
+                   syb >=0.4,
                    sbv >=3.1,
-                   multiset ==0.2.*,
+                   multiset >=0.2,
                    ConfigFile ==1.1.*,
                    parallel ==3.2.*,
                    process >=1.2.0.0,
                    SafeSemaphore >=0.9,
-                   directory ==1.2.*,
-                   either ==4.3.*,
+                   directory >=1.2,
+                   either >=4.3,
                    vector >=0.10,
                    template-haskell >=2.8,
                    transformers >=0.2,
-                   argparser >=0.3.4,
-                   int-cast,
-                   unification-fd >=0.10
+                   int-cast
   hs-source-dirs:  src
-  extensions:      CPP
-  ghc-options:     -Wall -fno-warn-unused-matches -rtsopts -threaded
-  other-modules:   
+  default-extensions:
+                   CPP
+  ghc-options:     -Wall -Wno-redundant-constraints -Wno-unused-matches
+  exposed-modules: 
                    Caper.Assertions.Check,
                    Caper.Assertions.Consume,
                    Caper.Assertions.Generate,
@@ -91,42 +88,53 @@ executable Caper
                    Caper.Utils.NondetClasses,
                    Caper.Utils.PMaybe,
                    Caper.Utils.SimilarStrings,
-                   Caper.DeductionFailure,
-                   Caper.FirstOrderSorted
+                   Caper.DeductionFailure
 
   if flag(z3ffi)
     build-depends:  z3 >=4.0.0
     cpp-options:    -Dz3ffi
-    other-modules:  Caper.Provers.Values.Z3, Caper.Provers.Permissions.SMT
+    other-modules:  Caper.Provers.Values.Z3, Caper.Provers.Permissions.SMT, Caper.Provers.Values.Z3plus
 
   if impl(ghc >= 7.10)
      cpp-options:   -Doverlap_pragmas
-     
+  if impl(ghc < 8.0)
+    build-depends:  template-haskell <2.11
+
+executable Caper
+  default-language:    Haskell2010
+  hs-source-dirs:      executable
+  main-is:             Caper.hs
+  default-extensions:  CPP
+  ghc-options:     -Wall -rtsopts -threaded
+  build-depends:       base >= 4.6
+                     , caper
+                     , argparser >= 0.3.4
+                     , mtl >= 2.2.1
+                     
+
 executable Interpreter
+  default-language:    Haskell2010
   build-depends:   
                    base >= 4,
+                   caper,
                    parsec >=3.1 && <3.2,
                    mtl >=2.1.2,
                    template-haskell >=2.8,
                    lens >=3.9,
                    containers >=0.5 && <0.6
-  hs-source-dirs:  src
+  hs-source-dirs:  interpreter
   ghc-options:     -W -rtsopts
   main-is:         Interpreter.hs
-  other-modules:   
-                   Caper.ExceptionContext,
-                   Caper.FreeVariables,
-                   Caper.Interpreter.Environment,
-                   Caper.Interpreter.Interpreter,
-                   Caper.Parser.AST,
-                   Caper.Parser.AST.Annotation,
-                   Caper.Parser.AST.Code,
-                   Caper.Parser.AST.SourcePos,
-                   Caper.Parser.Parser
+  if impl(ghc < 8.0)
+    build-depends:  template-haskell <2.11
+  other-modules:       Caper.Interpreter.Environment
+                     , Caper.Interpreter.Interpreter
 
 executable RunTests
+  default-language:    Haskell2010
   build-depends:   
                    base >= 4,
+                   caper,
                    template-haskell >=2.8,
                    directory >= 1.2,
                    text >= 1.1,
@@ -136,3 +144,21 @@ executable RunTests
                    containers >= 0.5
   hs-source-dirs:  Tests
   main-is:         RunTests.hs
+  if impl(ghc < 8.0)
+    build-depends:  template-haskell <2.11
+
+test-suite tasty-suite
+  default-language:    Haskell2010
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      tasty-suite
+  main-is:             Main.hs
+  build-depends:       base >= 4.6
+                     , tasty                     
+                     , tasty-quickcheck
+                     , tasty-hunit
+                     , HUnit
+                     , QuickCheck
+                     , caper
+                     , containers
+                     , time
+                      

@@ -3,7 +3,7 @@
 region TLock(r,x) {
     guards #TICKET;
     interpretation {
-        n : x |-> m &*& (x+1) |-> n &*& m >= n &*& r@TICKET{k | k >= m};
+        n : (x+0) |-> m &*& (x+1) |-> n &*& m >= n &*& r@TICKET{k | k >= m};
     }
     actions {
         TICKET(n) : n ~> n + 1;

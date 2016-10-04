@@ -4,6 +4,7 @@ module Caper.Regions where
 import Prelude hiding (mapM_,mapM,concat,any,foldl,concatMap,foldr)
 import Control.Monad.State hiding (mapM_,mapM,forM_,msum)
 import Control.Monad.Reader hiding (mapM_,mapM,forM_,msum)
+import Control.Monad.Trans.Maybe
 import Control.Lens hiding (op)
 import Data.Foldable
 import Data.Traversable
@@ -20,16 +21,15 @@ import Caper.Parser.AST.Annotation (TopLevelGuardDeclr(..))
 import Caper.RegionTypes
 import Caper.Logger
 import Caper.Exceptions
-import Caper.ProverDatatypes
-import Caper.Prover -- TODO: move some stuff from Prover to ProverDatatypes?
 import Caper.DeductionFailure
 import Caper.ProverStates
 import Caper.Guards
 import Caper.Transitions
+import qualified Caper.TypingContext as TC
 
 data RegionInstance = RegionInstance {
         riType :: RTId,
-        riParameters :: [Expr VariableID]
+        riParameters :: [Expr VariableID]  -- EXCLUDING region identifier
 }
 
 data Region = Region {
@@ -89,7 +89,7 @@ mergeValueExpressions :: (MonadState s m, AssumptionLenses s) =>
         ValueExpression VariableID -> m (ValueExpression VariableID)
 mergeValueExpressions ve1 ve2 = assumeTrue (ve1 $=$ ve2) >> return ve1
 
-mergeRegions :: (MonadState s m, AssumptionLenses s, MonadReader r m, RTCGetter r, MonadDemonic m) =>
+mergeRegions :: (MonadState s m, AssumptionLenses s, MonadReader r m, RTCGetter r, MonadDemonic m, DebugState s r, MonadLabel CapturedState m) =>
         Region -> Region -> m Region
 mergeRegions r1 r2 = do
                 let dirty = regDirty r1 || regDirty r2
@@ -99,11 +99,9 @@ mergeRegions r1 r2 = do
                 case ti of
                         (Just (RegionInstance rtid _)) -> do
                                 res <- view resolveRType
-                                let gt = rtWeakGT $ res rtid
-                                unless (checkGuardAtType g gt) succeed --assumeContradiction
+                                strongCheckGuardAtTLType g (rtGuardType (res rtid))
                         _ -> return ()
                 return $ Region dirty ti s g
-
 
 -- FIXME: Add bound information!
 -- | Add a region, or merge it if one already exists with the same identifier.
@@ -111,25 +109,35 @@ mergeRegions r1 r2 = do
 --
 -- Pre: the number and type of arguments should have been checked (otherwise an error may arise).
 produceMergeRegion :: (MonadState s m, AssumptionLenses s, RegionLenses s,
-                MonadReader r m, RTCGetter r, MonadIO m,
-                MonadDemonic m) =>
+                MonadReader r m, RTCGetter r, DebugState s r,
+                MonadDemonic m, MonadLabel CapturedState m) =>
                 VariableID -> Region -> m ()
 produceMergeRegion rvar region = do
                 regs <- use regions
                 let rs = AM.toRootList regs
-                liftIO $ putStrLn $ "MERGEABLES: " ++ show (map fst rs)
+                --liftIO $ putStrLn $ "MERGEABLES: " ++ show (map fst rs)
                 case AM.lookup rvar regs of
                         Nothing -> (do
-                                liftIO $ putStrLn $ "NOT MERGE " ++ show rvar
+                                --liftIO $ putStrLn $ "NOT MERGE " ++ show rvar
+                                labelS $ "region " ++ show rvar ++ " is fresh"
                                 regions .= AM.insert rvar region regs
                                 forM_ rs (assume . DisequalityCondition rvar . fst)
+                                _ <- runMaybeT $ do
+                                    (RegionInstance rtid args) <- chooseFrom $ regTypeInstance region
+                                    rt <- lookupRType rtid
+                                    dc <- chooseFrom $ rtDistinctionCondition rt
+                                    forM_ rs $ \(_, rg) -> runMaybeT $ do
+                                        (RegionInstance rtid' args') <- chooseFrom $ regTypeInstance rg
+                                        when (rtid == rtid') $ mapM_ assume $ dc args args'
+                                return ()       
                                 ) <#>
                             dAll [(do
-                                liftIO $ putStrLn $ "TRY MERGE: " ++ show rvar ++ ", " ++ show rid
+                                --liftIO $ putStrLn $ "TRY MERGE: " ++ show rvar ++ ", " ++ show rid
                                 assume $ EqualityCondition rvar rid
                                 r' <- mergeRegions r region
                                 regions .= (AM.addAlias rvar rid) (AM.overwrite rid r' regs)
-                                liftIO $ putStrLn $ "MERGED"
+                                labelS $ "region " ++ show rvar ++ " is " ++ show rid
+                                --liftIO $ putStrLn $ "MERGED"
                                 ) | (rid, r) <- rs]
                         (Just r) -> do
                                 r' <- mergeRegions r region
@@ -139,7 +147,6 @@ produceMergeRegion rvar region = do
 -- XXX: This is overkill.  In all but very few cases the rid should already
 -- point to a region.
 consumeRegion :: (MonadState s m, AssertionLenses s, RegionLenses s,
-                MonadReader r m, RTCGetter r,
                 MonadPlus m, Failure DeductionFailure m,
                 MonadLogger m) =>
                 RTId                    -- ^Type of the region 
@@ -180,29 +187,6 @@ consumeRegion rtid rid params st = do
         bindState Nothing = newAvar "state" >>=
                         assertTrue . VAEq st . var
                 
-
--- |Determine if two variables cannot be aliases for the same region.
--- It may be possible that variables can be proved not to be aliases,
--- but this routine may still treat them as if they could be.
-cannotAlias :: (MonadState s m, RegionLenses s) => VariableID -> VariableID -> m Bool
-cannotAlias r1 r2
-        | r1 == r2 = return False
-        | otherwise = do
-                regs <- use regions
-                return $ case (regs ^? ix r1 >>= regTypeInstance, regs ^? ix r2 >>= regTypeInstance) of
-                    (Just rt1, Just rt2) -> riType rt1 /= riType rt2
-                    _ -> False
-
-
-{-
--- For now, I'm not going to use this, in favour of cannotAliasStrong.
-cannotAliasRegs :: AliasMap VariableID Region -> VariableID -> VariableID -> Bool
-cannotAliasRegs regs r1 r2
-        | r1 == r2 = False
-        | otherwise = case (regs ^? ix r1 >>= regTypeInstance, regs ^? ix r2 >>= regTypeInstance) of
-                    (Just rt1, Just rt2) -> riType rt1 /= riType rt2
-                    _ -> False
--}
 -- TODO: Put somewhere more appropriate?
 restoring :: (MonadState s m) => m a -> m a
 -- ^Run a stateful computation, restoring the state at the beginning.
@@ -213,45 +197,22 @@ restoring f = do
             return r 
                    
 -- |Determine if two variables cannot be aliases for the same region.
--- It may be possible that variables can be proved not to be aliases,
--- but this routine may still treat them as if they could be.
--- This version gives fewer false negatives than cannotAlias, but requires
--- calls to provers to see if a merge can take place.
-cannotAliasStrong :: (ProverM s r m, RegionLenses s, RTCGetter r) => VariableID -> VariableID -> m Bool
-cannotAliasStrong r1 r2 = use regions >>= return . not . AM.areAliases r1 r2
-{-        | r1 == r2 = return False
-        | otherwise = do
-                    -- Try merging the regions.  If the result is
-                    -- inconsistent then the regions are not aliases.
-                    regs <- use regions
-                    case (regs ^? ix r1, regs ^? ix r2) of
-                        (Just reg1, Just reg2) -> restoring $ do
-                                _ <- mergeRegions reg1 reg2
-                                assume (EqualityCondition r1 r2)
-                                c <- isConsistent
-                                return (c == Just False)
-                        _ -> return False
--}                        
+-- In the current representation, Caper case splits on whether regions
+-- are aliases, so this returns `True` exactly when the regions are not
+-- considered to be aliased.
+cannotAlias :: (ProverM s r m, RegionLenses s) => VariableID -> VariableID -> m Bool
+cannotAlias r1 r2 = use regions >>= return . not . AM.areAliases r1 r2
 
 -- |Stabilise all regions
-stabiliseRegions :: (ProverM s r m, RegionLenses s, RTCGetter r, DebugState s r, MonadRaise m) =>
+stabiliseRegions :: (ProverM s r m, RegionLenses s, RTCGetter r, DebugState s r, MonadRaise m, MonadLabel CapturedState m) =>
                         m ()
 stabiliseRegions = do
                         regs <- use regions
                         regs' <- imapM stabiliseRegion regs
                         regions .= regs'
 
-{-
--- Stabilise a region (only if it is dirty)
-stabiliseRegion :: (ProverM s r m, RTCGetter r) =>
-                        Region -> m Region
-stabiliseRegion reg = if regDirty reg then
-                                stabiliseDirtyRegion reg
-                        else
-                                return reg -}
-
--- Stabilise a region
-stabiliseRegion :: (ProverM s r m, RTCGetter r, DebugState s r, MonadRaise m) =>
+-- |Stabilise a region.
+stabiliseRegion :: (ProverM s r m, RTCGetter r, DebugState s r, MonadRaise m, MonadLabel CapturedState m) =>
                         VariableID -> Region -> m Region
 -- Not dirty, so nothing to do!
 stabiliseRegion rid
@@ -262,16 +223,14 @@ stabiliseRegion rid
                         let ps = var rid : ps0
                         -- resolve region type
                         rt <- lookupRType rtid
-                        liftIO $ putStrLn $ "Checking transitions for region: " ++ show rt ++ " " ++ show ps ++ " " ++ show gd
                         transitions <- checkTransitions rt ps gd
-                        liftIO $ putStrLn $ "Transitions are: " ++ show transitions
                         -- compute the closure relation
-                        tcrel <- rely rt transitions -- computeClosureRelation (rtStateSpace rt) transitions
+                        tcrel <- rely rt transitions
                         -- create a new state variable
                         newStateVar <- newAvar "state"
                         -- assume it is related to the old state
                         assumeTrue $ tcrel se (var newStateVar)
-                        liftIO $ putStrLn $ "RELY CONDITION : " ++ show (tcrel se (var newStateVar))
+                        labelS $ "Stabilising region " ++ show rid ++ " with Rely: " ++ show (tcrel se (var newStateVar))
                         -- return the clean region with the new state
                         return $ Region
                                 False
@@ -314,13 +273,18 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
                                 -- combine guards
                                 gd' <- mergeGuards gd (exprCASub' s trgd)
                                 -- We extract the assumptions that condition the transition.
-                                -- That is, those that have variables which are locally bound for
-                                -- the action, and occur in either the pre- or post-state.
-                                -- These variables are bound to be value variables, and so all such
-                                -- conditions will be value-convertible.
+                                -- Currently, this takes all assumptions that involve value variables
+                                -- that are in the transition.  We can only take conditions that
+                                -- are value-convertible (since they will form part of a rely relation).
+                                -- Previously, we only considered conditions with variables occurring in
+                                -- the pre- or post-state.  However, this is restrictive when we have
+                                -- other variables that are related to these variables and are themselves
+                                -- conditioned.  This new version may be overly inclusive (i.e. include
+                                -- conditions that are universally true).  This is probably not a big
+                                -- problem.
                                 assms <- use assumptions
-                                let isDynVar = (`Set.member` Set.fromList (concatMap toList [prec, post]))
-                                let cvars = Map.elems $ Map.filterWithKey (\k _ -> isDynVar k) bvmap
+                                bndgs <- use bindings
+                                let cvars = [v | v <- Map.elems bvmap, TC.lookup v bndgs == TC.JustType VTValue]
                                 let isCvar = (`Set.member` Set.fromList cvars)
                                 let cassms = filter (any isCvar . freeVariables) assms
                                 -- check the guard matches the guard type
@@ -334,21 +298,19 @@ checkTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem r
                         case guardCompat of
                           Left _ -> return []
                           Right cassms -> do
-                            liftIO $ putStrLn $ "Transition conditions for: " ++ show bvars ++ " " ++ (show (exprSub s prec)) ++ " ~> " ++ show (exprSub s post)
-                            liftIO $ mapM_ print cassms
                             let cond = foldBy FOFAnd FOFTrue $ valueConditions (const True) cassms
                             return [GuardedTransition bvars cond (exprSub s prec) (exprSub s post)]
 
 -- |Determine a list of possible thread (guarantee) transitions for a given
 -- parametrised region type and guard.
-checkGuaranteeTransitions :: (ProverM (WithAssertions s) r m, AssumptionLenses s, DebugState (WithAssertions s) r, MonadRaise m) => RegionType -> [Expr VariableID] -> Guard VariableID -> m [GuardedTransition VariableID]
+checkGuaranteeTransitions :: (ProverM (WithAssertions s) r m, AssumptionLenses s, DebugState (WithAssertions s) r, MonadRaise m) =>
+        RegionType -> [Expr VariableID] -> Guard VariableID -> m [GuardedTransition VariableID]
 checkGuaranteeTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitionSystem rt)
         where
                 bndVars :: TransitionRule -> Set.Set RTDVar
                 bndVars tr = Set.difference (freeVariables tr) (rtParamVars rt)
                 params = Map.fromList $ zip (map fst $ rtParameters rt) ps
                 checkTrans tr@(TransitionRule trgd prd prec post) = do
-                        liftIO $ putStrLn $ "+++ Params " ++ show params
                         -- Compute a binding for fresh variables
                         bvmap <- freshInternals rtdvStr (bndVars tr)
                         let bvars = Map.elems bvmap
@@ -370,10 +332,7 @@ checkGuaranteeTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitio
                                     SomeGuardDeclr gdec -> do
                                             _ <- guardEntailment gdec gd (exprCASub' s trgd)
                                             return ()
-                                liftIO $ putStrLn "Entailment for guarantee"
-                                debugState
                                 justCheck
-                                liftIO $ putStrLn "passed"
                                 -- We extract the assertions that condition the transition.
                                 -- That is, those that have variables which are locally bound for
                                 -- the action and occur in either the pre- or post-state.
@@ -389,51 +348,11 @@ checkGuaranteeTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitio
                                 let cond = foldBy FOFAnd FOFTrue $ valueConditions (const True) cassrts in
                                 GuardedTransition bvars cond (exprSub s prec) (exprSub s post)
                         return (map condToTrans conds)
-                        {-case conds of
-                            Nothing -> return []
-                            Just cassrts -> do
-                                --cond <- foldlM (\x -> liftM (FOFAnd x . exprCASub' s) . toValueFOF isDynVar) FOFTrue dyconds
-                                let cond = foldBy FOFAnd FOFTrue $ valueConditions (const True) cassrts
-                                return [GuardedTransition bvars cond (exprSub s prec) (exprSub s post)] -}
-
-{-
-toValueFOF :: (MonadRaise m, Monad m) => (v -> Bool) -> Condition v -> m (FOF ValueAtomic v)
-toValueFOF varTest (ValueCondition v) = return v
-toValueFOF varTest (PermissionCondition pc) = case find varTest pc of
-                                Nothing -> error "Caper.Regions.toValueFOF: internal error"
-                                Just v -> raise $ TypeMismatch VTPermission VTValue
-toValueFOF varTest (EqualityCondition v1 v2) = return $ FOFAtom $ VAEq (var v1) (var v2)
-toValueFOF varTest (DisequalityCondition v1 v2) = return $ FOFNot $ FOFAtom $ VAEq (var v1) (var v2)
--}
-
-{-
--- |Generate a 'Condition' that captures the fact that two abstract
--- states must be related by the guarantee for a region.   
-simpleGenerateGuaranteeCondition :: (ProverM (WithAssertions s) r m, AssumptionLenses s, DebugState (WithAssertions s) r, MonadRaise m) =>
-    RegionType                      -- ^Type of the region
-    -> [Expr VariableID]            -- ^Parameters for the region
-    -> Guard VariableID             -- ^Guard for the region
-    -> ValueExpression VariableID   -- ^Old state
-    -> ValueExpression VariableID   -- ^New state
-        -> m (Condition VariableID)
-simpleGenerateGuaranteeCondition rt ps gd st0 st1 = msum (map checkTrans (rtTransitionSystem rt))
-    where
-        bndVars :: TransitionRule -> Set.Set RTDVar
-        bndVars tr = Set.difference (freeVariables tr) (rtParamVars rt)
-        params = Map.fromList $ zip (map fst $ rtParameters rt) ps
-        checkTrans tr@(TransitionRule trgd prd prec post) = do
-            bvmap <- freshInternals rtdvStr (bndVars tr)
-            let bvars = Map.elems bvmap
-            let subst = Map.union params $ fmap var bvmap
-            let s v = Map.findWithDefault (error "checkGuaranteeTransitions: variable not found") v subst
-            assertTrue $ VAEq st0 (exprSub s prec)
-            assertTrue $ VAEq st1 (exprSub s post)
-  -}          
 
 
 -- |Generate a 'Condition' that captures the fact that two abstract
 -- states must be related by the guarantee for a region.   
-generateGuaranteeCondition :: (ProverM (WithAssertions s) r m, AssumptionLenses s, DebugState (WithAssertions s) r, MonadRaise m) =>
+generateGuaranteeCondition :: (ProverM (WithAssertions s) r m, AssumptionLenses s, DebugState (WithAssertions s) r, MonadRaise m, MonadLabel CapturedState m) =>
     RegionType                      -- ^Type of the region
     -> [Expr VariableID]            -- ^Parameters for the region
     -> Guard VariableID             -- ^Guard for the region
@@ -443,7 +362,6 @@ generateGuaranteeCondition :: (ProverM (WithAssertions s) r m, AssumptionLenses 
 generateGuaranteeCondition rt params gd st0 st1
     | not (isFinite (rtStateSpace rt)) = do
         transitions <- checkGuaranteeTransitions rt params gd
-        liftIO $ putStrLn $ "Guarantee transitions: " ++ show transitions
         return $ ValueCondition $ foldl FOFOr (st0 $=$ st1) $ do
             GuardedTransition bvars cond e0 e1 <- transitions
             let c = FOFAnd (FOFAnd (st0 $=$ e0) (st1 $=$ e1)) cond
@@ -454,17 +372,3 @@ generateGuaranteeCondition rt params gd st0 st1
         return $ ValueCondition (rel st0 st1)
 
 
--- |Get the region type and parameters for a region.  If no type is available
--- (because the variable does not identify a region or the region's type is
--- not known) it will return Nothing.  It can throw an error if a region
--- has an invalid region type identifier.
-getTypeOfRegion :: (MonadState s m, RegionLenses s, MonadReader r m, RTCGetter r) =>
-            VariableID -> m (Maybe (RegionType, [Expr VariableID]))
-getTypeOfRegion rid = do
-            regs <- use regions
-            case regs ^? ix rid >>= regTypeInstance of
-                Nothing -> return Nothing
-                Just (RegionInstance rtid ps) -> do
-                        rt <- lookupRType rtid
-                        return $ Just (rt, ps) 
--- Check if a guard is compatible 

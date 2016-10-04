@@ -1,5 +1,8 @@
-{-# LANGUAGE TemplateHaskell, MultiParamTypeClasses #-}
-module Caper.ProverStates where
+{-# LANGUAGE TemplateHaskell, MultiParamTypeClasses, FlexibleContexts, FlexibleInstances #-}
+module Caper.ProverStates(
+        module Caper.Prover,
+        module Caper.ProverStates
+) where
 
 import Control.Lens
 import Data.Set (Set)
@@ -9,13 +12,19 @@ import qualified Data.Map as Map
 import Data.List (intercalate)
 import Control.Monad.Reader
 import Control.Monad.State
-import Control.Monad
+
+import Caper.Utils.NondetClasses
+import Caper.Utils.Failure
 
 import qualified Caper.TypingContext as TC
 import Caper.Logger
-import Caper.ProverDatatypes
 import Caper.Prover
--- import Caper.RegionTypes
+
+class AbductionFailure f where
+        abduceConditions :: [VariableID] -> [Condition VariableID] -> f
+        handleAbduceConditions :: ([VariableID] -> [Condition VariableID] -> Maybe x) -> f -> Maybe x
+
+
 
 showAssumptions :: (AssumptionLenses a) => a -> String
 showAssumptions ass = "[" ++ show avars ++ "]\n" ++
@@ -85,11 +94,38 @@ admitChecks o = do
                 put $ admitAssertions s'
                 return r
 
-check :: (AssumptionLenses s, MonadLogger m, Provers p, MonadReader p m,
-            MonadIO m, MonadState s m, MonadPlus m) =>
+check :: (AssumptionLenses s, MonadLogger m, Provers p, MonadReader p m, OnFailure f m, AbductionFailure f, MonadOrElse m,
+            MonadIO m, MonadState s m, MonadPlus m, DebugState (WithAssertions s) p, MonadLabel CapturedState m) =>
            StateT (WithAssertions s) m a -> m a
 check c = admitChecks $ do
                 r <- c
+                labelS "Check assertions"
+                justCheck'
+                retry (return ()) $ (handleAbduceConditions handler)
+                return r
+        where
+                handler vs cs = Just $ do
+                        mapM_ declareEvar vs
+                        mapM_ assert cs
+                        labelS "Handling abduction"
+                        justCheck'
+                justCheck' = orElse (labelS "Checking assertions" >> justCheck) $ do
+                        -- Check if the assertions are even possibly consistent with the assumptions
+                        wasts <- get
+                        consistent <- flip evalStateT (admitAssertions wasts) $ isConsistent
+                        if consistent == Just True then
+                                -- If they are, abduce
+                                (failure =<< abduceConditions . Set.toList <$> use existentials <*> use assertions)
+                            else
+                                -- Otherwise there is no point
+                                mzero
+
+checkNoAbduce :: (AssumptionLenses s, MonadLogger m, Provers p, MonadReader p m,
+            MonadIO m, MonadState s m, MonadPlus m, DebugState (WithAssertions s) p, MonadLabel CapturedState m) =>
+           StateT (WithAssertions s) m a -> m a
+checkNoAbduce c = admitChecks $ do
+                r <- c
+                labelS "Check assertions"
                 justCheck
                 return r
 
@@ -103,6 +139,12 @@ emptyAssertions = emptyWithAssertions
 
 class DebugState s r where
     showState :: r -> s -> String
+
+instance DebugState Assumptions r where
+        showState r = showAssumptions
+
+instance DebugState (WithAssertions Assumptions) r where
+        showState r = showAssertions
 
 debugState :: (MonadState s m, MonadReader r m, DebugState s r, MonadIO m) => m ()
 debugState = do
@@ -121,3 +163,20 @@ type LVarBindings = Map String VariableID
 emptyLVars :: LVarBindings
 emptyLVars = Map.empty
 
+-- |A 'CapturedState' is a representation of the internal state
+-- at a point in time.
+newtype CapturedState = CapturedState String
+instance Show CapturedState where
+        show (CapturedState s) = s
+
+captureState :: (MonadState s m, MonadReader r m, DebugState s r) => m CapturedState
+captureState = do
+        r <- ask
+        s <- get
+        return $ CapturedState $ showState r s
+
+labelS :: (MonadState s m, MonadReader r m, DebugState s r, MonadLabel CapturedState m) =>
+        String -> m ()
+labelS l = do
+        s <- captureState
+        labelState s l

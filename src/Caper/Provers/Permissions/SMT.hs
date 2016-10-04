@@ -107,7 +107,13 @@ z3ify ctx FOFFalse = mkFalse
 z3ify ctx FOFTrue = mkTrue
 
 permCheckZ3 :: Eq v => Maybe Int -> FOF PermissionAtomic v -> IO (Maybe Bool)
-permCheckZ3 timeout f = evalZ3With Nothing opts $ do
+permCheckZ3 timeout f = evalZ3With Nothing stdOpts $ do
+                params <- mkParams
+                tmo <- mkStringSymbol "timeout"
+                paramsSetUInt params tmo (case timeout of
+                    Just x -> if x > 0 then toEnum x else 0
+                    Nothing -> 0)
+                solverSetParams params
                 f' <- z3ify [] f
                 --liftIO . putStrLn =<< astToString f'
                 assert =<< mkNot f'
@@ -116,10 +122,11 @@ permCheckZ3 timeout f = evalZ3With Nothing opts $ do
                         Sat -> Just False
                         Unsat -> Just True
                         _ -> Nothing
-        where
+{-        where
                 opts = case timeout of
                         (Just x) -> if x > 0 then opt "TIMEOUT" x else stdOpts
                         _ -> stdOpts
+-}
 
 -- The following functions construct string-based queries for an SMT solver.
 -- Since this module uses the library interface to Z3, this is not used, but I'm leaving it here in case it

@@ -32,6 +32,7 @@ data LogEvent
         | WarnMissingPostcondition String String
         | WarnUninitialisedVariable String
         | WarnAmbiguousVariable Bool String
+        | WarnProverNoAnswer String
         | InfoEvent String
 instance Show LogEvent where
         show (WarnAutoBind vars) = "WARNING: the variables " ++ show (Data.Set.toList vars) ++
@@ -53,6 +54,7 @@ instance Show LogEvent where
         show (WarnUninitialisedVariable v) = "WARNING: the variable '" ++ v ++ "' is used before it is initialised."
         show (WarnAmbiguousVariable b v) = "WARNING: the variable '" ++ v ++ "' is ambiguous and could refer to a program " ++
                 "variable or logical variable. It is being treated as a " ++ (if b then "program" else "logical") ++ " variable."
+        show (WarnProverNoAnswer p) = "WARNING: the " ++ p ++ " prover returned no answer. Increasing the timeout may help."
         show (InfoEvent s) = "INFO: " ++ s
 
 
@@ -69,6 +71,7 @@ class Monad m => MonadLogger m where
         logEventContext = logAll . (:[]) 
         logEvent :: LogEvent -> m ()
         logEvent e = logEventContext ([],e)
+        {-# MINIMAL logEventContext | logAll #-}
 
 joinLoggerT :: MonadLogger m => LoggerT m a -> m a
 joinLoggerT x = do
@@ -121,7 +124,7 @@ instance (MonadLogger m) => MonadLogger (FilterLoggerT m) where
                 f <- ask
                 when (f e) $ logEventContext (ec, e)
 
-filterLogger :: (MonadLogger m) => (LogEvent -> Bool) -> FilterLoggerT m a -> m a
+filterLogger :: (LogEvent -> Bool) -> FilterLoggerT m a -> m a
 filterLogger f (FilterLoggerT x) = runReaderT x f
 
 logNotProver :: LogEvent -> Bool

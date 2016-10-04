@@ -6,6 +6,7 @@ region TLock(r,x) {
         n : x |-> m &*& (x+1) |-> n &*& m >= n &*& r@TICKET{i | i >= m};
     }
     actions {
+        // TICKET(i) : i ~> i + 1;
         t0 < t1 | TICKET{i | i >= t0, i < t1} : t0 ~> t1;
     }
 }
@@ -61,5 +62,21 @@ function unlock(x)
     // Increment "now serving"
     v := [x + 1];
     [x + 1] := v + 1;
+    //write(x+1,v+1);
 }
 
+function test(x)
+        requires TLock(r,x,_);
+        ensures TLock(r,x,_);
+{
+        lock(x);
+        unlock(x);
+}
+
+function write(x,y)
+        requires x |-> _;
+        ensures x |-> y;
+{
+        [x] := 0;
+        [x] := y;
+}

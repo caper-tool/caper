@@ -159,7 +159,7 @@ type RaiseT m = ReaderT [ExceptionContext]
 --}
 
 type RaiseT = EitherT ([ExceptionContext], CaperException)
-runRaiseT :: Monad m => RaiseT m a -> m (Either ([ExceptionContext], CaperException) a)
+runRaiseT :: RaiseT m a -> m (Either ([ExceptionContext], CaperException) a)
 runRaiseT = runEitherT
         
 instance {-# OVERLAPPING #-} (Monad m, MonadReader r m, ECLenses r) =>

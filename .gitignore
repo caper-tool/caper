@@ -14,3 +14,8 @@ docs/design.pdf
 *.aux
 *.out
 *.log
+*.bbl
+*.blg
+.stack-work/
+TAGS
+stack.yaml

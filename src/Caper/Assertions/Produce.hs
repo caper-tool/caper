@@ -10,8 +10,6 @@ import           Caper.Assertions.Generate
 import           Caper.Exceptions
 import qualified Caper.Guards as G
 import           Caper.Parser.AST
-import           Caper.Prover
-import           Caper.ProverDatatypes
 import           Caper.RegionTypes
 import           Caper.Regions (RegionLenses)
 import qualified Caper.Regions as R
@@ -20,6 +18,8 @@ import qualified Caper.SymbolicState as SS
 import           Caper.Utils.AliasingMap ()
 import           Caper.Utils.NondetClasses
 import Caper.Predicates (PredicateLenses)
+import Caper.ProverStates
+
 {-
         At some point, this whole module should probably be rewritten.
         In particular, some consideration of where variables are bound to
@@ -32,12 +32,12 @@ import Caper.Predicates (PredicateLenses)
 -}
 
 class (MonadState s m, AssumptionLenses s, RegionLenses s, SymbStateLenses s,
-        MonadReader r m, RTCGetter r, PredicateLenses r,
-        MonadRaise m, MonadDemonic m, MonadIO m) => ProduceMonad r s m
+        MonadReader r m, RTCGetter r, PredicateLenses r, DebugState s r,
+        MonadRaise m, MonadDemonic m, MonadIO m, MonadLabel CapturedState m) => ProduceMonad r s m
 
 instance (MonadState s m, AssumptionLenses s, RegionLenses s, SymbStateLenses s,
-        MonadReader r m, RTCGetter r, PredicateLenses r,
-        MonadRaise m, MonadDemonic m, MonadIO m) => ProduceMonad r s m        
+        MonadReader r m, RTCGetter r, PredicateLenses r, DebugState s r,
+        MonadRaise m, MonadDemonic m, MonadIO m, MonadLabel CapturedState m) => ProduceMonad r s m        
 
 
 -- |Given a syntactic pure assertion, produce it by adding it as an assumption.
@@ -45,28 +45,6 @@ producePure :: (MonadState s m, AssumptionLenses s, SymbStateLenses s,
         MonadRaise m) =>
                 PureAssrt -> m ()
 producePure assn = generatePure produceVariable assn >>= assumeE
-{-
-producePure = producePure' False
-        where
-                asm sp b = addSPContext sp . if b then assumeFalseE else assumeTrueE
-                producePure' b (NotBAssrt _ pa) = producePure' (not $! b) pa
-                producePure' b (ConstBAssrt _ b') = when (b == b') assumeContradiction
-                producePure' b (BinaryVarAssrt sp ebo vl vr) = do  -- TODO: specialise handling
-                                vvl <- produceVariable vl
-                                vvr <- produceVariable vr
-                                asm sp (b == (ebo == EqualRel))
-                                        (EqualityCondition vvl vvr)
-                producePure' b (BinaryValAssrt sp bo vel ver) = do
-                                vvel <- produceValueExpr vel
-                                vver <- produceValueExpr ver
-                                asm sp b $
-                                        valueRel bo vvel vver
-                producePure' b (BinaryPermAssrt sp brel pel per) = do
-                                let rel = permissionRel brel
-                                ppel <- producePermissionExpr pel
-                                pper <- producePermissionExpr per
-                                asm sp b $ rel ppel pper
--}
 
 -- |Produce a variable.  Named variables are converted to 'VIDNamed'
 -- instances, and declared in the assumptions.  Anonymous (wildcard)
@@ -133,31 +111,8 @@ produceGuards gg@(Guards sp ridv gds) = contextualise gg $
                         addContext (StringContext $ "The region identifier '" ++ ridv ++ "'") $
                                 bindVarAsE rrid VTRegionID
                         guards <- generateGuard produceVariable assumeTrue gds
---                        guards <- liftM G.GD $ foldlM mkGuards Map.empty gds
                         R.produceMergeRegion rrid $
                                 R.Region False Nothing Nothing guards
-{-        where
-            permExprHandler pe = assumeFalse $ PAEq pe PEZero
-            permDisjHandler pe1 pe2 = assumeTrue $ PADis pe1 pe2 -}
-{-        where
-                mkGuards g gd@(NamedGuard _ nm) = contextualise gd $
-                        if nm `Map.member` g then
-                                raise $ IncompatibleGuardOccurrences nm
-                        else
-                                return $ Map.insert nm G.NoGP g
-                mkGuards g gd@(PermGuard _ nm pe) = contextualise gd $ do
-                        ppe <- producePermissionExpr pe
-                        case Map.lookup nm g of
-                                Nothing -> return $
-                                        Map.insert nm (G.PermissionGP ppe) g
-                                (Just (G.PermissionGP pe0)) -> return $
-                                        Map.insert nm
-                                                (G.PermissionGP (PESum pe0 ppe))
-                                                g
-                                _ -> raise $ IncompatibleGuardOccurrences nm
-                mkGuards g gd@(ParamGuard _ nm es) = contextualise gd $
-                        raise $ SyntaxNotImplemented "parametrised guards"
--}
 
 
 producePredicate :: (ProduceMonad r s m) =>
@@ -182,12 +137,13 @@ produceAssrt dirty (AssrtConj sp a1 a2) = produceAssrt dirty a1 >>
                                         produceAssrt dirty a2
 produceAssrt dirty (AssrtITE sp c a1 a2) =
   (do
-    liftIO (putStrLn $ "*** case: " ++ show c)
+    label $ "case: " ++ show c
     producePure c 
     produceAssrt dirty a1) <#>
           (do
-            liftIO (putStrLn $ "*** case: " ++ show (NotBAssrt sp c))
+            label $ "case: " ++ show (NotBAssrt sp c)
             producePure (NotBAssrt sp c)
             produceAssrt dirty a2)
 produceAssrt dirty (AssrtOr sp a1 a2) =
-  produceAssrt dirty a1 <#> produceAssrt dirty a2
+  (label ("left case: " ++ show a1) >> produceAssrt dirty a1)
+  <#> (label ("right case: " ++ show a2) >> produceAssrt dirty a2)

@@ -13,17 +13,20 @@ import Caper.Predicates
 
 data ConfigurationContext = ConfigurationContext {
         ccRegionConstructionLimit :: Int,
-        ccRegionOpenLimit :: Int
+        ccRegionOpenLimit :: Int,
+        ccInteractiveVerification :: Bool
         }
 
 class Configuration c where
         regionConstructionLimit :: c -> Int
         regionOpenLimit :: c -> Int
+        interactiveVerification :: c -> Bool
 
 defaultConfiguration :: ConfigurationContext
 defaultConfiguration = ConfigurationContext {
         ccRegionConstructionLimit = defaultRegionConstructionLimit,
-        ccRegionOpenLimit = defaultRegionOpenLimit
+        ccRegionOpenLimit = defaultRegionOpenLimit,
+        ccInteractiveVerification = False
         }
 
 data ProcedureContext = ProcedureContext {
@@ -39,6 +42,7 @@ makeLenses ''ProcedureContext
 instance Configuration ProcedureContext where
         regionConstructionLimit = ccRegionConstructionLimit . _pcConfigurationContext
         regionOpenLimit = ccRegionOpenLimit . _pcConfigurationContext
+        interactiveVerification = ccInteractiveVerification . _pcConfigurationContext
 
 instance SpecificationContext ProcedureContext where
         specifications = pcSpecificationContext
