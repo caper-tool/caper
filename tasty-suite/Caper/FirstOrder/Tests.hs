@@ -3,10 +3,8 @@ module Caper.FirstOrder.Tests (tests) where
 
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.QuickCheck (testProperty)
-import Test.Tasty.HUnit (testCase)
-import Test.HUnit (Assertion, (@?=))
-import Test.QuickCheck as QC
-import Test.QuickCheck.Monadic as QC
+import Test.QuickCheck
+import Test.QuickCheck.Monadic
 
 import qualified Data.Set as Set
 

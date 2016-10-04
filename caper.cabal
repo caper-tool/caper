@@ -4,8 +4,10 @@ synopsis:       A tool for automatic program verification.
 license-file:   LICENSE
 author:         Thomas Dinsdale-Young, Pedro da Rocha Pinto
 maintainer:     td202@d-y.me.uk
-build-type:     Simple
+build-type:     Simple                 
 cabal-version:  >= 1.8
+extra-source-files:
+                runtests/*.t          
 
 flag z3ffi
   description:  Enable z3 invocation via FFI (requires z3 package)
@@ -146,7 +148,7 @@ test-suite tasty-suite
   default-language:    Haskell2010
   type:                exitcode-stdio-1.0
   hs-source-dirs:      tasty-suite
-  main-is:             Main.hs
+  main-is:             Main.hs                                            
   build-depends:       base >= 4.6
                      , tasty                     
                      , tasty-quickcheck
@@ -156,4 +158,12 @@ test-suite tasty-suite
                      , caper
                      , containers
                      , time
-                      
+                     , lens
+                     , mtl
+                     , parsec
+                     , either
+                     , directory
+                     , filepath
+                     , template-haskell
+                     , process
+                     , text
