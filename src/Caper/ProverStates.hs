@@ -1,5 +1,8 @@
 {-# LANGUAGE TemplateHaskell, MultiParamTypeClasses, FlexibleContexts, FlexibleInstances #-}
-module Caper.ProverStates where
+module Caper.ProverStates(
+        module Caper.Prover,
+        module Caper.ProverStates
+) where
 
 import Control.Lens
 import Data.Set (Set)
@@ -9,16 +12,13 @@ import qualified Data.Map as Map
 import Data.List (intercalate)
 import Control.Monad.Reader
 import Control.Monad.State
--- import Control.Monad
 
 import Caper.Utils.NondetClasses
 import Caper.Utils.Failure
 
 import qualified Caper.TypingContext as TC
 import Caper.Logger
-import Caper.ProverDatatypes
 import Caper.Prover
--- import Caper.RegionTypes
 
 class AbductionFailure f where
         abduceConditions :: [VariableID] -> [Condition VariableID] -> f

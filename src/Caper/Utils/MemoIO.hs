@@ -3,7 +3,7 @@ import qualified Data.Map as Map
 import Data.IORef
 import Control.Monad.IO.Class
 
-memoIO :: (Eq a, Ord a, MonadIO m) => (a -> m b) -> IO (a -> m b)
+memoIO :: (Ord a, MonadIO m) => (a -> m b) -> IO (a -> m b)
 memoIO f = do
         cacheref <- newIORef Map.empty
         return $ \x -> do

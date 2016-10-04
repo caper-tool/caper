@@ -21,8 +21,6 @@ import Caper.Parser.AST.Annotation (TopLevelGuardDeclr(..))
 import Caper.RegionTypes
 import Caper.Logger
 import Caper.Exceptions
-import Caper.ProverDatatypes
-import Caper.Prover -- TODO: move some stuff from Prover to ProverDatatypes?
 import Caper.DeductionFailure
 import Caper.ProverStates
 import Caper.Guards
@@ -149,7 +147,6 @@ produceMergeRegion rvar region = do
 -- XXX: This is overkill.  In all but very few cases the rid should already
 -- point to a region.
 consumeRegion :: (MonadState s m, AssertionLenses s, RegionLenses s,
-                MonadReader r m, RTCGetter r,
                 MonadPlus m, Failure DeductionFailure m,
                 MonadLogger m) =>
                 RTId                    -- ^Type of the region 
@@ -190,29 +187,6 @@ consumeRegion rtid rid params st = do
         bindState Nothing = newAvar "state" >>=
                         assertTrue . VAEq st . var
                 
-
--- |Determine if two variables cannot be aliases for the same region.
--- It may be possible that variables can be proved not to be aliases,
--- but this routine may still treat them as if they could be.
-cannotAlias :: (MonadState s m, RegionLenses s) => VariableID -> VariableID -> m Bool
-cannotAlias r1 r2
-        | r1 == r2 = return False
-        | otherwise = do
-                regs <- use regions
-                return $ case (regs ^? ix r1 >>= regTypeInstance, regs ^? ix r2 >>= regTypeInstance) of
-                    (Just rt1, Just rt2) -> riType rt1 /= riType rt2
-                    _ -> False
-
-
-{-
--- For now, I'm not going to use this, in favour of cannotAliasStrong.
-cannotAliasRegs :: AliasMap VariableID Region -> VariableID -> VariableID -> Bool
-cannotAliasRegs regs r1 r2
-        | r1 == r2 = False
-        | otherwise = case (regs ^? ix r1 >>= regTypeInstance, regs ^? ix r2 >>= regTypeInstance) of
-                    (Just rt1, Just rt2) -> riType rt1 /= riType rt2
-                    _ -> False
--}
 -- TODO: Put somewhere more appropriate?
 restoring :: (MonadState s m) => m a -> m a
 -- ^Run a stateful computation, restoring the state at the beginning.
@@ -223,25 +197,11 @@ restoring f = do
             return r 
                    
 -- |Determine if two variables cannot be aliases for the same region.
--- It may be possible that variables can be proved not to be aliases,
--- but this routine may still treat them as if they could be.
--- This version gives fewer false negatives than cannotAlias, but requires
--- calls to provers to see if a merge can take place.
-cannotAliasStrong :: (ProverM s r m, RegionLenses s, RTCGetter r) => VariableID -> VariableID -> m Bool
-cannotAliasStrong r1 r2 = use regions >>= return . not . AM.areAliases r1 r2
-{-        | r1 == r2 = return False
-        | otherwise = do
-                    -- Try merging the regions.  If the result is
-                    -- inconsistent then the regions are not aliases.
-                    regs <- use regions
-                    case (regs ^? ix r1, regs ^? ix r2) of
-                        (Just reg1, Just reg2) -> restoring $ do
-                                _ <- mergeRegions reg1 reg2
-                                assume (EqualityCondition r1 r2)
-                                c <- isConsistent
-                                return (c == Just False)
-                        _ -> return False
--}                        
+-- In the current representation, Caper case splits on whether regions
+-- are aliases, so this returns `True` exactly when the regions are not
+-- considered to be aliased.
+cannotAlias :: (ProverM s r m, RegionLenses s) => VariableID -> VariableID -> m Bool
+cannotAlias r1 r2 = use regions >>= return . not . AM.areAliases r1 r2
 
 -- |Stabilise all regions
 stabiliseRegions :: (ProverM s r m, RegionLenses s, RTCGetter r, DebugState s r, MonadRaise m, MonadLabel CapturedState m) =>
@@ -251,16 +211,7 @@ stabiliseRegions = do
                         regs' <- imapM stabiliseRegion regs
                         regions .= regs'
 
-{-
--- Stabilise a region (only if it is dirty)
-stabiliseRegion :: (ProverM s r m, RTCGetter r) =>
-                        Region -> m Region
-stabiliseRegion reg = if regDirty reg then
-                                stabiliseDirtyRegion reg
-                        else
-                                return reg -}
-
--- Stabilise a region
+-- |Stabilise a region.
 stabiliseRegion :: (ProverM s r m, RTCGetter r, DebugState s r, MonadRaise m, MonadLabel CapturedState m) =>
                         VariableID -> Region -> m Region
 -- Not dirty, so nothing to do!
@@ -360,7 +311,6 @@ checkGuaranteeTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitio
                 bndVars tr = Set.difference (freeVariables tr) (rtParamVars rt)
                 params = Map.fromList $ zip (map fst $ rtParameters rt) ps
                 checkTrans tr@(TransitionRule trgd prd prec post) = do
-                        -- liftIO $ putStrLn $ "+++ Params " ++ show params
                         -- Compute a binding for fresh variables
                         bvmap <- freshInternals rtdvStr (bndVars tr)
                         let bvars = Map.elems bvmap
@@ -382,10 +332,7 @@ checkGuaranteeTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitio
                                     SomeGuardDeclr gdec -> do
                                             _ <- guardEntailment gdec gd (exprCASub' s trgd)
                                             return ()
-                                --liftIO $ putStrLn "Entailment for guarantee"
-                                --debugState
                                 justCheck
-                                --liftIO $ putStrLn "passed"
                                 -- We extract the assertions that condition the transition.
                                 -- That is, those that have variables which are locally bound for
                                 -- the action and occur in either the pre- or post-state.
@@ -401,46 +348,6 @@ checkGuaranteeTransitions rt ps gd = liftM concat $ mapM checkTrans (rtTransitio
                                 let cond = foldBy FOFAnd FOFTrue $ valueConditions (const True) cassrts in
                                 GuardedTransition bvars cond (exprSub s prec) (exprSub s post)
                         return (map condToTrans conds)
-                        {-case conds of
-                            Nothing -> return []
-                            Just cassrts -> do
-                                --cond <- foldlM (\x -> liftM (FOFAnd x . exprCASub' s) . toValueFOF isDynVar) FOFTrue dyconds
-                                let cond = foldBy FOFAnd FOFTrue $ valueConditions (const True) cassrts
-                                return [GuardedTransition bvars cond (exprSub s prec) (exprSub s post)] -}
-
-{-
-toValueFOF :: (MonadRaise m, Monad m) => (v -> Bool) -> Condition v -> m (FOF ValueAtomic v)
-toValueFOF varTest (ValueCondition v) = return v
-toValueFOF varTest (PermissionCondition pc) = case find varTest pc of
-                                Nothing -> error "Caper.Regions.toValueFOF: internal error"
-                                Just v -> raise $ TypeMismatch VTPermission VTValue
-toValueFOF varTest (EqualityCondition v1 v2) = return $ FOFAtom $ VAEq (var v1) (var v2)
-toValueFOF varTest (DisequalityCondition v1 v2) = return $ FOFNot $ FOFAtom $ VAEq (var v1) (var v2)
--}
-
-{-
--- |Generate a 'Condition' that captures the fact that two abstract
--- states must be related by the guarantee for a region.   
-simpleGenerateGuaranteeCondition :: (ProverM (WithAssertions s) r m, AssumptionLenses s, DebugState (WithAssertions s) r, MonadRaise m) =>
-    RegionType                      -- ^Type of the region
-    -> [Expr VariableID]            -- ^Parameters for the region
-    -> Guard VariableID             -- ^Guard for the region
-    -> ValueExpression VariableID   -- ^Old state
-    -> ValueExpression VariableID   -- ^New state
-        -> m (Condition VariableID)
-simpleGenerateGuaranteeCondition rt ps gd st0 st1 = msum (map checkTrans (rtTransitionSystem rt))
-    where
-        bndVars :: TransitionRule -> Set.Set RTDVar
-        bndVars tr = Set.difference (freeVariables tr) (rtParamVars rt)
-        params = Map.fromList $ zip (map fst $ rtParameters rt) ps
-        checkTrans tr@(TransitionRule trgd prd prec post) = do
-            bvmap <- freshInternals rtdvStr (bndVars tr)
-            let bvars = Map.elems bvmap
-            let subst = Map.union params $ fmap var bvmap
-            let s v = Map.findWithDefault (error "checkGuaranteeTransitions: variable not found") v subst
-            assertTrue $ VAEq st0 (exprSub s prec)
-            assertTrue $ VAEq st1 (exprSub s post)
-  -}          
 
 
 -- |Generate a 'Condition' that captures the fact that two abstract
@@ -465,17 +372,3 @@ generateGuaranteeCondition rt params gd st0 st1
         return $ ValueCondition (rel st0 st1)
 
 
--- |Get the region type and parameters for a region.  If no type is available
--- (because the variable does not identify a region or the region's type is
--- not known) it will return Nothing.  It can throw an error if a region
--- has an invalid region type identifier.
-getTypeOfRegion :: (MonadState s m, RegionLenses s, MonadReader r m, RTCGetter r) =>
-            VariableID -> m (Maybe (RegionType, [Expr VariableID]))
-getTypeOfRegion rid = do
-            regs <- use regions
-            case regs ^? ix rid >>= regTypeInstance of
-                Nothing -> return Nothing
-                Just (RegionInstance rtid ps) -> do
-                        rt <- lookupRType rtid
-                        return $ Just (rt, ps) 
--- Check if a guard is compatible 

@@ -123,7 +123,7 @@ instance (MonadLogger m) => MonadLogger (FilterLoggerT m) where
                 f <- ask
                 when (f e) $ logEventContext (ec, e)
 
-filterLogger :: (MonadLogger m) => (LogEvent -> Bool) -> FilterLoggerT m a -> m a
+filterLogger :: (LogEvent -> Bool) -> FilterLoggerT m a -> m a
 filterLogger f (FilterLoggerT x) = runReaderT x f
 
 logNotProver :: LogEvent -> Bool

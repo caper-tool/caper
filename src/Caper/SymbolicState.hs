@@ -20,8 +20,6 @@ import Caper.Utils.Failure
 import Caper.Utils.NondetClasses
 
 import Caper.Logger
-import Caper.ProverDatatypes
-import Caper.Prover
 import Caper.ProverStates
 import qualified Caper.Utils.AliasingMap as AliasMap
 import Caper.Parser.AST.Code
@@ -208,21 +206,7 @@ takingEachPredInstance pname = do
                 preds %= Map.adjust (MultiSet.delete p) pname
                 return p
 
-{-
-
-wrapStateT :: (Monad m) => (t -> s) -> (s -> t) -> StateT s m a -> StateT t m a
-wrapStateT initial fin op = StateT $ \s0 -> do
-                        (r, t1) <- runStateT op (initial s0)
-                        return (r, fin t1)
-
-wrapRWST :: (Monad m) => (t -> s) -> (s -> t) -> RWST r w s m a -> RWST r w t m a
-wrapRWST initial fin op = RWST $ \rd s0 -> do
-                        (r, t1, w) <- runRWST op rd (initial s0)
-                        return (r, fin t1, w)
--}
-
-
-consumeCellAny :: (Monad m, MonadPlus m, MonadState s m, MonadLogger m, MonadLabel CapturedState m, MonadReader r m, DebugState s r,
+consumeCellAny :: (MonadPlus m, MonadState s m, MonadLogger m, MonadLabel CapturedState m, MonadReader r m, DebugState s r,
         AssertionLenses s, SymbStateLenses s) => Expr VariableID -> Expr VariableID -> m ()
 consumeCellAny x y = (do
                 [e1,e2] <- takingEachPredInstance PCell
@@ -275,9 +259,6 @@ consumePred p@(pt, args) = do
 -- TD-Y: I'm going to use this stuff as is; at some point the front-end will be
 -- redesigned to simplify the parser and provide an input validation/type-
 -- checking phase.
-{-consumePredicate :: (Monad m, MonadPlus m, MonadLogger m) =>
-        Predicate -> MSCheck r m ()
-        -}
 consumePredicate :: 
                       (SymbStateLenses s, AssertionLenses s, MonadLogger m, MonadLabel CapturedState m,
                        MonadState s m, MonadPlus m, MonadReader r m, PredicateLenses r, MonadRaise m, DebugState s r) =>
@@ -288,7 +269,7 @@ consumePredicate p = do
 
 -- |Remove all resources (predicate and region), returning an operation
 -- that will restore them. 
-frame :: (MonadState s m, SymbStateLenses s, AssumptionLenses s, RegionLenses s,
+frame :: (MonadState s m, SymbStateLenses s, RegionLenses s,
         MonadReader r m, RTCGetter r, Provers r, DebugState s r,
         MonadLogger m, MonadRaise m, MonadIO m, MonadDemonic m, MonadLabel CapturedState m) =>
         m (m ())

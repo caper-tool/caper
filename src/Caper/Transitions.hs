@@ -1,5 +1,12 @@
 {-# LANGUAGE FlexibleContexts, MultiParamTypeClasses #-}
-module Caper.Transitions where
+-- |This module provides operations for computing the transitive closure of
+-- a set of actions on a finite state space.
+module Caper.Transitions(
+        GuardedTransition(..),
+        computeClosureRelation,
+        underComputeClosureRelation
+)
+where
 import Prelude hiding (elem, foldr)
 import Control.Monad
 import Control.Monad.Reader.Class
@@ -10,24 +17,10 @@ import System.IO.Unsafe
 
 import Caper.Utils.MemoIO
 
-import Caper.ProverDatatypes
 import Caper.Prover
 import Caper.Utils.FloydWarshall
 import Caper.RegionTypes
 import Caper.Logger
--- import Caper.Provers -- TODO: remove (used for testing)
-
-{-
-data ClosureVariable v = Context v | Local String deriving (Eq, Ord)
-
-instance (Show v) => Show (ClosureVariable v) where
-        show (Context v) = "c_" ++ show v
-        show (Local s) = "l_" ++ s
-
-instance (StringVariable v) => StringVariable (ClosureVariable v) where
-        varToString (Context v) = "c_" ++ varToString v
-        varToString (Local s) = "l_" ++ s
--}
 
 {- OK.
  - I want to compute a formula that represents the transitive closure of
@@ -51,10 +44,16 @@ instance (StringVariable v) => StringVariable (ClosureVariable v) where
  -     an expression describing the final state for the transition (bv only)
  -}
 
+-- |A transition relation.  Roughly @{(gtPreState, gtPostState) | gtGuard}@
+-- with @gtBoundVars@ as the variables bound in the set builder.
 data GuardedTransition vt = GuardedTransition {
+        -- |Bound variables
         gtBoundVars :: [vt],
+        -- |Formula conditioning the transition
         gtGuard :: FOF ValueAtomic vt,
+        -- |Initial state
         gtPreState :: ValueExpression vt,
+        -- |Final state
         gtPostState :: ValueExpression vt
         } deriving (Eq,Ord)
 gtFreeVars :: Eq vt => GuardedTransition vt -> [vt]
@@ -142,7 +141,8 @@ computeClosureRelation' (StateSpace (Just lower) (Just upper)) gts = do
 computeClosureRelation' _ _ = return (\x y -> FOFTrue)
 
 {-# NOINLINE computeClosureRelation #-}
-computeClosureRelation :: (MonadIO m, MonadReader r m, Provers r, Eq v, Ord v, StringVariable v, MonadLogger m) =>
+-- |Compute an overapproximation of the closure of a set of transitions (memoised).
+computeClosureRelation :: (MonadIO m, MonadReader r m, Provers r, Ord v, StringVariable v, MonadLogger m) =>
         StateSpace -> [GuardedTransition v] -> m (ValueExpression v -> ValueExpression v -> FOF ValueAtomic v)
 computeClosureRelation = curry $ unsafePerformIO $ memoIO $ uncurry computeClosureRelation'
 
@@ -161,7 +161,8 @@ underComputeClosureRelation' (StateSpace (Just lower) (Just upper)) gts = do
 underComputeClosureRelation' _ _ = return (\x y -> FOFAtom $ VAEq x y)
 
 {-# NOINLINE underComputeClosureRelation #-}
-underComputeClosureRelation :: (MonadIO m, MonadReader r m, Provers r, Eq v, Ord v, StringVariable v, MonadLogger m) =>
+-- |Compute an underapproximation of the closure of a set of transitions (memoised).
+underComputeClosureRelation :: (MonadIO m, MonadReader r m, Provers r, Ord v, StringVariable v, MonadLogger m) =>
         StateSpace -> [GuardedTransition v] -> m (ValueExpression v -> ValueExpression v -> FOF ValueAtomic v)
 underComputeClosureRelation = curry $ unsafePerformIO $ memoIO $ uncurry underComputeClosureRelation'
 
