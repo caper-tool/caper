@@ -18,15 +18,15 @@
 #define TRYDEQENTRY_FAILED        0
 #define TRYDEQENTRY_SUCCESS       1
 
-#define PROC(x,p,n,o) (PREVIOUS(x) |-> p &*& NEXT(x) |-> n &*& OWNER(x) |-> o)
+#define PROC(x,p,n) (PREVIOUS(x) |-> p &*& NEXT(x) |-> n)
 
 region Process(r,x) {
   guards #OWNN * #OWNP * CONTROL;
   interpretation {
-    NULL : PROC(x,NULL,NULL,NULL) &*& r@(OWNN{z|true} * OWNP{z|true}) \/ r@(CONTROL);
-    q != NULL | q : Queue(s,q,_) &*& (PROC(x,p,n,q) \/ s@LK(x)) &*& r@(OWNP{z|z!=n} * OWNN{z|z!=p}) &*&
+    NULL : (PROC(x,NULL,NULL) &*& r@(OWNN{z|true} * OWNP{z|true}) \/ r@(CONTROL)) &*& OWNER(x) |-> NULL;
+    q != NULL | q : Queue(s,q,_) &*& OWNER(x) |-> q &*& (s@LK(x) \/ PROC(x,p,n) &*& r@(OWNP{z|z!=n} * OWNN{z|z!=p}) &*&
       (p = NULL ? s@HD(x) : Process(rp,p,q) &*& rp@OWNP(x)) &*&
-      (n = NULL ? s@TL(x) : Process(rn,n,q) &*& rn@OWNN(x)) &*& r@CONTROL;
+      (n = NULL ? s@TL(x) : Process(rn,n,q) &*& rn@OWNN(x))) &*& r@CONTROL;
   }
   actions {
     OWNP{z|true} * OWNN{z|true} * CONTROL : q ~> q2;
@@ -48,7 +48,7 @@ region Queue(s,q) {
     LK{z|true} : 1 ~> 0;
   }
 }
-
+/*
 function enqNE(queue,process)
   requires TAIL(queue) |-> tl &*& NEXT(tl) |-> _ &*& PREVIOUS(process) |-> _;
   ensures TAIL(queue) |-> process &*& NEXT(tl) |-> process &*& PREVIOUS(process) |-> tl;
@@ -66,72 +66,32 @@ function enqE(queue,process)
     [TAIL(queue)] := process;
 }
 
-/*
-function enqE2(queue,process)
-  requires TAIL(queue) |-> process &*& s@(LK{z|true} * HD{x|x!=process} * TL{x|x!=process}) &*& r@(OWNN(NULL) * OWNP(NULL)) &*& Process(r,process,0) &*&
-      PROC(process,NULL,NULL,queue) &*& r@(OWNP{z|z!=NULL} * OWNN{z|z!=NULL}) &*& s@(HD(process) * TL(process)) &*& Queue(s,queue,_);
-  ensures true;
-{
-    [HEAD(queue)] := process; 
-}
-*/
-
-
-function EnqHdNE(queue,process,h)
-  requires h != NULL &*& h != SENTINEL &*& Queue(s,queue,1) &*& queue != NULL &*& 
-     TAIL(queue) |-> t &*& s@LK{z|true} &*&
-     s@HD{x | x != h} &*& Process(r,h,queue) &*& r@OWNN(NULL) &*&
-        s@TL{x | x != t} &*& Process(r2,t,queue) &*& r2@OWNP(NULL) &*&
-        Process(rr,process,NULL) &*& PROC(process,NULL,NULL,queue) &*&
-        rr@(OWNN{z|true} * OWNP{z|true});
-  ensures true;
-{
-// Things I know:
-// Works if r and r2 are identical
-
-  skip; // Open the r2 region
-        // p=0 fine
-        // rp fresh problematic
-        // rp = r problematic
-        // rp = r2 success
-        // rp = rr success
-    enqNE(queue,process);
-    [HEAD(queue)] := h;
-}
-
 function TryEnqueue(queue,process)
-//  requires false;
   requires Queue(s,queue,_) &*& Process(r,process,NULL) &*& r@CONTROL;
-  ensures true;
+  ensures ret = TRYENQ_FAILED ? Process(r,process,NULL) &*& r@CONTROL : (ret = TRYENQ_SUCCESS_NONEMPTY \/ ret = TRYENQ_SUCCESS_EMPTY);
 {
   h := TryLockHead(queue);
   if (h = SENTINEL) {
     return TRYENQ_FAILED;
   }
   else {
+    [OWNER(process)] := queue;
 
   if (h != NULL) {
-    [OWNER(process)] := queue;
-    EnqHdNE(queue,process,h);
-    /*assert TAIL(queue) |-> tl &*& PROC(tl,_,_,_);
-    return 0;
     enqNE(queue,process);
-    [HEAD(queue)] := h;*/
+    [HEAD(queue)] := h;
     return TRYENQ_SUCCESS_NONEMPTY;
   } else {
-    [OWNER(process)] := queue;
     enqE(queue,process);
-/*    assert TAIL(queue) |-> process &*& s@(LK{z|true} * HD{x|x!=process} * TL{x|x!=process}) &*& r@(OWNN(NULL) * OWNP(NULL)) &*& Process(r,process,0) &*&
-      PROC(x,NULL,NULL,queue) &*& r@(OWNP{z|z!=NULL} * OWNN{z|z!=NULL}) &*& s@(HD(process) * TL(process)) &*& Queue(s,queue,_);*/
     [HEAD(queue)] := process;
     return TRYENQ_SUCCESS_EMPTY;
   }
   }
 }
-
+*/
 function TryLockHead(queue)
   requires Queue(s,queue,_);
-  ensures ret = SENTINEL ? true : Queue(s,queue,1) &*& 
+  ensures ret = SENTINEL ? true : Queue(s,queue,1) &*& queue != NULL &*&
      TAIL(queue) |-> t &*& s@LK{z|true} &*& 
         (ret = NULL ? t = NULL &*& s@(HD{x|true} * TL{x|true}) :
         s@HD{x | x != ret} &*& Process(r,ret,queue) &*& r@OWNN(NULL) &*&
@@ -146,8 +106,10 @@ function TryLockHead(queue)
   }
   return h;
 }
-
+/*
 function TryDequeue(queue)
+  requires Queue(s,queue,_);
+  ensures ret = TRYDEQ_FAILED \/ ret = TRYDEQ_SUCCESS_EMPTY \/ (Process(r,ret,NULL) &*& r@CONTROL);
 {
   h := TryLockHead(queue);
   if (h = SENTINEL) {
@@ -172,8 +134,10 @@ function TryDequeue(queue)
     }
   }
 }
-
+*/
 function TryDequeueEntry(queue,process)
+  requires Queue(s,queue,_) &*& Process(r,process,_);
+  ensures ret = TRYDEQENTRY_FAILED \/ ret = TRYDEQENTRY_SUCCESS &*& Process(r,process,NULL) &*& r@CONTROL;
 {
   h := TryLockHead(queue);
   if (h = SENTINEL) {
