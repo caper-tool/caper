@@ -24,7 +24,7 @@ region Process(r,x) {
   guards #OWNN * #OWNP * CONTROL;
   interpretation {
     NULL : PROC(x,NULL,NULL,NULL) &*& r@(OWNN{z|true} * OWNP{z|true}) \/ r@(CONTROL);
-    q != NULL | q : (PROC(x,p,n,q) \/ s@LK(x)) &*& r@(OWNP{z|z!=n} * OWNN{z|z!=p}) &*& Queue(s,q,_) &*&
+    q != NULL | q : Queue(s,q,_) &*& (PROC(x,p,n,q) \/ s@LK(x)) &*& r@(OWNP{z|z!=n} * OWNN{z|z!=p}) &*&
       (p = NULL ? s@HD(x) : Process(rp,p,q) &*& rp@OWNP(x)) &*&
       (n = NULL ? s@TL(x) : Process(rn,n,q) &*& rn@OWNN(x)) &*& r@CONTROL;
   }
@@ -77,9 +77,31 @@ function enqE2(queue,process)
 */
 
 
+function EnqHdNE(queue,process,h)
+  requires h != NULL &*& h != SENTINEL &*& Queue(s,queue,1) &*& queue != NULL &*& 
+     TAIL(queue) |-> t &*& s@LK{z|true} &*&
+     s@HD{x | x != h} &*& Process(r,h,queue) &*& r@OWNN(NULL) &*&
+        s@TL{x | x != t} &*& Process(r2,t,queue) &*& r2@OWNP(NULL) &*&
+        Process(rr,process,NULL) &*& PROC(process,NULL,NULL,queue) &*&
+        rr@(OWNN{z|true} * OWNP{z|true});
+  ensures true;
+{
+// Things I know:
+// Works if r and r2 are identical
+
+  skip; // Open the r2 region
+        // p=0 fine
+        // rp fresh problematic
+        // rp = r problematic
+        // rp = r2 success
+        // rp = rr success
+    enqNE(queue,process);
+    [HEAD(queue)] := h;
+}
+
 function TryEnqueue(queue,process)
-requires false;
-//  requires Queue(s,queue,_) &*& Process(r,process,NULL) &*& r@CONTROL;
+//  requires false;
+  requires Queue(s,queue,_) &*& Process(r,process,NULL) &*& r@CONTROL;
   ensures true;
 {
   h := TryLockHead(queue);
@@ -87,19 +109,23 @@ requires false;
     return TRYENQ_FAILED;
   }
   else {
-    [OWNER(process)] := queue;
-  }
-  
+
   if (h != NULL) {
+    [OWNER(process)] := queue;
+    EnqHdNE(queue,process,h);
+    /*assert TAIL(queue) |-> tl &*& PROC(tl,_,_,_);
+    return 0;
     enqNE(queue,process);
-    [HEAD(queue)] := h;
+    [HEAD(queue)] := h;*/
     return TRYENQ_SUCCESS_NONEMPTY;
   } else {
+    [OWNER(process)] := queue;
     enqE(queue,process);
 /*    assert TAIL(queue) |-> process &*& s@(LK{z|true} * HD{x|x!=process} * TL{x|x!=process}) &*& r@(OWNN(NULL) * OWNP(NULL)) &*& Process(r,process,0) &*&
       PROC(x,NULL,NULL,queue) &*& r@(OWNP{z|z!=NULL} * OWNN{z|z!=NULL}) &*& s@(HD(process) * TL(process)) &*& Queue(s,queue,_);*/
     [HEAD(queue)] := process;
     return TRYENQ_SUCCESS_EMPTY;
+  }
   }
 }
 
