@@ -9,6 +9,7 @@ region RWLock(r,x) {
   }
   actions {
     : 0 ~> 2;
+	
     WUNLOCK : 2 ~> 0;
     : 0 ~> 1;
     RUNLOCK|-1| : 1 ~> 0;
@@ -28,36 +29,40 @@ function readerAcquire(x)
   requires RWLock(r,x,_);
   ensures  RWLock(r,x,1) &*& r@RUNLOCK|1|;
 {
-    v := [x];
-    if (v >= 0) {
-      b := CAS(x, v, v + 1);
-      if (b != 0) {
-        return;
-      }
+    do {
+        v := [x];
+        if (v >= 0) {
+            b := CAS(x, v, v + 1);
+        } else {
+            b := 0;
+        }
     }
-    readerAcquire(x);
+      invariant RWLock(r,x,ni) &*& (b = 0 ? true : ni = 1 &*& r@RUNLOCK|1|);
+    while (b = 0);
 }
 
 function readerRelease(x)
   requires RWLock(r,x,1) &*& r@RUNLOCK|1|;
   ensures RWLock(r,x,_);
 {
-    v := [x];
-    assert v = 1 ? true : true;
-    b := CAS(x, v, v - 1);
-    if (b = 0) {
-      readerRelease(x);
+    do {
+        v := [x];
+        assert v = 1 ? true : true;
+        b := CAS(x, v, v - 1);
     }
+      invariant RWLock(r,x,ni) &*& (b = 0 ? ni = 1 &*& r@RUNLOCK|1| : true);
+    while (b = 0);
 }
 
 function writerAcquire(x)
   requires RWLock(r,x,_);
   ensures RWLock(r,x,2) &*& r@WUNLOCK;
 {
-    b := CAS(x, 0, -1);
-    if (b = 0) {
-      writerAcquire(x);
+    do {
+        b := CAS(x, 0, -1);
     }
+      invariant b = 0 ? RWLock(r,x,_) : RWLock(r,x,2) &*& r@WUNLOCK;
+    while (b = 0);
 }
 
 function writerRelease(x)
