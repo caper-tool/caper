@@ -42,7 +42,7 @@ function wait(x, t)
     }
 }
 
-function lock(x)
+function acquire(x)
   requires TLock(r, x, _);
   ensures TLock(r, x, n) &*& r@NEXT(n);
 {
@@ -50,7 +50,7 @@ function lock(x)
     wait(x, t);    
 }
 
-function unlock(x)
+function release(x)
   requires TLock(r, x, n) &*& r@NEXT(n);
   ensures TLock(r, x, _);
 {
@@ -71,9 +71,9 @@ function foo(x, z, w)
   requires Client(r, x, s, z,0) &*& TLock(s,z,_);
   ensures Client(r,x,s,z,0) &*& TLock(s,z,_);
 {
-  lock(z);
+  acquire(z);
   t := [x];
   [x] := w;
   [x + 1] := w;
-  unlock(z);
+  release(z);
 }

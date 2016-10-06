@@ -21,17 +21,17 @@ function makeLock()
     return v;
 }
 
-function lock(x)
+function acquire(x)
   requires SLock(r,x,_) &*& r@LOCK[p];
   ensures SLock(r,x,1) &*& r@(LOCK[p] * UNLOCK);
 {
   	b := CAS(x, 0, 1);
   	if (b = 0) {
-  		lock(x);
+  		acquire(x);
   	}
 }
 
-function unlock(x)
+function release(x)
   requires SLock(r,x,1) &*& r@UNLOCK;
   ensures SLock(r,x,_);
 {
