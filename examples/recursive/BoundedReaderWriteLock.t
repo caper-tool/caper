@@ -6,7 +6,7 @@ region RWLock(r, x) {
     0 : x |-> 0 &*& r@(RUNLOCK1 * RUNLOCK2 * WUNLOCK);
     1 : x |-> 1 &*& r@(WUNLOCK * RUNLOCK2);
     2 : x |-> 1 &*& r@(WUNLOCK * RUNLOCK1);
-    3 : x |-> 2 &*& r@(WUNLOCK);
+    3 : x |-> 2 &*& r@WUNLOCK;
     -1 : x |-> -1 &*& r@(RUNLOCK1 * RUNLOCK2);
   }
   actions {
@@ -25,7 +25,7 @@ region RWLock(r, x) {
 
 function makeLock()
   requires true;
-  ensures RWLock(r,ret,0) &*& r@(RLOCK1 * RLOCK2 * WLOCK[1p]);
+  ensures RWLock(r, ret, 0) &*& r@(RLOCK1 * RLOCK2 * WLOCK[1p]);
 {
     v := alloc(1);
     [v] := 0;

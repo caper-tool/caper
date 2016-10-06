@@ -4,12 +4,12 @@ function incr(x)
   requires x |-> v0;
   ensures x |-> v0 + 1;
 {
-    do 
-        invariant x |-> vi &*& (b != 0 ? vi = (v0 + 1) : vi = v0)
-    {
+    do {
         v := [x];
         b := CAS(x, v, v + 1);
-    } while (b = 0);
+    } 
+	  invariant x |-> vi &*& (b != 0 ? vi = (v0 + 1) : vi = v0);
+	while (b = 0);
     return v;
 }
 
