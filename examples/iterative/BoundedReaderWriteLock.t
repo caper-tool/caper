@@ -1,7 +1,7 @@
-// Read Write Lock
+// Bounded Read Write Lock
 
 region RWLock(r, x) {
-  guards RLOCK1 * RUNLOCK1 * RLOCK2 * RUNLOCK2 * %WLOCK * WUNLOCK;
+  guards %WLOCK * WUNLOCK * RLOCK1 * RUNLOCK1 * RLOCK2 * RUNLOCK2;
   interpretation {
     0 : x |-> 0 &*& r@(RUNLOCK1 * RUNLOCK2 * WUNLOCK);
     1 : x |-> 1 &*& r@(WUNLOCK * RUNLOCK2);
@@ -32,25 +32,7 @@ function makeLock()
     return v;
 }
 
-function lockWriter(x)
-  requires RWLock(r, x, _) &*& r@WLOCK[p];
-  ensures RWLock(r, x, -1) &*& r@(WLOCK[p] * WUNLOCK);
-{
-    do {
-        b := CAS(x, 0, -1);
-    }
-      invariant r@WLOCK[p] &*& (b = 0 ? RWLock(r, x, _) : RWLock(r, x, -1) &*& r@WUNLOCK);
-    while (b = 0);
-}
-
-function unlockWriter(x)
-  requires RWLock(r, x, -1) &*& r@WUNLOCK;
-  ensures RWLock(r, x, _);
-{
-    [x] := 0;
-}
-
-function lockReader1(x)
+function readerAcquire1(x)
   requires RWLock(r, x, m) &*& r@RLOCK1 &*& m != 1 &*& m != 3;
   ensures RWLock(r, x, n) &*& r@(RLOCK1 * RUNLOCK1) &*& n > 0;
 {
@@ -66,7 +48,7 @@ function lockReader1(x)
     while (b = 0);
 }
 
-function unlockReader1(x)
+function readerRelease1(x)
   requires RWLock(r, x, n) &*& n > 0 &*& r@RUNLOCK1;
   ensures RWLock(r, x, _);
 {
@@ -78,7 +60,7 @@ function unlockReader1(x)
     while (b = 0);
 }
 
-function lockReader2(x)
+function readerAcquire2(x)
   requires RWLock(r, x, m) &*& r@RLOCK2 &*& m != 2 &*& m != 3;
   ensures RWLock(r, x, n) &*& r@(RLOCK2 * RUNLOCK2) &*& n > 0;
 {
@@ -94,7 +76,7 @@ function lockReader2(x)
     while (b = 0);
 }
 
-function unlockReader2(x)
+function readerRelease2(x)
   requires RWLock(r, x, n) &*& n > 0 &*& r@RUNLOCK2;
   ensures RWLock(r, x, _);
 {
@@ -104,4 +86,22 @@ function unlockReader2(x)
     }
       invariant RWLock(r, x, ni) &*& (b = 0 ? ni > 0 &*& r@RUNLOCK2 : true);
     while (b = 0);
+}
+
+function writerAcquire(x)
+  requires RWLock(r, x, _) &*& r@WLOCK[p];
+  ensures RWLock(r, x, -1) &*& r@(WLOCK[p] * WUNLOCK);
+{
+    do {
+        b := CAS(x, 0, -1);
+    }
+      invariant r@WLOCK[p] &*& (b = 0 ? RWLock(r, x, _) : RWLock(r, x, -1) &*& r@WUNLOCK);
+    while (b = 0);
+}
+
+function writerRelease(x)
+  requires RWLock(r, x, -1) &*& r@WUNLOCK;
+  ensures RWLock(r, x, _);
+{
+    [x] := 0;
 }

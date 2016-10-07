@@ -12,7 +12,6 @@ region SLock(r, x) {
   }
 }
 
-
 function makeLock()
   requires true;
   ensures SLock(r, ret, 0) &*& r@LOCK[1p];
@@ -22,8 +21,7 @@ function makeLock()
     return v;
 }
 
-
-function lock(x)
+function acquire(x)
   requires SLock(r, x, _) &*& r@LOCK[p];
   ensures SLock(r, x, 1) &*& r@(LOCK[p] * UNLOCK);
 {
@@ -34,7 +32,7 @@ function lock(x)
     while (b = 0);
 }
 
-function unlock(x)
+function release(x)
   requires SLock(r, x, 1) &*& r@UNLOCK;
   ensures SLock(r, x, _);
 {
