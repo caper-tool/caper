@@ -57,7 +57,7 @@ function pop(x)
       t2 := [t + 1];
       cr := popCAS(x,t,t2);
     }
-	  invariant Bag(r,x,0) &*& (cr = 0 ? true : BagList(rt,t,v,t2,_) &*& t != 0 &*& bagInvariant(v)); 
+	  invariant Bag(r,x,0) &*& (cr = 0 ? true : BagList(rt,t,v,t2,_) &*& t != 0 &*& bagInvariant(v));
 	while (cr = 0);
     ret := [t];
     return ret;
