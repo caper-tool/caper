@@ -34,7 +34,7 @@ function acquire(x)
         v := [x + 1];
     }
       invariant TLock(r, x, ni) &*& r@NEXT(t) &*& t >= ni &*& ni >= v;
-    while(v < t);
+    while (v < t);
 }
 
 function release(x)
