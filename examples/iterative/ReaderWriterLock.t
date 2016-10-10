@@ -5,11 +5,10 @@ region RWLock(r,x) {
   interpretation {
     0 : x |-> 0 &*& r@(WUNLOCK * RUNLOCK|-1|);
     1 : x |-> k &*& k > 0 &*& r@(WUNLOCK * RUNLOCK|-1-k|);
-    2 : x |-> -1 &*& r@(RUNLOCK|-1|);
+    2 : x |-> -1 &*& r@RUNLOCK|-1|;
   }
   actions {
     : 0 ~> 2;
-	
     WUNLOCK : 2 ~> 0;
     : 0 ~> 1;
     RUNLOCK|-1| : 1 ~> 0;
