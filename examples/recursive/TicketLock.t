@@ -47,7 +47,7 @@ function acquire(x)
   ensures TLock(r, x, n) &*& r@NEXT(n);
 {
     t := incr(x);
-    wait(x, t);    
+    wait(x, t);
 }
 
 function release(x)
