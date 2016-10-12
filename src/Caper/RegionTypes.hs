@@ -332,9 +332,6 @@ checkForClosure' params gt trs tr1 tr2 = flip evalStateT emptyAssumptions $ do
                 _ <- guardEntailmentTL gt grd (exprCASub' (sub pmap3) (trGuard tr3))
                 assertTrue $ exprSub (sub pmap1) (trPreState tr1) $=$ exprSub (sub pmap3) (trPreState tr3)
                 assertTrue $ exprSub (sub pmap2) (trPostState tr2) $=$ exprSub (sub pmap3) (trPostState tr3))
-              `mplus` do
-                 logEvent (InfoEvent $ "Transitivity check failed for clauses " ++ show tr1 ++ " and " ++ show tr2)
-                 mzero
     where
         sub :: Map.Map RTDVar VariableID -> RTDVar -> Expr VariableID
         sub pmap v = toExpr $ Identity $ Map.findWithDefault (error "checkForClosure: variable not found") v pmap
@@ -438,9 +435,13 @@ attemptClosure :: (MonadIO m, MonadLogger m, MonadReader r m, Provers r) =>
         RegionType -> m RegionType
 attemptClosure rt@(RegionType{rtParameters = params, rtGuardType = gt, rtTransitionSystem = trs0}) = ac closureDepth [] trs0
         where
-                ac n oldtrs [] = return rt{rtTransitionSystem = oldtrs, rtIsTransitive = True}
+                ac n oldtrs [] = do
+                                    logEvent $ InfoEvent $ "Region type " ++ rtRegionTypeName rt ++ " is transitively closed with actions:\n  " ++ intercalate "\n  " (map show oldtrs)
+                                    return rt{rtTransitionSystem = oldtrs, rtIsTransitive = True}
                 ac n oldtrs newtrs
-                        | n <= 0 = return rt{rtIsTransitive = False}
+                        | n <= 0 = do
+                                    logEvent $ WarnNontransitiveRegionType $ rtRegionTypeName rt
+                                    return rt{rtIsTransitive = False}
                         | otherwise = do
                                 (oldtrs', newtrs') <- generateComposedTransitions params gt oldtrs newtrs
                                 ac (n - 1) oldtrs' newtrs'
