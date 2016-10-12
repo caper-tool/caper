@@ -339,6 +339,7 @@ checkForClosure' params gt trs tr1 tr2 = flip evalStateT emptyAssumptions $ do
         sub :: Map.Map RTDVar VariableID -> RTDVar -> Expr VariableID
         sub pmap v = toExpr $ Identity $ Map.findWithDefault (error "checkForClosure: variable not found") v pmap
 
+-- TODO: This doesn't currently account for reflexivity.
 notSubsumedBy :: (MonadIO m, MonadLogger m, MonadReader r m, Provers r) =>
         [(RTDVar,VariableType)] -- ^Region parameters
         -> AST.TopLevelGuardDeclr   -- ^Guard type
