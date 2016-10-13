@@ -40,7 +40,9 @@ library
   hs-source-dirs:  src
   default-extensions:
                    CPP
-  ghc-options:     -Wall -Wno-redundant-constraints -Wno-unused-matches
+  ghc-options:     -Wall -fno-warn-unused-matches
+  if impl(ghc >= 8.0)
+        ghc-options: -fno-warn-redundant-constraints 
   exposed-modules: 
                    Caper.Assertions.Check,
                    Caper.Assertions.Consume,
