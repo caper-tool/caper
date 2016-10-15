@@ -19,3 +19,6 @@ docs/design.pdf
 .stack-work/
 TAGS
 stack.yaml
+*.gz
+*.fls
+*.fdb_latexmk
