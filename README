@@ -32,6 +32,7 @@ Next, install the dependencies:
 ```
 Now build Caper:
 ```
+  cabal configure --enable-tests
   cabal build
 ```
 Create the configuration file by copying the defaults (optionally editing):
@@ -41,7 +42,7 @@ Create the configuration file by copying the defaults (optionally editing):
 
 Now you can run Caper:
 ```
-  dist/build/Caper/Caper examples/recursive/SpinLock.t 
+  dist/build/Caper/Caper examples/recursive/SpinLock.t
 ```
 Or the regression tests:
 ```
