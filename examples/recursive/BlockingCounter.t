@@ -3,7 +3,7 @@
 region Counter(r,x) {
   guards %INCREMENT * OWN;
   interpretation {
-    n >= 0 | n : x |-> n &*& r@(OWN) \/ x |-> -1;
+    n >= 0 | n : x |-> n &*& r@OWN \/ x |-> -1;
   }
   actions {
     n >= 0, n < m | INCREMENT[_] * OWN : n ~> m;
@@ -12,7 +12,7 @@ region Counter(r,x) {
 
 function makeCounter()
   requires true;
-  ensures Counter(r,ret,0) &*& r@(INCREMENT[1p]);
+  ensures Counter(r,ret,0) &*& r@INCREMENT[1p];
 {
     v := alloc(1);
     [v] := 0;
@@ -20,8 +20,8 @@ function makeCounter()
 }
 
 function incr(x)
-  requires Counter(r,x,v0) &*& r@(INCREMENT[p]);
-  ensures Counter(r,x,v1) &*& v1 > v0 &*& r@(INCREMENT[p]);
+  requires Counter(r,x,v0) &*& r@INCREMENT[p];
+  ensures Counter(r,x,v1) &*& v1 > v0 &*& r@INCREMENT[p];
 {
   v := [x];
   if (v = -1) {
