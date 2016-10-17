@@ -1,6 +1,6 @@
 // Ticket Lock
 
-region TLock(r, x) {
+region TLock(r,x) {
   guards #NEXT;
   interpretation {
     n : x |-> m &*& (x + 1) |-> n &*& r@NEXT{ k | k >= m } &*& m >= n;
@@ -12,7 +12,7 @@ region TLock(r, x) {
 
 function makeLock()
   requires true;
-  ensures TLock(r, ret, _);
+  ensures TLock(r,ret,_);
 {
     v := alloc(2);
     [v + 0] := 0;
@@ -21,8 +21,8 @@ function makeLock()
 }
 
 function incr(x)
-  requires TLock(r, x, _);
-  ensures TLock(r, x, n) &*& r@NEXT(ret) &*& ret >= n;
+  requires TLock(r,x,_);
+  ensures TLock(r,x,n) &*& r@NEXT(ret) &*& ret >= n;
 {
     t := [x + 0];
     b := CAS(x + 0, t, t + 1);
@@ -43,32 +43,32 @@ function wait(x, t)
 }
 
 function acquire(x)
-  requires TLock(r, x, _);
-  ensures TLock(r, x, n) &*& r@NEXT(n);
+  requires TLock(r,x,_);
+  ensures TLock(r,x,n) &*& r@NEXT(n);
 {
     t := incr(x);
     wait(x, t);
 }
 
 function release(x)
-  requires TLock(r, x, n) &*& r@NEXT(n);
-  ensures TLock(r, x, _);
+  requires TLock(r,x,n) &*& r@NEXT(n);
+  ensures TLock(r,x,_);
 {
     v := [x + 1];
     [x + 1] := v + 1;
 }
 
-region Client(r, x, s, z) {
+region Client(r,x,s,z) {
   guards 0;
   interpretation {
-    0 : TLock(s, z, k) &*& (x |-> a &*& (x+1) |-> a \/ s@NEXT(k));
+    0 : TLock(s,z,k) &*& (x |-> a &*& (x+1) |-> a \/ s@NEXT(k));
   }
   actions {
   }
 }
 
 function foo(x, z, w)
-  requires Client(r, x, s, z,0) &*& TLock(s,z,_);
+  requires Client(r,x,s,z,0) &*& TLock(s,z,_);
   ensures Client(r,x,s,z,0) &*& TLock(s,z,_);
 {
   acquire(z);

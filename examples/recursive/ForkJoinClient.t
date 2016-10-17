@@ -36,3 +36,35 @@ function wait(x)
         wait(x);
     }
 }
+
+region Flag(r,x,y) {
+  guards SFLAG;
+  interpretation {
+    0 : x |-> 0 &*& Join(s,y,0) &*& s@SET;
+    1 : x |-> 1 &*& Join(s,y,_);
+  }
+  actions {
+    SFLAG : 0 ~> 1;
+  }
+}
+
+function thread2(x, y)
+  requires Flag(r,x,y,0) &*& r@SFLAG;
+  ensures true;
+{
+  [x] := 1;
+  set(y);
+}
+
+function main()
+  requires true;
+  ensures Flag(r,x,y,1) &*& ret = 1;
+{
+  x := alloc(1);
+  [x] := 0;
+  y := make_join();
+  fork thread2(x, y);
+  wait(y);
+  v := [x];
+  return v;
+}
