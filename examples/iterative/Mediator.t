@@ -7,7 +7,6 @@ region Barrier(a,b,waiters) {
                         \/ (k < waiters &*& a@(DOWN|-1-waiters+k| * WAIT(0) * WAIT{x|k<x,x<waiters})))
                     \/ 0 >= k &*& (a@(DOWN|-1-waiters-k| * WAIT{x| -k<=x,x<waiters})
                         \/ (-k < waiters &*& a@(UP|-1-waiters-k| * WAIT(0) * WAIT{x| -k<x,x<waiters}))));
-
   }
   actions {
     0<=k,k<n,n<=waiters  | UP|-waiters+n-1| * WAIT{x|k<=x,x<waiters} : k ~> n;
