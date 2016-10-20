@@ -1,3 +1,5 @@
+// Barrier
+
 region Barrier(a,b,waiters) {
   guards #WAIT * (|UP| + |DOWN|);
   interpretation {

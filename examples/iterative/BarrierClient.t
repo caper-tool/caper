@@ -1,3 +1,6 @@
+// Barrier Client
+// Requires flags: -c 0
+
 region Barrier(a,b,waiters) {
   guards #WAIT * (|UP| + |DOWN|);
   interpretation {
