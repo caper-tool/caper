@@ -1,4 +1,4 @@
-// Reader Write Lock
+// Read Write Lock
 
 region RWLock(r,x) {
   guards WUNLOCK * |RUNLOCK|;
