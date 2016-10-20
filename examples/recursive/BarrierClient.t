@@ -20,31 +20,26 @@ function syncUpEnter(b,waiters)
   requires Barrier(a,b,waiters,_) &*& a@UP|1|;
   ensures Barrier(a,b,waiters,s) &*& a@WAIT(ret) &*& ret >= 0 &*& ret < waiters &*& s >= 0;
 {
-  while (true)
-    invariant Barrier(a,b,waiters,_) &*& a@UP|1|;
-  {
-    z := [b];
-    if (z >= 0) {
-      cr := CAS(b,z,z+1);
-      if (cr != 0) {
-        return z;
-      }
+  z := [b];
+  if (z >= 0) {
+    cr := CAS(b,z,z+1);
+    if (cr != 0) {
+      return z;
     }
   }
+  z := syncUpEnter(b,waiters);
+  return z;
 }
 
 function syncUpExit(b,waiters,w)
   requires Barrier(a,b,waiters,s) &*& a@WAIT(w) &*& w >= 0 &*& w < waiters &*& s >= 0;
   ensures Barrier(a,b,waiters,_) &*& a@DOWN|1|;
 {
-  while (true)
-    invariant Barrier(a,b,waiters,si) &*& a@WAIT(w) &*& w >= 0 &*& w < waiters &*& si >= 0;
-  {
-    z := [b];
-    if ((w = 0 and z = waiters) or (w != 0 and z = w)) {
-      [b] := z - 1;
-      return;
-    }
+  z := [b];
+  if ((w = 0 and z = waiters) or (w != 0 and z = w)) {
+    [b] := z - 1;
+  } else {
+    syncUpExit(b,waiters,w);
   }
 }
 
@@ -60,31 +55,26 @@ function syncDownEnter(b,waiters)
   requires Barrier(a,b,waiters,_) &*& a@DOWN|1|;
   ensures Barrier(a,b,waiters,s) &*& a@WAIT(ret) &*& ret >= 0 &*& ret < waiters &*& s <= 0;
 {
-  while (true)
-    invariant Barrier(a,b,waiters,_) &*& a@DOWN|1|;
-  {
-    z := [b];
-    if (z <= 0) {
-      cr := CAS(b,z,z-1);
-      if (cr != 0) {
-        return -z;
-      }
+  z := [b];
+  if (z <= 0) {
+    cr := CAS(b,z,z-1);
+    if (cr != 0) {
+      return -z;
     }
   }
+  z := syncDownEnter(b,waiters);
+  return z;
 }
 
 function syncDownExit(b,waiters,w)
   requires Barrier(a,b,waiters,s) &*& a@WAIT(w) &*& w >= 0 &*& w < waiters &*& s <= 0;
   ensures Barrier(a,b,waiters,_) &*& a@UP|1|;
 {
-  while (true)
-    invariant Barrier(a,b,waiters,si) &*& a@WAIT(w) &*& w >= 0 &*& w < waiters &*& si <= 0;
-  {
-    z := [b];
-    if ((w = 0 and z = -waiters) or (w != 0 and z = -w)) {
-      [b] := z + 1;
-      return;
-    }
+  z := [b];
+  if ((w = 0 and z = -waiters) or (w != 0 and z = -w)) {
+    [b] := z + 1;
+  } else {
+    syncDownExit(b,waiters,w);
   }
 }
 
@@ -132,14 +122,10 @@ function inc(x)
   requires UpDown(r,x,n) &*& r@INC|1|;
   ensures UpDown(r,x,m) &*& m > n &*& r@INC|1|;
 {
-  while (true)
-    invariant UpDown(r,x,ni) &*& ni >= n &*&  r@INC|1|;
-  {
-    old := [x];
-    ret := CAS(x,old,old+1);
-    if (ret != 0) {
-      return;
-    }
+  old := [x];
+  r := CAS(x,old,old+1);
+  if (r = 0) {
+    inc(x);
   }
 }
 
@@ -147,14 +133,10 @@ function dec(x)
   requires UpDown(r,x,n) &*& r@DEC|1|;
   ensures UpDown(r,x,m) &*& m < n &*& r@DEC|1|;
 {
-  while (true)
-    invariant UpDown(r,x,ni) &*& ni <= n &*& r@DEC|1|;
-  {
-    old := [x];
-    ret := CAS(x,old,old-1);
-    if (ret = 0) {
-      return;
-    }
+  old := [x];
+  r := CAS(x,old,old-1);
+  if (r = 0) {
+    dec(x);
   }
 }
 
@@ -180,11 +162,25 @@ function checkDec(x)
   }
 }
 
-function createUpDown()
-  requires true;
-  ensures UpDown(r,ret,0) &*& r@INC|-1|;
+function foo(x,b,waiters)
+  requires UpDown(updown,x,_) &*& Barrier(barrier,b,waiters,_) &*& Mediator(mediator,updown,barrier,0) &*& updown@INC|1|;
+  ensures true;
 {
-  x := alloc(1);
-  [x] := 0;
-  return x;
+  inc(x);
+  checkInc(x);
+  skip;
+  syncUp(b,waiters);
+  skip;
+  dec(x);
+  checkDec(x);
+}
+
+function parallelUpDown(x,b,waiters,n)
+  requires UpDown(updown,x,_) &*& Barrier(barrier,b,waiters,_) &*& Mediator(mediator,updown,barrier,0) &*& updown@INC|n| &*& n > 0;
+  ensures true;
+{
+  fork foo(x,b,waiters);
+  if (n > 1) {
+    parallelUpDown(x,b,waiters,n-1);
+  }
 }
