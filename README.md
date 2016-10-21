@@ -4,8 +4,8 @@ General Installation Notes
 Requirements
 ------------
 
-1. The Haskell Platform; ghc versions 7.8.4, 7.10.3 and 8.0.1 are currently supported; available from https://www.haskell.org/platform/
-2. The Z3 theorem prover; version 4.3.2 or later; available from https://github.com/Z3Prover/z3/releases
+1. The Haskell Platform; ghc versions 7.10.3 and 8.0.1 are currently supported; available from https://www.haskell.org/platform/
+2. The Z3 theorem prover; version 4.4.1 or later; available from https://github.com/Z3Prover/z3/releases
 
 Set up
 ------
