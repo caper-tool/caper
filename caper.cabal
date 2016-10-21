@@ -1,8 +1,9 @@
 name:           caper
 version:        0.1.0.0
 synopsis:       A tool for automatic program verification.
+license:        MIT
 license-file:   LICENSE
-author:         Thomas Dinsdale-Young, Pedro da Rocha Pinto
+author:         Thomas Dinsdale-Young, Pedro da Rocha Pinto, Kristoffer Just Andersen
 maintainer:     td202@d-y.me.uk
 build-type:     Simple                 
 cabal-version:  >= 1.10
