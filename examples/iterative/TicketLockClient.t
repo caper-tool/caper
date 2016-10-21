@@ -1,4 +1,4 @@
-// Ticket Lock
+// Ticket Lock Client
 
 region TLock(r,x) {
   guards #TICKET;
