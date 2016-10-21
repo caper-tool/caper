@@ -1,26 +1,56 @@
-// Stack-based bag
+// Binary tree
 
-predicate bagInvariant(v);
+predicate treeInvariant(v);
 
 region Tree(r,x) {
   guards 0;
   interpretation {
-    0 : x |-> head &*& TreeNode(bl,head,_,0) &*& bl@OWN;
+    0 : x |-> root &*& TreeNode(n,root,_,0) &*& n@OWN;
   }
   actions {}
 }
 
-region TreeNode(s,y,z) {
+region TreeNode(s,y,val) {
   guards OWN;
   interpretation {
-    0 : y = 0 ? true : y |-> val &*& (y + 1) |-> z &*& Node(t,z,_,0) &*& t@OWN &*& bagInvariant(val);
-    1 : s@OWN &*& y |-> val &*& (y + 1) |-> z &*& BagList(xtbl,z,_,_);
+    0 : y = 0 ? true : y |-> val &*& (y + 1) |-> z &*& (y + 2) |-> w &*& TreeNode(n,z,_,0) &*& n@OWN &*& TreeNode(m,w,_,0) &*& m@OWN &*& treeInvariant(val);
   }
-  actions {
-    OWN : 0 ~> 1;
-  }
+  actions {}
 }
 
+function innerInsert(x,y)
+  requires Tree(r,x,0) &*& y |-> v &*& y+1 |-> 0 &*& y+2 |-> 0 &*& treeInvariant(v);
+  ensures Tree(r,x,0);
+{
+  t := [x];
+  if (t = 0) {
+    cr := CAS(x,t,y);
+    if (cr != 0) {
+      return;
+    }
+  }
+  innerInsert(x,y);/*
+  t := [x];
+  if (t = 0) {
+    cr := CAS(x,t,y);
+  }
+  if (cr = 0) {
+    innerPush(x, y);
+  }*/
+}
+
+function insert(x, v)
+  requires Tree(r,x,0) &*& treeInvariant(v);
+  ensures Tree(r,x,0);
+{
+  y := alloc(3);
+  [y] := v;
+  [y + 1] := 0;
+  [y + 2] := 0;
+  innerInsert(x, y);
+}
+
+/*
 function push(x,v)
   requires Bag(r,x,0) &*& bagInvariant(v);
   ensures Bag(r,x,0);
@@ -59,4 +89,4 @@ function pop(x)
   ret := [t];
   return ret;
 }
-
+*/
